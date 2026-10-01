@@ -1,0 +1,235 @@
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#173f35">
+  <title>Kanji Learning App</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="#">
+      <span class="brand-mark">漢</span>
+      <span>
+        Kanji Learning
+        <span class="brand-sub">Tu espacio de estudio japonés</span>
+      </span>
+    </a>
+    <button id="exportBtn" class="button button-quiet" type="button">
+      ↓ Exportar JSON
+    </button>
+  </header>
+
+  <main class="container">
+    <section class="intro">
+      <p class="eyebrow">ESTUDIO PERSONAL DE JAPONÉS</p>
+      <h1>Un paso más cerca<br>
+        <span>de dominar el japonés.</span>
+      </h1>
+      <p class="intro-copy">
+        Organiza tus kanjis y palabras, estudia a tu ritmo
+        y conserva tu progreso en tu propio dispositivo.
+      </p>
+    </section>
+
+    <nav class="tabs" aria-label="Secciones">
+      <button class="tab active" data-view="study" type="button">
+        Estudiar
+      </button>
+      <button class="tab" data-view="manage" type="button">
+        Mis listas
+      </button>
+      <button class="tab" data-view="progress" type="button">
+        Progreso
+      </button>
+    </nav>
+
+    <!-- ESTUDIO -->
+    <section id="view-study" class="view">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">SESIÓN DE REPASO</p>
+          <h2>¿Qué vamos a estudiar?</h2>
+        </div>
+        <span id="dueBadge" class="pill">0 pendientes</span>
+      </div>
+
+      <div class="panel study-settings">
+        <label class="field">
+          <span>Contenido</span>
+          <select id="studyType">
+            <option value="kanji">Kanjis</option>
+            <option value="word">Palabras</option>
+            <option value="mixed">Mixto</option>
+          </select>
+        </label>
+
+        <label class="field">
+          <span>Nivel JLPT</span>
+          <select id="studyLevel">
+            <option>N5</option>
+            <option>N4</option>
+            <option selected>N3</option>
+            <option>N2</option>
+            <option>N1</option>
+            <option value="ALL">Todos</option>
+          </select>
+        </label>
+
+        <label class="field">
+          <span>Preguntas</span>
+          <select id="studyCount">
+            <option>10</option>
+            <option>20</option>
+            <option>30</option>
+            <option value="0">Todas</option>
+          </select>
+        </label>
+
+        <button id="startBtn" class="button button-primary" type="button">
+          Iniciar repaso →
+        </button>
+      </div>
+
+      <div id="studyArea" class="study-area">
+        <div class="empty-state">
+          <div class="empty-icon">学</div>
+          <h3>Tu próxima sesión empieza aquí</h3>
+          <p>Agrega una lista en “Mis listas” y luego inicia un repaso.</p>
+          <button class="button button-outline" data-go="manage" type="button">
+            Agregar contenido
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ADMINISTRAR LISTAS -->
+    <section id="view-manage" class="view hidden">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">TU CONTENIDO</p>
+          <h2>Mis listas</h2>
+        </div>
+        <span id="itemCount" class="pill">0 elementos</span>
+      </div>
+
+      <div class="panel">
+        <div class="form-grid">
+          <label class="field">
+            <span>Tipo de contenido</span>
+            <select id="importType">
+              <option value="kanji">Kanjis</option>
+              <option value="word">Palabras</option>
+            </select>
+          </label>
+
+          <label class="field">
+            <span>Nivel JLPT</span>
+            <select id="importLevel">
+              <option>N5</option>
+              <option>N4</option>
+              <option selected>N3</option>
+              <option>N2</option>
+              <option>N1</option>
+            </select>
+          </label>
+        </div>
+
+        <label class="field">
+          <span id="listLabel">Lista de kanjis</span>
+          <textarea id="listInput" rows="4"
+            placeholder="政, 議, 民, 経, 済"></textarea>
+        </label>
+
+        <div class="form-footer">
+          <p class="helper">
+            Separa los elementos con comas, punto y coma
+            o saltos de línea. Los duplicados se omiten.
+          </p>
+          <button id="addBtn" class="button button-primary" type="button">
+            Agregar a mis listas
+          </button>
+        </div>
+        <p id="addMessage" class="message" role="status"></p>
+      </div>
+
+      <div class="panel import-panel">
+        <div>
+          <h3>Restaurar una copia</h3>
+          <p class="helper">
+            Carga un archivo JSON exportado previamente.
+            Puedes combinarlo con los datos actuales.
+          </p>
+        </div>
+        <div class="import-actions">
+          <label class="button button-outline file-button">
+            Elegir JSON
+            <input id="importFile" type="file"
+              accept=".json,application/json" hidden>
+          </label>
+          <button id="mergeBtn" class="button button-quiet"
+            type="button" disabled>
+            Importar archivo
+          </button>
+        </div>
+        <p id="importMessage" class="message" role="status"></p>
+      </div>
+
+      <div class="list-toolbar">
+        <h3>Elementos guardados</h3>
+        <input id="filterInput" class="search" type="search"
+          placeholder="Filtrar contenido…">
+      </div>
+
+      <div id="itemsList" class="items-list"></div>
+    </section>
+
+    <!-- PROGRESO -->
+    <section id="view-progress" class="view hidden">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">TU CONSTANCIA</p>
+          <h2>Progreso</h2>
+        </div>
+      </div>
+
+      <div class="stats-grid">
+        <article class="stat-card">
+          <span>Total guardado</span>
+          <strong id="statTotal">0</strong>
+        </article>
+        <article class="stat-card">
+          <span>Estudiados</span>
+          <strong id="statStudied">0</strong>
+        </article>
+        <article class="stat-card">
+          <span>Para repasar hoy</span>
+          <strong id="statDue">0</strong>
+        </article>
+        <article class="stat-card">
+          <span>Consolidados</span>
+          <strong id="statMature">0</strong>
+        </article>
+      </div>
+
+      <div class="panel progress-panel">
+        <h3>Consejo</h3>
+        <p>
+          Marca cada respuesta con sinceridad. Los repasos se
+          programan según tu respuesta y se guardan en este
+          navegador. Exporta una copia periódicamente para
+          no perder tus datos.
+        </p>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <span>Kanji Learning App</span>
+    <span>Datos guardados localmente en este navegador</span>
+  </footer>
+</body>
+</html>
