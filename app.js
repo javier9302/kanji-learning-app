@@ -489,24 +489,31 @@ async function lookupJisho(item) {
     const senses = entry.senses || [];
 
     const dictionary = {
-      reading: japanese.reading || "",
-      written: japanese.word || item.value,
+  reading: japanese.reading || "",
+  readings: [
+    ...new Set(
+      (entry.japanese || [])
+        .map(form => form.reading)
+        .filter(Boolean)
+    )
+  ],
+  written: japanese.word || item.value,
 
-      meanings: senses
-        .flatMap(sense => sense.english_definitions || [])
-        .slice(0, 8),
+  meanings: senses
+    .flatMap(sense => sense.english_definitions || [])
+    .slice(0, 8),
 
-      partsOfSpeech: [
-        ...new Set(
-          senses.flatMap(sense =>
-            sense.parts_of_speech || []
-          )
-        )
-      ],
+  partsOfSpeech: [
+    ...new Set(
+      senses.flatMap(sense =>
+        sense.parts_of_speech || []
+      )
+    )
+  ],
 
-      jlpt: entry.jlpt || [],
-      tags: entry.tags || []
-    };
+  jlpt: entry.jlpt || [],
+  tags: entry.tags || []
+};
 
     item.dictionary = dictionary;
     item.lookupStatus = "found";
@@ -555,6 +562,7 @@ async function ensureRelatedKanji(wordItem) {
    11. MOSTRAR TARJETAS
    ========================================= */
 
+
 async function showCard() {
   const item = session[sessionIndex];
 
@@ -570,7 +578,6 @@ async function showCard() {
       </div>`;
 
     $("againBtn").addEventListener("click", startSession);
-
     await refresh();
     return;
   }
@@ -594,84 +601,144 @@ async function showCard() {
       </div>
 
       <p id="lookupStatus" class="loading">
-        Buscando información si es necesario…
+        Buscando información en Jisho…
       </p>
 
-      <div id="answer" class="answer"></div>
+      <form id="readingForm" class="reading-form">
+        <label class="field" for="readingInput">
+          <span>Escribe la lectura en hiragana</span>
+          <input
+            id="readingInput"
+            type="text"
+            placeholder="Escribe en romaji"
+            autocomplete="off"
+            autocapitalize="off"
+            spellcheck="false"
+            disabled
+          >
+        </label>
+        <p id="answerFeedback" class="message" role="status"></p>
+        <div class="card-actions">
+          <button
+            class="button button-primary"
+            id="checkReadingBtn"
+            type="submit"
+            disabled
+          >
+            Comprobar
+          </button>
+        </div>
+      </form>
 
-      <div class="card-actions" id="cardActions">
-        <button class="button button-outline" id="revealBtn">
-          Revelar respuesta
-        </button>
-      </div>
+      <div id="answer" class="answer"></div>
     </article>
   `;
 
   const dictionary = await lookupJisho(item);
-
   const status = $("lookupStatus");
+  const input = $("readingInput");
+  const checkButton = $("checkReadingBtn");
+  const form = $("readingForm");
+  const feedback = $("answerFeedback");
   const answer = $("answer");
 
-  if (!status || !answer) return;
+  if (!status || !input || !form) return;
+
+  const readings = [
+    ...new Set(
+      (dictionary?.readings || [dictionary?.reading])
+        .filter(Boolean)
+        .map(reading => reading.normalize("NFKC"))
+    )
+  ];
 
   status.textContent = dictionary
     ? "Información disponible"
     : "No se pudo recuperar información de Jisho.";
 
-  $("revealBtn").addEventListener("click", () => {
-    if (dictionary) {
-      answer.innerHTML = `
-        <p class="reading">
-          ${escapeHTML(dictionary.reading || "Lectura no disponible")}
-        </p>
+  input.disabled = false;
+  checkButton.disabled = false;
+  input.focus();
 
-        <p class="meaning">
-          ${escapeHTML(
-            (dictionary.meanings || []).join(" · ") ||
-            "Significado no disponible"
-          )}
-        </p>
+  // Convertir romaji a hiragana mientras se escribe.
+  input.addEventListener("input", () => {
+    const start = input.selectionStart;
+    const end = input.selectionEnd;
 
-        <p class="details">
-          ${escapeHTML(
-            (dictionary.partsOfSpeech || []).join(" · ")
-          )}
-        </p>
-      `;
+    if (window.wanakana) {
+      const converted = wanakana.toHiragana(input.value);
+      input.value = converted;
+      input.setSelectionRange(
+        Math.min(start, converted.length),
+        Math.min(end, converted.length)
+      );
+    }
+  });
+
+  form.addEventListener("submit", async event => {
+    event.preventDefault();
+
+    const userAnswer = input.value
+      .trim()
+      .normalize("NFKC");
+
+    if (!userAnswer) {
+      feedback.textContent = "Escribe una lectura primero.";
+      return;
+    }
+
+    if (!readings.length) {
+      feedback.textContent =
+        "No hay una lectura disponible para comprobar. " +
+        "Puedes revelar la información de Jisho.";
+      return;
+    }
+
+    const correct = readings.includes(userAnswer);
+
+    if (correct) {
+      feedback.textContent = "¡Correcto!";
+
+      feedback.className = "message correct";
+      input.disabled = true;
+      checkButton.disabled = true;
+
+      await grade(item, "good");
     } else {
+      feedback.textContent =
+        "No es la lectura esperada. Inténtalo de nuevo.";
+
+      feedback.className = "message incorrect";
+      input.select();
+
       answer.innerHTML = `
-        <p class="details">
-          Información no disponible.
-          Comprueba tu conexión e inténtalo de nuevo.
-        </p>
-        <button id="retryBtn" class="button button-outline">
-          Reintentar búsqueda
+        <button
+          type="button"
+          class="button button-outline"
+          id="showAnswerBtn"
+        >
+          Revelar respuesta y continuar
         </button>
       `;
 
-      $("retryBtn").addEventListener("click", async () => {
-        item.lookupStatus = "pending";
-        await saveItem(item);
-        await showCard();
+      $("showAnswerBtn").addEventListener("click", async () => {
+        answer.innerHTML = `
+          <p class="reading">
+            ${escapeHTML(readings.join(" · "))}
+          </p>
+          <p class="meaning">
+            ${escapeHTML(
+              (dictionary.meanings || []).join(" · ") ||
+              "Significado no disponible"
+            )}
+          </p>
+        `;
+
+        input.disabled = true;
+        checkButton.disabled = true;
+        await grade(item, "again");
       });
     }
-
-    $("cardActions").innerHTML = `
-      <button class="button button-wrong" data-grade="again">
-        Otra vez
-      </button>
-      <button class="button button-hard" data-grade="hard">
-        Difícil
-      </button>
-      <button class="button button-good" data-grade="good">
-        Bien
-      </button>
-      <button class="button button-easy" data-grade="easy">
-        Fácil
-      </button>
-    `;
-
-    bindGrades();
   });
 }
 
