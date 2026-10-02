@@ -672,12 +672,12 @@ async function grade(item, rating) {
   await saveItem(item);
 
   items = await allItems();
-  sessionIndex++;
+  
 
   updateCounts();
   renderStats();
 
-  await showCard();
+  
 }
 
 /* =========================================
