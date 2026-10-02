@@ -468,6 +468,8 @@ async function showCard() {
   const checkButton = $("checkBtn");
   const feedback = $("feedback");
   const answer = $("answer");
+  // Si WanaKana está cargado, "ka" se convierte en "か" al escribir
+  if (window.wanakana) window.wanakana.bind(input);
   input.focus();
 
   let answered = false;
@@ -546,7 +548,9 @@ async function grade(item, rating) {
   item.lastReviewed = new Date().toISOString();
   await saveItem(item);
 
-  // item es el mismo objeto que está en `items`: basta con refrescar la UI
+  // Si `items` se recargó durante la sesión, sustituye la copia obsoleta
+  const idx = items.findIndex((i) => i.id === item.id);
+  if (idx >= 0) items[idx] = item;
   updateCounts();
   renderStats();
 }
@@ -604,10 +608,4 @@ async function importData() {
   if (!pendingImport) return;
 
   try {
-    const parsed = JSON.parse(await pendingImport.text());
-
-    if (parsed.app !== "kanji-learning-app" ||
-        parsed.schemaVersion !== 1 ||
-        !Array.isArray(parsed.items)) {
-      throw new Error("El archivo no tiene un formato compatible.");
-  
+    const parsed = JSON.parse(await pendingImpo
