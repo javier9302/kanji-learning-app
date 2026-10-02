@@ -563,184 +563,59 @@ async function ensureRelatedKanji(wordItem) {
    ========================================= */
 
 
-async function showCard() {
-  const item = session[sessionIndex];
 
-  if (!item) {
-    $("studyArea").innerHTML = `
-      <div class="empty-state">
-        <div class="empty-icon">達</div>
-        <h3>¡Sesión completada!</h3>
-        <p>Has terminado ${session.length} preguntas.</p>
-        <button class="button button-primary" id="againBtn">
-          Volver a estudiar
-        </button>
-      </div>`;
+form.addEventListener("submit", async event => {
+  event.preventDefault();
 
-    $("againBtn").addEventListener("click", startSession);
-    await refresh();
+  const userAnswer = input.value.trim().normalize("NFKC");
+
+  if (!userAnswer) {
+    feedback.textContent = "Escribe una lectura primero.";
     return;
   }
 
-  if (item.type === "word") {
-    await ensureRelatedKanji(item);
+  if (!readings.length) {
+    feedback.textContent =
+      "No hay una lectura disponible para comprobar.";
+    return;
   }
 
-  $("studyArea").innerHTML = `
-    <article class="card-study">
-      <div class="card-meta">
-        <span>
-          ${item.type === "kanji" ? "KANJI" : "VOCABULARIO"}
-          · ${escapeHTML(item.level)}
-        </span>
-        <span>${sessionIndex + 1} / ${session.length}</span>
-      </div>
+  const correct = readings.includes(userAnswer);
 
-      <div class="prompt ${item.type === "word" ? "word" : ""}">
-        ${escapeHTML(item.value)}
-      </div>
+  if (correct) {
+    feedback.textContent = "¡Correcto!";
+    feedback.className = "message correct";
+    await grade(item, "good");
+  } else {
+    feedback.textContent = "No es correcto.";
+    feedback.className = "message incorrect";
+    await grade(item, "again");
+  }
 
-      <p id="lookupStatus" class="loading">
-        Buscando información en Jisho…
-      </p>
-
-      <form id="readingForm" class="reading-form">
-        <label class="field" for="readingInput">
-          <span>Escribe la lectura en hiragana</span>
-          <input
-            id="readingInput"
-            type="text"
-            placeholder="Escribe en romaji"
-            autocomplete="off"
-            autocapitalize="off"
-            spellcheck="false"
-            disabled
-          >
-        </label>
-        <p id="answerFeedback" class="message" role="status"></p>
-        <div class="card-actions">
-          <button
-            class="button button-primary"
-            id="checkReadingBtn"
-            type="submit"
-            disabled
-          >
-            Comprobar
-          </button>
-        </div>
-      </form>
-
-      <div id="answer" class="answer"></div>
-    </article>
+  // Mostrar siempre la lectura correcta.
+  answer.innerHTML = `
+    <p class="reading">
+      ${escapeHTML(readings.join(" · "))}
+    </p>
   `;
 
-  const dictionary = await lookupJisho(item);
-  const status = $("lookupStatus");
-  const input = $("readingInput");
-  const checkButton = $("checkReadingBtn");
-  const form = $("readingForm");
-  const feedback = $("answerFeedback");
-  const answer = $("answer");
+  // Bloquear la respuesta hasta pasar a la siguiente tarjeta.
+  input.disabled = true;
+  checkButton.disabled = true;
 
-  if (!status || !input || !form) return;
-
-  const readings = [
-    ...new Set(
-      (dictionary?.readings || [dictionary?.reading])
-        .filter(Boolean)
-        .map(reading => reading.normalize("NFKC"))
-    )
-  ];
-
-  status.textContent = dictionary
-    ? "Información disponible"
-    : "No se pudo recuperar información de Jisho.";
-
-  input.disabled = false;
-  checkButton.disabled = false;
-  input.focus();
-
-  // Convertir romaji a hiragana mientras se escribe.
-  input.addEventListener("input", () => {
-    const start = input.selectionStart;
-    const end = input.selectionEnd;
-
-    if (window.wanakana) {
-      const converted = wanakana.toHiragana(input.value);
-      input.value = converted;
-      input.setSelectionRange(
-        Math.min(start, converted.length),
-        Math.min(end, converted.length)
-      );
-    }
+  // Mostrar el botón para avanzar manualmente.
+  const nextButton = document.createElement("button");
+  nextButton.type = "button";
+  nextButton.className = "button button-primary";
+  nextButton.textContent = "Siguiente";
+  nextButton.addEventListener("click", async () => {
+    sessionIndex++;
+    await showCard();
   });
 
-  form.addEventListener("submit", async event => {
-    event.preventDefault();
+  answer.appendChild(nextButton);
+});
 
-    const userAnswer = input.value
-      .trim()
-      .normalize("NFKC");
-
-    if (!userAnswer) {
-      feedback.textContent = "Escribe una lectura primero.";
-      return;
-    }
-
-    if (!readings.length) {
-      feedback.textContent =
-        "No hay una lectura disponible para comprobar. " +
-        "Puedes revelar la información de Jisho.";
-      return;
-    }
-
-    const correct = readings.includes(userAnswer);
-
-    if (correct) {
-      feedback.textContent = "¡Correcto!";
-
-      feedback.className = "message correct";
-      input.disabled = true;
-      checkButton.disabled = true;
-
-      await grade(item, "good");
-    } else {
-      feedback.textContent =
-        "No es la lectura esperada. Inténtalo de nuevo.";
-
-      feedback.className = "message incorrect";
-      input.select();
-
-      answer.innerHTML = `
-        <button
-          type="button"
-          class="button button-outline"
-          id="showAnswerBtn"
-        >
-          Revelar respuesta y continuar
-        </button>
-      `;
-
-      $("showAnswerBtn").addEventListener("click", async () => {
-        answer.innerHTML = `
-          <p class="reading">
-            ${escapeHTML(readings.join(" · "))}
-          </p>
-          <p class="meaning">
-            ${escapeHTML(
-              (dictionary.meanings || []).join(" · ") ||
-              "Significado no disponible"
-            )}
-          </p>
-        `;
-
-        input.disabled = true;
-        checkButton.disabled = true;
-        await grade(item, "again");
-      });
-    }
-  });
-}
 
 /* =========================================
    12. REPETICIÓN ESPACIADA BÁSICA
