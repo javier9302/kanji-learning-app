@@ -245,6 +245,13 @@ body {
   opacity: .4;
   cursor: not-allowed;
 }
+.button-secondary {
+  background: var(--mint);
+  color: var(--green-dark);
+}
+.button-secondary:hover {
+  background: var(--line);
+}
 
 .button-quiet {
   background: transparent;
@@ -468,7 +475,6 @@ body {
   flex-direction: column;
   gap: 8px;
 }
-
 .item-row {
   display: flex;
   align-items: center;
@@ -480,15 +486,17 @@ body {
 }
 
 .item-symbol {
-  width: 43px;
-  height: 43px;
-  display: grid;
-  place-items: center;
-  border-radius: 10px;
-  background: #f0f5f1;
-  color: var(--green);
-  font: 22px 'Noto Sans JP';
-  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  flex: 0 0 90px;
+  min-width: 0;
+  font-family: "Noto Sans JP", sans-serif;
+  font-size: clamp(1.5rem, 4vw, 2.5rem);
+  font-weight: 500;
+  line-height: 1.4;
+  text-align: center;
+  overflow-wrap: anywhere;
 }
 
 .item-info {
@@ -665,4 +673,106 @@ footer {
   .stat-card strong {
     font-size: 23px;
   }
+}
+
+
+/* =========================================
+   TARJETA DE ESTUDIO
+   ========================================= */
+
+.card {
+  max-width: 650px;
+  min-height: 335px;
+  margin: 0 auto;
+  padding: 25px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  background: var(--white);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  box-shadow: var(--shadow);
+}
+
+.card-progress {
+  width: 100%;
+  color: var(--muted);
+  font-size: 11px;
+  text-align: right;
+}
+
+.card-symbol {
+  margin: 30px 0 25px;
+  color: var(--ink);
+  font: 500 clamp(48px, 10vw, 82px) 'Noto Sans JP', sans-serif;
+  line-height: 1.35;
+}
+
+/* Formulario de respuesta */
+
+#readingForm {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12px;
+  width: 100%;
+  max-width: 400px;
+}
+
+#readingInput {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 48px;
+  padding: 12px 14px;
+  border: 1px solid #dce5de;
+  border-radius: 9px;
+  background: #fbfcfa;
+  color: var(--ink);
+  font: 16px 'DM Sans', 'Noto Sans JP', sans-serif;
+  text-align: center;
+  outline: none;
+  transition: border-color .2s, box-shadow .2s;
+}
+
+#readingInput:focus {
+  border-color: #77a591;
+  box-shadow: 0 0 0 3px var(--mint);
+}
+
+#readingInput:disabled {
+  background: #f1f5f3;
+  color: var(--muted);
+  cursor: not-allowed;
+}
+
+#readingForm .button {
+  width: 100%;
+  min-height: 43px;
+}
+
+/* Resultado y botón siguiente */
+
+#feedback {
+  width: 100%;
+  margin-top: 14px;
+}
+
+#feedback.correct {
+  color: #236344;
+}
+
+#feedback.incorrect {
+  color: var(--red);
+}
+
+#answer {
+  width: 100%;
+  min-height: 76px;
+  margin-top: 12px;
+}
+
+#answer .button {
+  margin-top: 12px;
 }

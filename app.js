@@ -303,16 +303,43 @@ function chooseSession() {
   const level = $("studyLevel").value;
   const count = Number($("studyCount").value);
 
-  const candidates = items.filter((i) =>
-    (type === "mixed" || i.type === type) && (level === "ALL" || i.level === level));
+  const candidates = items.filter((item) =>
+    (type === "mixed" || item.type === type) &&
+    (level === "ALL" || item.level === level)
+  );
 
-  const due = candidates.filter((i) => i.studied && i.nextReview <= today());
-  const fresh = candidates.filter((i) => !i.studied);
-  const later = candidates.filter((i) => i.studied && i.nextReview > today());
+  // 1. Tarjetas cuya fecha de revisión ya llegó.
+  const due = candidates.filter((item) =>
+    item.studied && item.nextReview && item.nextReview <= today()
+  );
 
-  let pool = [...shuffle(due), ...shuffle(fresh), ...shuffle(later)];
-  if (count > 0) pool = pool.slice(0, count);
-  return pool;
+  // 2. Tarjetas que todavía no se han estudiado.
+  const newCards = candidates.filter((item) => !item.studied);
+
+  // 3. Todas las tarjetas, para reiniciar el ciclo
+  // cuando ya no queden pendientes ni tarjetas nuevas.
+  const allCards = shuffle(candidates);
+
+  const selected = [];
+  const selectedIds = new Set();
+
+  function addCards(cards) {
+    for (const item of shuffle(cards)) {
+      if (selected.length >= count) break;
+
+      if (!selectedIds.has(item.id)) {
+        selected.push(item);
+        selectedIds.add(item.id);
+      }
+    }
+  }
+
+  // Prioridad: pendientes, nuevas y finalmente todas.
+  addCards(due);
+  addCards(newCards);
+  addCards(allCards);
+
+  return selected;
 }
 
 async function startSession() {
@@ -320,17 +347,32 @@ async function startSession() {
   sessionIndex = 0;
 
   if (!session.length) {
-    $("studyArea").innerHTML = `
-      <div class="empty-state">
-        <div class="empty-icon">✓</div>
-        <h3>No hay elementos en esta selección</h3>
-        <p>Agrega contenido de ese tipo y nivel en “Mis listas”.</p>
-        <button class="button button-outline" data-go="manage" type="button">
-          Administrar listas
-        </button>
-      </div>`;
-    return; // la navegación ya funciona por delegación
-  }
+  const hasMatchingItems = items.some((item) =>
+    ($("studyType").value === "mixed" ||
+      item.type === $("studyType").value) &&
+    ($("studyLevel").value === "ALL" ||
+      item.level === $("studyLevel").value)
+  );
+
+  $("studyArea").innerHTML = `
+    <div class="empty-state">
+      <div class="empty-icon">✓</div>
+      <h3>${
+        hasMatchingItems
+          ? "¡Has terminado el repaso por ahora!"
+          : "No hay elementos en esta selección"
+      }</h3>
+      <p>${
+        hasMatchingItems
+          ? "No tienes tarjetas pendientes para revisar con estos filtros. Las próximas revisiones estarán disponibles según su calendario."
+          : "No hay elementos de este tipo y nivel en tus listas."
+      }</p>
+      <button class="button button-outline" data-go="progress" type="button">
+        Ver progreso
+      </button>
+    </div>`;
+  return;
+}
   await showCard();
 }
 
@@ -351,53 +393,190 @@ async function fetchJSON(url) {
 }
 
 async function fetchDictionary(item) {
+  // Kanji: mantener kanjiapi.dev
   if (item.type === "kanji") {
     const data = await fetchJSON(
-      "https://kanjiapi.dev/v1/kanji/" + encodeURIComponent(item.value));
+      "https://kanjiapi.dev/v1/kanji/" + encodeURIComponent(item.value)
+    );
+
     const readings = new Set();
-    for (const r of [...(data.on_readings || []), ...(data.kun_readings || [])]) {
+
+    for (const r of [
+      ...(data.on_readings || []),
+      ...(data.kun_readings || [])
+    ]) {
       const full = normalizeReading(r);
-      const stem = normalizeReading(r.split(".")[0]); // た.べる -> た y たべる
+      const stem = normalizeReading(r.split(".")[0]);
+
       if (full) readings.add(full);
       if (stem) readings.add(stem);
     }
+
     return {
       v: DICT_VERSION,
       source: "kanjiapi.dev",
       readings: [...readings],
       display: {
-        on: (data.on_readings || []),
-        kun: (data.kun_readings || [])
+        on: data.on_readings || [],
+        kun: data.kun_readings || []
       },
       meanings: (data.meanings || []).slice(0, 8),
       jlpt: data.jlpt ?? null
     };
   }
 
-  // Palabra
-  const entries = await fetchJSON(
-    "https://kanjiapi.dev/v1/words/" + encodeURIComponent(item.value));
-  const readings = new Set();
-  const meanings = [];
-  for (const entry of entries) {
-    const matches = (entry.variants || []).filter((v) => v.written === item.value);
-    if (!matches.length) continue; // solo lecturas de ESTA escritura
-    matches.forEach((v) => readings.add(normalizeReading(v.pronounced)));
-    for (const m of entry.meanings || []) meanings.push(...(m.glosses || []));
-  }
-  if (!readings.size) throw new Error("Sin lectura para esta palabra");
+  // Palabras: intentar primero con Jisho
+  try {
+    const data = await fetchJSON(
+      "https://jisho.org/api/v1/search/words?keyword=" +
+      encodeURIComponent(item.value)
+    );
 
-  return {
-    v: DICT_VERSION,
-    source: "kanjiapi.dev",
-    readings: [...readings],
-    display: { words: [...readings] },
-    meanings: [...new Set(meanings)].slice(0, 8)
-  };
+    const readings = new Set();
+    const meanings = new Set();
+    const partsOfSpeech = new Set();
+    const jlpt = new Set();
+
+    for (const entry of data.data || []) {
+      const japanese = entry.japanese || [];
+
+      // Aceptar solo la escritura exacta solicitada.
+      const matches = japanese.filter((variant) =>
+        variant.word === item.value ||
+        (!variant.word && variant.reading === item.value)
+      );
+
+      if (!matches.length) continue;
+
+      for (const variant of matches) {
+        const reading = normalizeReading(variant.reading);
+        if (reading) readings.add(reading);
+      }
+
+      for (const sense of entry.senses || []) {
+        for (const meaning of sense.english_definitions || []) {
+          if (meaning) meanings.add(meaning);
+        }
+
+        for (const pos of sense.parts_of_speech || []) {
+          if (pos) partsOfSpeech.add(pos);
+        }
+
+        for (const tag of sense.tags || []) {
+          if (/^jlpt-n[1-5]$/i.test(tag)) {
+            jlpt.add(tag.toLowerCase());
+          }
+        }
+      }
+    }
+
+    if (readings.size) {
+      return {
+        v: DICT_VERSION,
+        source: "jisho",
+        readings: [...readings],
+        display: {
+          words: [...readings]
+        },
+        meanings: [...meanings].slice(0, 8),
+        partsOfSpeech: [...partsOfSpeech],
+        jlpt: [...jlpt]
+      };
+    }
+
+    throw new Error("Jisho no encontró una coincidencia exacta");
+  } catch (jishoError) {
+    // Respaldo: intentar recuperar la palabra con kanjiapi.dev
+    try {
+      const entries = await fetchJSON(
+        "https://kanjiapi.dev/v1/words/" +
+        encodeURIComponent(item.value)
+      );
+
+      const readings = new Set();
+      const meanings = new Set();
+
+      for (const entry of entries) {
+        const matches = (entry.variants || []).filter(
+          (variant) => variant.written === item.value
+        );
+
+        if (!matches.length) continue;
+
+        for (const variant of matches) {
+          const reading = normalizeReading(variant.pronounced);
+          if (reading) readings.add(reading);
+        }
+
+        for (const meaning of entry.meanings || []) {
+          for (const gloss of meaning.glosses || []) {
+            if (gloss) meanings.add(gloss);
+          }
+        }
+      }
+
+      if (!readings.size) {
+        throw new Error("Sin lectura para esta palabra");
+      }
+
+      return {
+        v: DICT_VERSION,
+        source: "kanjiapi.dev",
+        readings: [...readings],
+        display: {
+          words: [...readings]
+        },
+        meanings: [...meanings].slice(0, 8)
+      };
+    } catch (fallbackError) {
+      throw new Error(
+        `Jisho: ${jishoError.message}. ` +
+        `kanjiapi.dev: ${fallbackError.message}`
+      );
+    }
+  }
 }
 
 async function getDictionary(item) {
-  if (item.dictionary?.v === DICT_VERSION) return item.dictionary;
+  if (item.dictionary?.v === DICT_VERSION) {
+    return item.dictionary;
+  }
+
+  // Utilizar primero el diccionario que viene en el JSON.
+  const imported = item.dictionary;
+
+  if (imported && typeof imported.reading === "string" &&
+      imported.reading.trim()) {
+    const reading = normalizeReading(imported.reading);
+
+    item.dictionary = {
+      ...imported,
+      v: DICT_VERSION,
+      source: "import",
+      readings: reading ? [reading] : [],
+      display: item.type === "kanji"
+        ? {
+            on: [],
+            kun: [],
+            imported: [imported.reading]
+          }
+        : {
+            words: [imported.reading]
+          },
+      meanings: Array.isArray(imported.meanings)
+        ? imported.meanings
+        : []
+    };
+
+    item.lookupStatus = "found";
+    item.lookupDate = new Date().toISOString();
+    delete item.lookupError;
+
+    await saveItem(item);
+    return item.dictionary;
+  }
+
+  // Si el JSON no contiene una lectura, recurrir a la API.
   try {
     item.dictionary = await fetchDictionary(item);
     item.lookupStatus = "found";
@@ -409,6 +588,7 @@ async function getDictionary(item) {
     await saveItem(item);
     return null;
   }
+
   await saveItem(item);
   return item.dictionary;
 }
@@ -442,7 +622,7 @@ async function showCard() {
         <h3>${escapeHTML(item.value)}</h3>
         <p>No se pudo obtener la lectura (${escapeHTML(item.lookupError || "sin datos")}).</p>
         <button id="retryBtn" class="button button-outline" type="button">Reintentar</button>
-        <button id="skipBtn" class="button button-primary" type="button">Saltar</button>
+        <button id="skipBtn" class="button button-secondary" type="button">Saltar</button>
       </div>`;
     $("retryBtn").onclick = showCard;
     $("skipBtn").onclick = () => { sessionIndex++; showCard(); };
@@ -454,10 +634,12 @@ async function showCard() {
       <div class="card-progress">${sessionIndex + 1} / ${session.length}</div>
       <div class="card-symbol">${escapeHTML(item.value)}</div>
       <form id="readingForm" autocomplete="off">
-        <input id="readingInput" type="text" lang="ja"
-          placeholder="Escribe la lectura (hiragana o katakana)"
-          autocapitalize="off" spellcheck="false">
+        <input id="readingInput" class="reading-input" type="text"
+  lang="ja" inputmode="text"
+  placeholder="Escribe la lectura (hiragana o katakana)"
+  autocapitalize="off" autocomplete="off" spellcheck="false">
         <button id="checkBtn" class="button button-primary" type="submit">Comprobar</button>
+        <button id="skipBtn" class="button button-secondary" type="button">Saltar</button>
       </form>
       <p id="feedback" class="message"></p>
       <div id="answer"></div>
@@ -466,12 +648,28 @@ async function showCard() {
   const form = $("readingForm");
   const input = $("readingInput");
   const checkButton = $("checkBtn");
+  
   const feedback = $("feedback");
   const answer = $("answer");
   // Si WanaKana está cargado, "ka" se convierte en "か" al escribir
-  if (window.wanakana) window.wanakana.bind(input);
-  input.focus();
+if (window.wanakana && typeof window.wanakana.bind === "function") {
+  window.wanakana.bind(input);
+} else {
+  console.error("WanaKana no se ha cargado correctamente.");
+}
+$("skipBtn").onclick = async () => {
+  if (answered) return;
 
+  answered = true;
+  input.disabled = true;
+  checkButton.disabled = true;
+  $("skipBtn").disabled = true;
+
+  await grade(item, "skipped");
+
+  sessionIndex++;
+  await showCard();
+};
   let answered = false;
 
   form.addEventListener("submit", async (event) => {
@@ -493,10 +691,19 @@ async function showCard() {
     checkButton.disabled = true;
 
     // La respuesta se queda en pantalla hasta pulsar "Siguiente"
-    const shown = item.type === "kanji"
-      ? `${dict.display.on.length ? `<p class="reading">On: ${escapeHTML(dict.display.on.join(" · "))}</p>` : ""}
-         ${dict.display.kun.length ? `<p class="reading">Kun: ${escapeHTML(dict.display.kun.join(" · "))}</p>` : ""}`
-      : `<p class="reading">${escapeHTML(dict.display.words.join(" · "))}</p>`;
+   
+const shown = item.type === "kanji"
+  ? (
+      dict.display.imported?.length
+        ? `<p class="reading">${escapeHTML(dict.display.imported.join(" · "))}</p>`
+        : `${dict.display.on.length
+            ? `<p class="reading">On: ${escapeHTML(dict.display.on.join(" · "))}</p>`
+            : ""}
+           ${dict.display.kun.length
+            ? `<p class="reading">Kun: ${escapeHTML(dict.display.kun.join(" · "))}</p>`
+            : ""}`
+    )
+  : `<p class="reading">${escapeHTML(dict.display.words.join(" · "))}</p>`;
 
     answer.innerHTML = `
       ${shown}
@@ -530,7 +737,12 @@ async function grade(item, rating) {
     easy: item.interval ? Math.max(2, Math.round(item.interval * 3.5)) : 4
   };
 
-  if (rating === "again") {
+  if (rating === "skipped") {
+    item.skippedCount = (item.skippedCount || 0) + 1;
+    item.interval = 1;
+    item.status = "learning";
+    item.nextReview = daysFromNow(1);
+  } else if (rating === "again") {
     item.incorrectCount++;
     item.repetitions = 0;
     item.interval = 0;
@@ -540,7 +752,10 @@ async function grade(item, rating) {
     item.correctCount++;
     item.repetitions++;
     item.interval = intervals[rating];
-    item.status = item.repetitions >= 4 && item.interval >= 7 ? "mature" : "learning";
+    item.status =
+      item.repetitions >= 4 && item.interval >= 7
+        ? "mature"
+        : "learning";
     item.nextReview = daysFromNow(item.interval);
   }
 
@@ -551,10 +766,10 @@ async function grade(item, rating) {
   // Si `items` se recargó durante la sesión, sustituye la copia obsoleta
   const idx = items.findIndex((i) => i.id === item.id);
   if (idx >= 0) items[idx] = item;
+
   updateCounts();
   renderStats();
 }
-
 /* =========================================
    12. EXPORTAR
    ========================================= */
@@ -586,11 +801,26 @@ async function exportData() {
 /* Solo se copian campos conocidos (antes ...raw permitía sobrescribir cualquier cosa) */
 function sanitizeRecord(raw) {
   const base = newItem(raw.type, raw.value.trim(), raw.level || "N3");
-  const num = (v, d) => (Number.isFinite(Number(v)) ? Number(v) : d);
+
+  const num = (v, d) => Number.isFinite(Number(v)) ? Number(v) : d;
+  const textOrArray = (value) => {
+    if (Array.isArray(value)) {
+      return value.filter((v) => typeof v === "string" && v.trim());
+    }
+    if (typeof value === "string" && value.trim()) {
+      return [value.trim()];
+    }
+    return [];
+  };
+
   return {
     ...base,
     source: "import",
-    dictionary: raw.dictionary && typeof raw.dictionary === "object" ? raw.dictionary : null,
+    reading: textOrArray(raw.reading),
+    meaning: textOrArray(raw.meaning),
+    dictionary: raw.dictionary && typeof raw.dictionary === "object"
+      ? raw.dictionary
+      : null,
     lookupStatus: raw.dictionary ? (raw.lookupStatus || "found") : "pending",
     studied: !!raw.studied,
     correctCount: num(raw.correctCount, 0),
@@ -599,13 +829,120 @@ function sanitizeRecord(raw) {
     interval: num(raw.interval, 0),
     ease: num(raw.ease, 2.5),
     lastReviewed: raw.lastReviewed || null,
-    nextReview: /^\d{4}-\d{2}-\d{2}$/.test(raw.nextReview) ? raw.nextReview : today(),
-    status: ["new", "learning", "mature"].includes(raw.status) ? raw.status : base.status
+    nextReview: /^\d{4}-\d{2}-\d{2}$/.test(raw.nextReview)
+      ? raw.nextReview
+      : today(),
+    status: ["new", "learning", "mature"].includes(raw.status)
+      ? raw.status
+      : base.status
   };
 }
-
 async function importData() {
   if (!pendingImport) return;
-
+ 
   try {
-    const parsed = JSON.parse(await pendingImpo
+    const parsed = JSON.parse(await pendingImport.text());
+ 
+    if (parsed.app !== "kanji-learning-app" ||
+        parsed.schemaVersion !== 1 ||
+        !Array.isArray(parsed.items)) {
+      throw new Error("El archivo no tiene un formato compatible.");
+    }
+ 
+    const byId = new Map(items.map((i) => [i.id, i]));
+    const toSave = [];
+    let added = 0, updated = 0;
+ 
+    for (const raw of parsed.items) {
+      if (!raw || !["kanji", "word"].includes(raw.type) ||
+          typeof raw.value !== "string" || !raw.value.trim()) continue;
+ 
+      const clean = sanitizeRecord(raw);
+      const existing = byId.get(clean.id);
+ 
+      if (existing) {
+        if (!existing.dictionary && clean.dictionary) {
+          existing.dictionary = clean.dictionary;
+          existing.lookupStatus = clean.lookupStatus;
+        }
+        if (!existing.studied && clean.studied) {
+          Object.assign(existing, {
+            studied: true,
+            correctCount: clean.correctCount,
+            incorrectCount: clean.incorrectCount,
+            repetitions: clean.repetitions,
+            interval: clean.interval,
+            ease: clean.ease,
+            lastReviewed: clean.lastReviewed,
+            nextReview: clean.nextReview,
+            status: clean.status === "new" ? "learning" : clean.status
+          });
+        }
+        toSave.push(existing);
+        updated++;
+      } else {
+        toSave.push(clean);
+        byId.set(clean.id, clean);
+        added++;
+      }
+    }
+ 
+    if (toSave.length) await saveItems(toSave);
+ 
+    $("importMessage").textContent =
+      `Importación completada. Nuevos: ${added}; registros combinados: ${updated}.`;
+    pendingImport = null;
+    $("mergeBtn").disabled = true;
+    $("importFile").value = "";
+    await refresh();
+ 
+  } catch (error) {
+    $("importMessage").textContent = error.message || "No se pudo importar el archivo.";
+  }
+}
+ 
+/* =========================================
+   14. EVENTOS
+   ========================================= */
+ 
+$("importType").addEventListener("change", () => {
+  const kanji = $("importType").value === "kanji";
+  $("listLabel").textContent = kanji ? "Lista de kanjis" : "Lista de palabras";
+  $("listInput").placeholder = kanji ? "政, 議, 民, 経, 済" : "政治, 政府, 行政";
+});
+ 
+$("addBtn").addEventListener("click", addList);
+$("startBtn").addEventListener("click", startSession);
+$("exportBtn").addEventListener("click", exportData);
+$("filterInput").addEventListener("input", renderItems);
+ 
+$("importFile").addEventListener("change", (event) => {
+  pendingImport = event.target.files?.[0] || null;
+  $("mergeBtn").disabled = !pendingImport;
+  $("importMessage").textContent = pendingImport
+    ? `Archivo seleccionado: ${pendingImport.name}` : "";
+});
+ 
+$("mergeBtn").addEventListener("click", importData);
+ 
+/* =========================================
+   15. INICIO
+   ========================================= */
+ 
+async function init() {
+  try {
+    db = await openDatabase();
+    bindNavigation();
+    bindDelete();
+    await refresh();
+  } catch (error) {
+    console.error("Error al iniciar la aplicación:", error);
+    $("studyArea").innerHTML = `
+      <div class="empty-state">
+        <h3>No se pudo abrir el almacenamiento local</h3>
+        <p>Abre la aplicación desde un navegador compatible con IndexedDB.</p>
+      </div>`;
+  }
+}
+ 
+init();
