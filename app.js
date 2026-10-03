@@ -212,6 +212,7 @@ function adoptItems(list) {
 
 function renderAll() {
   updateCounts();
+  renderBaseLists();
   renderItems();
   renderStats();
   renderDataView();
@@ -342,6 +343,48 @@ async function addList() {
     (derived ? ` (+${derived} kanjis derivados)` : "") +
     `. Ya existentes: ${skipped}.` +
     (invalid ? ` Formato no válido: ${invalid}.` : "");
+
+  renderAll();
+  scheduleSync();
+  runLookups();
+}
+
+/* ---------- Listas base JLPT (jlpt-lists.js) ---------- */
+
+const baseList = (level) => [...(globalThis.JLPT_KANJI?.[level] || "")];
+
+function renderBaseLists() {
+  const known = new Set(items.map((i) => i.id));
+  $("baseLists").innerHTML = LEVELS.map((level) => {
+    const list = baseList(level);
+    const missing = list.filter((k) => !known.has(uid("kanji", k))).length;
+    return `
+      <button class="button button-outline" data-base="${level}" type="button"${missing ? "" : " disabled"}>
+        <strong>${level}</strong>
+        <span>${!missing ? `${list.length} kanjis · agregada`
+          : missing === list.length ? `Agregar ${list.length} kanjis`
+          : `Agregar ${missing} restantes`}</span>
+      </button>`;
+  }).join("");
+}
+
+async function addBaseList(level) {
+  const known = new Set(items.map((i) => i.id));
+  const toSave = [];
+
+  for (const value of baseList(level)) {
+    if (known.has(uid("kanji", value))) continue;
+    const item = newItem("kanji", value, level);
+    item.source = "base-list";
+    toSave.push(item);
+  }
+
+  if (toSave.length) {
+    await saveItems(toSave);
+    items.push(...toSave);
+  }
+
+  $("baseMessage").textContent = `Lista ${level}: ${plural(toSave.length, "kanji agregado", "kanjis agregados")}.`;
 
   renderAll();
   scheduleSync();
@@ -1673,6 +1716,10 @@ function bindSettings() {
   });
 
   $("addBtn").addEventListener("click", addList);
+  $("baseLists").addEventListener("click", (event) => {
+    const button = event.target.closest("[data-base]");
+    if (button && !button.disabled) addBaseList(button.dataset.base);
+  });
   $("startBtn").addEventListener("click", startSession);
   $("exportBtn").addEventListener("click", exportData);
   $("retryLookupsBtn").addEventListener("click", () => {

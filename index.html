@@ -14,6 +14,7 @@
   <link rel="apple-touch-icon" href="icons/icon-180.png">
   <link rel="stylesheet" href="style.css">
   <script src="https://unpkg.com/wanakana@5.3.1/wanakana.min.js" defer></script>
+  <script src="jlpt-lists.js" defer></script>
   <script src="app.js" defer></script>
 </head>
 <body>
@@ -126,7 +127,7 @@
         <div class="empty-state">
           <div class="empty-icon">学</div>
           <h3>Tu próxima sesión empieza aquí</h3>
-          <p>Agrega una lista en “Mis listas” y luego inicia un repaso.</p>
+          <p>Agrega una lista base JLPT o tu propia lista en “Mis listas” y luego inicia un repaso.</p>
           <button class="button button-outline" data-go="manage" type="button">
             Agregar contenido
           </button>
@@ -142,6 +143,16 @@
           <h2>Mis listas</h2>
         </div>
         <span id="itemCount" class="pill">0 elementos</span>
+      </div>
+
+      <div class="panel">
+        <h3>Listas base JLPT</h3>
+        <p class="helper">
+          Kanjis de cada nivel, listos para agregar con un clic. Las lecturas
+          y los significados se buscan automáticamente.
+        </p>
+        <div id="baseLists" class="base-lists"></div>
+        <p id="baseMessage" class="message" role="status"></p>
       </div>
 
       <div class="panel">
