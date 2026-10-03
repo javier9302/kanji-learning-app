@@ -1,14 +1,20 @@
-
 <!DOCTYPE html>
 <html lang="es">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#173f35">
+  <meta name="theme-color" content="#173f35" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#101815" media="(prefers-color-scheme: dark)">
+  <meta name="color-scheme" content="light dark">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Kanji">
   <title>Kanji Learning App</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/icon-180.png">
   <link rel="stylesheet" href="style.css">
-<script src="https://unpkg.com/wanakana"></script>
-<script src="app.js" defer></script>
+  <script src="https://unpkg.com/wanakana@5.3.1/wanakana.min.js" defer></script>
+  <script src="app.js" defer></script>
 </head>
 <body>
   <header class="topbar">
@@ -19,8 +25,10 @@
         <span class="brand-sub">Tu espacio de estudio japonés</span>
       </span>
     </a>
-    <button id="exportBtn" class="button button-quiet" type="button">
-      ↓ Exportar JSON
+    <button id="syncBtn" class="button button-quiet sync-btn" type="button"
+      data-state="off" title="Sincronización">
+      <span class="sync-dot" aria-hidden="true"></span>
+      <span id="syncLabel">Solo en este dispositivo</span>
     </button>
   </header>
 
@@ -32,7 +40,7 @@
       </h1>
       <p class="intro-copy">
         Organiza tus kanjis y palabras, estudia a tu ritmo
-        y conserva tu progreso en tu propio dispositivo.
+        y lleva tu progreso contigo a cualquier dispositivo.
       </p>
     </section>
 
@@ -46,6 +54,9 @@
       <button class="tab" data-view="progress" type="button">
         Progreso
       </button>
+      <button class="tab" data-view="data" type="button">
+        Datos
+      </button>
     </nav>
 
     <!-- ESTUDIO -->
@@ -56,6 +67,14 @@
           <h2>¿Qué vamos a estudiar?</h2>
         </div>
         <span id="dueBadge" class="pill">0 pendientes</span>
+      </div>
+
+      <div class="today-strip">
+        <span id="streakText" class="today-streak">Racha: 0 días</span>
+        <div class="today-goal">
+          <span id="todayText">Hoy: 0 / 20 repasos</span>
+          <div class="meter" aria-hidden="true"><div id="todayBar"></div></div>
+        </div>
       </div>
 
       <div class="panel study-settings">
@@ -77,6 +96,14 @@
             <option>N2</option>
             <option>N1</option>
             <option value="ALL">Todos</option>
+          </select>
+        </label>
+
+        <label class="field">
+          <span>Modo</span>
+          <select id="studyMode">
+            <option value="type">Escribir la lectura</option>
+            <option value="flash">Tarjetas (autoevaluación)</option>
           </select>
         </label>
 
@@ -148,7 +175,8 @@
         <div class="form-footer">
           <p class="helper">
             Separa los elementos con comas, punto y coma
-            o saltos de línea. Los duplicados se omiten.
+            o saltos de línea. Los duplicados se omiten y las
+            lecturas y significados se buscan automáticamente.
           </p>
           <button id="addBtn" class="button button-primary" type="button">
             Agregar a mis listas
@@ -157,35 +185,40 @@
         <p id="addMessage" class="message" role="status"></p>
       </div>
 
-      <div class="panel import-panel">
-        <div>
-          <h3>Restaurar una copia</h3>
-          <p class="helper">
-            Carga un archivo JSON exportado previamente.
-            Puedes combinarlo con los datos actuales.
-          </p>
-        </div>
-        <div class="import-actions">
-          <label class="button button-outline file-button">
-            Elegir JSON
-            <input id="importFile" type="file"
-              accept=".json,application/json" hidden>
-          </label>
-          <button id="mergeBtn" class="button button-quiet"
-            type="button" disabled>
-            Importar archivo
-          </button>
-        </div>
-        <p id="importMessage" class="message" role="status"></p>
-      </div>
-
       <div class="list-toolbar">
         <h3>Elementos guardados</h3>
-        <input id="filterInput" class="search" type="search"
-          placeholder="Filtrar contenido…">
+        <div class="list-filters">
+          <select id="filterType" aria-label="Filtrar por tipo">
+            <option value="">Tipo: todos</option>
+            <option value="kanji">Kanjis</option>
+            <option value="word">Palabras</option>
+          </select>
+          <select id="filterLevel" aria-label="Filtrar por nivel">
+            <option value="">Nivel: todos</option>
+            <option>N5</option>
+            <option>N4</option>
+            <option>N3</option>
+            <option>N2</option>
+            <option>N1</option>
+          </select>
+          <select id="filterStatus" aria-label="Filtrar por estado">
+            <option value="">Estado: todos</option>
+            <option value="due">Para repasar hoy</option>
+            <option value="new">Sin estudiar</option>
+            <option value="learning">Aprendiendo</option>
+            <option value="mature">Consolidados</option>
+            <option value="nodict">Sin lectura</option>
+          </select>
+          <input id="filterInput" class="search" type="search"
+            placeholder="Buscar kanji, lectura o significado…">
+        </div>
       </div>
+      <p id="lookupMessage" class="message" role="status"></p>
 
       <div id="itemsList" class="items-list"></div>
+      <button id="moreBtn" class="button button-outline more-btn hidden" type="button">
+        Mostrar más
+      </button>
     </section>
 
     <!-- PROGRESO -->
@@ -214,23 +247,205 @@
           <span>Consolidados</span>
           <strong id="statMature">0</strong>
         </article>
+        <article class="stat-card">
+          <span>Racha actual</span>
+          <strong id="statStreak">0</strong>
+        </article>
+        <article class="stat-card">
+          <span>Aciertos (30 días)</span>
+          <strong id="statAccuracy">—</strong>
+        </article>
       </div>
 
-      <div class="panel progress-panel">
-        <h3>Consejo</h3>
-        <p>
-          Marca cada respuesta con sinceridad. Los repasos se
-          programan según tu respuesta y se guardan en este
-          navegador. Exporta una copia periódicamente para
-          no perder tus datos.
+      <div class="panel chart-panel">
+        <h3>Repasos de los próximos 14 días</h3>
+        <p class="helper">Tarjetas ya estudiadas que vencen cada día.</p>
+        <div id="forecastChart" class="bar-chart"></div>
+      </div>
+
+      <div class="panel chart-panel">
+        <h3>Actividad</h3>
+        <p class="helper">Respuestas por día en las últimas 16 semanas.</p>
+        <div id="heatmap" class="heatmap"></div>
+        <div class="legend heat-legend">
+          <span>Menos</span>
+          <i data-heat="0"></i><i data-heat="1"></i><i data-heat="2"></i>
+          <i data-heat="3"></i><i data-heat="4"></i>
+          <span>Más</span>
+        </div>
+      </div>
+
+      <div class="panel chart-panel">
+        <h3>Avance por nivel</h3>
+        <div class="legend">
+          <span><i class="sw sw-mature"></i>Consolidados</span>
+          <span><i class="sw sw-learning"></i>Aprendiendo</span>
+          <span><i class="sw sw-new"></i>Sin estudiar</span>
+        </div>
+        <div id="levelChart" class="level-chart"></div>
+      </div>
+
+      <div class="panel chart-panel">
+        <h3>Los que más se te resisten</h3>
+        <div id="hardList" class="hard-list"></div>
+      </div>
+    </section>
+
+    <!-- DATOS -->
+    <section id="view-data" class="view hidden">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">TUS DATOS</p>
+          <h2>Sincronización y copias</h2>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h3>Sincronización automática</h3>
+        <p class="helper">
+          Guarda tus listas y tu progreso en un gist privado de tu cuenta
+          de GitHub y mantenlos al día en todos tus dispositivos, sin
+          exportar ni importar archivos.
         </p>
+
+        <div id="syncSetup">
+          <ol class="steps">
+            <li>
+              <a href="https://github.com/settings/tokens/new?scopes=gist&description=Kanji%20Learning%20App"
+                target="_blank" rel="noopener">Crea un token de GitHub</a>
+              con el único permiso <strong>gist</strong>.
+            </li>
+            <li>Pégalo aquí. Repite este paso en cada dispositivo.</li>
+          </ol>
+          <div class="inline-form">
+            <input id="syncToken" class="search" type="password"
+              placeholder="ghp_…" autocomplete="off" spellcheck="false"
+              aria-label="Token de GitHub">
+            <button id="syncConnectBtn" class="button button-primary" type="button">
+              Conectar
+            </button>
+          </div>
+          <p class="helper">
+            El token se guarda solo en este navegador y no se incluye
+            en las copias exportadas.
+          </p>
+        </div>
+
+        <div id="syncActive" class="hidden">
+          <div class="inline-form">
+            <button id="syncNowBtn" class="button button-primary" type="button">
+              Sincronizar ahora
+            </button>
+            <a id="syncGistLink" class="button button-outline" target="_blank"
+              rel="noopener" href="#">Ver gist</a>
+            <button id="syncDisconnectBtn" class="button button-quiet" type="button">
+              Desconectar
+            </button>
+          </div>
+        </div>
+        <p id="syncMessage" class="message" role="status"></p>
+      </div>
+
+      <div class="panel import-panel">
+        <div>
+          <h3>Copia de seguridad</h3>
+          <p class="helper">
+            Descarga un archivo JSON con todo, o carga uno exportado
+            previamente: se combina con los datos actuales.
+          </p>
+        </div>
+        <div class="import-actions">
+          <button id="exportBtn" class="button button-outline" type="button">
+            ↓ Exportar JSON
+          </button>
+          <label class="button button-outline file-button">
+            Elegir JSON
+            <input id="importFile" type="file"
+              accept=".json,application/json" hidden>
+          </label>
+          <button id="mergeBtn" class="button button-quiet"
+            type="button" disabled>
+            Importar archivo
+          </button>
+        </div>
+        <p id="importMessage" class="message" role="status"></p>
+      </div>
+
+      <div class="panel import-panel">
+        <div>
+          <h3>Meta diaria</h3>
+          <p class="helper">Número de respuestas que quieres hacer cada día.</p>
+        </div>
+        <div class="import-actions">
+          <input id="goalInput" class="search goal-input" type="number"
+            min="1" max="500" step="1" aria-label="Meta diaria">
+        </div>
+      </div>
+
+      <div class="panel import-panel">
+        <div>
+          <h3>Diccionario</h3>
+          <p id="dictSummary" class="helper"></p>
+        </div>
+        <div class="import-actions">
+          <button id="retryLookupsBtn" class="button button-outline" type="button">
+            Volver a consultar
+          </button>
+        </div>
       </div>
     </section>
   </main>
 
+  <dialog id="editDialog" class="dialog">
+    <form id="editForm" method="dialog">
+      <div class="dialog-head">
+        <span id="editSymbol" class="dialog-symbol"></span>
+        <div>
+          <h3 id="editTitle"></h3>
+          <p id="editSub" class="helper"></p>
+        </div>
+      </div>
+
+      <label class="field">
+        <span>Nivel JLPT</span>
+        <select id="editLevel">
+          <option>N5</option>
+          <option>N4</option>
+          <option>N3</option>
+          <option>N2</option>
+          <option>N1</option>
+        </select>
+      </label>
+
+      <label class="field">
+        <span>Lecturas aceptadas (separadas por comas)</span>
+        <input id="editReadings" class="search" type="text" lang="ja"
+          autocomplete="off" spellcheck="false">
+      </label>
+
+      <label class="field">
+        <span>Significados (separados por comas)</span>
+        <input id="editMeanings" class="search" type="text" autocomplete="off">
+      </label>
+
+      <div class="dialog-actions">
+        <button id="editResetBtn" class="button button-quiet" type="button">
+          Reiniciar progreso
+        </button>
+        <span class="spacer"></span>
+        <button class="button button-secondary" type="submit" value="cancel">
+          Cancelar
+        </button>
+        <button id="editSaveBtn" class="button button-primary" type="submit" value="save">
+          Guardar
+        </button>
+      </div>
+    </form>
+  </dialog>
+
   <footer>
     <span>Kanji Learning App</span>
-    <span>Datos guardados localmente en este navegador</span>
+    <span id="footerNote">Datos guardados localmente en este navegador</span>
   </footer>
 </body>
 </html>
