@@ -153,11 +153,29 @@ function normalizeReading(value) {
 const hasReadings = (item) =>
   item.dictionary?.v === DICT_VERSION && item.dictionary.readings?.length > 0;
 const isDue = (item) => item.studied && item.nextReview <= today();
-const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+
+/* Lecturas que se aceptan como respuesta. En los kanjis solo valen las kun;
+   si el kanji no tiene ninguna (o la lectura se escribió a mano) valen todas. */
+function acceptedReadings(item) {
+  const { readings, display } = item.dictionary;
+  if (item.type !== "kanji" || display.imported?.length || !display.kun?.length) return readings;
+  return [...new Set(display.kun
+    .flatMap((r) => [normalizeReading(r), normalizeReading(r.split(".")[0])])
+    .filter(Boolean))];
+}
+
+/* Un kanji está aprendido cuando se ha acertado al menos una vez */
+const isLearned = (item) => item.type === "kanji" && item.correctCount > 0;
+const learnedKanji = () => new Set(items.filter(isLearned).map((i) => i.value));
+
+/* Una palabra solo se estudia cuando todos sus kanjis están aprendidos */
+const isUnlocked = (item, learned) =>
+  item.type !== "word" || splitKanji(item.value).every((k) => learned.has(k));
+const plural = (n, one, many) => `${n} ${t(n === 1 ? one : many)}`;
 
 function formatDate(iso) {
   const [y, m, d] = iso.split("-").map(Number);
-  return new Date(y, m - 1, d).toLocaleDateString("es", { day: "numeric", month: "short" });
+  return new Date(y, m - 1, d).toLocaleDateString(lang, { day: "numeric", month: "short" });
 }
 
 /* Lecturas tal y como se muestran al usuario */
@@ -180,6 +198,7 @@ function switchView(name) {
   document.querySelectorAll(".tab").forEach((t) =>
     t.classList.toggle("active", t.dataset.view === name));
   document.body.dataset.view = name;
+  if (name === "draw") renderDraw();
   if (name === "manage") renderItems();
   if (name === "progress") renderStats();
   if (name === "data") renderDataView();
@@ -232,14 +251,15 @@ function currentStreak() {
 }
 
 function updateCounts() {
-  const due = items.filter(isDue);
+  const learned = learnedKanji();
+  const due = items.filter((i) => isDue(i) && isUnlocked(i, learned));
   const done = meta.days[today()]?.r || 0;
   const goal = Math.max(1, Number(prefs.goal) || 20);
 
   $("itemCount").textContent = plural(items.length, "elemento", "elementos");
   $("dueBadge").textContent = plural(due.length, "pendiente", "pendientes");
-  $("streakText").textContent = `Racha: ${plural(currentStreak(), "día", "días")}`;
-  $("todayText").textContent = `Hoy: ${done} / ${goal} repasos`;
+  $("streakText").textContent = t("Racha: {n}", { n: plural(currentStreak(), "día", "días") });
+  $("todayText").textContent = t("Hoy: {done} / {goal} repasos", { done, goal });
   $("todayBar").style.width = `${Math.min(100, (done / goal) * 100)}%`;
   $("todayBar").classList.toggle("complete", done >= goal);
 }
@@ -253,19 +273,29 @@ function matchesStudyFilter(item) {
 
 function renderStudyHome() {
   if (!items.length) return; // se queda el mensaje inicial del HTML
-  const candidates = items.filter(matchesStudyFilter);
+  const learned = learnedKanji();
+  const matching = items.filter(matchesStudyFilter);
+  const candidates = matching.filter((i) => isUnlocked(i, learned));
+  const locked = matching.length - candidates.length;
   const due = candidates.filter(isDue).length;
   const fresh = candidates.filter((i) => !i.studied).length;
+  const lockedNote = locked
+    ? " " + t("{n} hasta que aciertes sus kanjis.",
+        { n: plural(locked, "palabra bloqueada", "palabras bloqueadas") })
+    : "";
 
   $("studyArea").innerHTML = `
     <div class="empty-state">
       <div class="empty-icon">学</div>
       <h3>${candidates.length
         ? `${plural(due, "repaso pendiente", "repasos pendientes")} · ${plural(fresh, "nuevo", "nuevos")}`
-        : "No hay elementos en esta selección"}</h3>
+        : t("No hay elementos en esta selección")}</h3>
       <p>${candidates.length
-        ? `${plural(candidates.length, "elemento", "elementos")} con estos filtros. Pulsa “Iniciar repaso” para empezar.`
-        : "Cambia el contenido o el nivel, o agrega más elementos en “Mis listas”."}</p>
+        ? t("{n} con estos filtros. Pulsa “Iniciar repaso” para empezar.",
+            { n: plural(candidates.length, "elemento", "elementos") }) + lockedNote
+        : locked
+          ? t("Las palabras se desbloquean cuando aciertas al menos una vez todos sus kanjis.") + lockedNote
+          : t("Cambia el contenido o el nivel, o agrega más elementos en “Mis listas”.")}</p>
     </div>`;
 }
 
@@ -300,7 +330,7 @@ async function addList() {
   const values = splitInput($("listInput").value);
 
   if (!values.length) {
-    $("addMessage").textContent = "Introduce al menos un elemento.";
+    $("addMessage").textContent = t("Introduce al menos un elemento.");
     return;
   }
 
@@ -339,10 +369,10 @@ async function addList() {
 
   $("listInput").value = "";
   $("addMessage").textContent =
-    `Agregados: ${toSave.length - derived}` +
-    (derived ? ` (+${derived} kanjis derivados)` : "") +
-    `. Ya existentes: ${skipped}.` +
-    (invalid ? ` Formato no válido: ${invalid}.` : "");
+    t("Agregados: {n}", { n: toSave.length - derived }) +
+    (derived ? t(" (+{n} kanjis derivados)", { n: derived }) : "") +
+    t(". Ya existentes: {n}.", { n: skipped }) +
+    (invalid ? t(" Formato no válido: {n}.", { n: invalid }) : "");
 
   renderAll();
   scheduleSync();
@@ -351,30 +381,42 @@ async function addList() {
 
 /* ---------- Listas base JLPT (jlpt-lists.js) ---------- */
 
-const baseList = (level) => [...(globalThis.JLPT_KANJI?.[level] || "")];
+const BASE_LABEL = {
+  kanji: ["kanjis", "kanji agregado", "kanjis agregados"],
+  word: ["palabras", "palabra agregada", "palabras agregadas"]
+};
+
+function baseList(type, level) {
+  return type === "kanji"
+    ? [...JLPT_KANJI[level]]
+    : JLPT_WORDS[level].split(",");
+}
 
 function renderBaseLists() {
   const known = new Set(items.map((i) => i.id));
-  $("baseLists").innerHTML = LEVELS.map((level) => {
-    const list = baseList(level);
-    const missing = list.filter((k) => !known.has(uid("kanji", k))).length;
-    return `
-      <button class="button button-outline" data-base="${level}" type="button"${missing ? "" : " disabled"}>
+  $("baseLists").innerHTML = Object.keys(BASE_LABEL).map((type) => `
+    <p class="base-title">${type === "kanji" ? t("Kanjis") : t("Palabras")}</p>
+    <div class="base-row">${LEVELS.map((level) => {
+      const list = baseList(type, level);
+      const missing = list.filter((v) => !known.has(uid(type, v))).length;
+      const name = t(BASE_LABEL[type][0]);
+      return `
+      <button class="button button-outline" data-base="${type}:${level}" type="button"${missing ? "" : " disabled"}>
         <strong>${level}</strong>
-        <span>${!missing ? `${list.length} kanjis · agregada`
-          : missing === list.length ? `Agregar ${list.length} kanjis`
-          : `Agregar ${missing} restantes`}</span>
+        <span>${!missing ? t("{n} {name} · agregada", { n: list.length, name })
+          : missing === list.length ? t("Agregar {n} {name}", { n: list.length, name })
+          : t("Agregar {n} restantes", { n: missing })}</span>
       </button>`;
-  }).join("");
+    }).join("")}</div>`).join("");
 }
 
-async function addBaseList(level) {
+async function addBaseList(type, level) {
   const known = new Set(items.map((i) => i.id));
   const toSave = [];
 
-  for (const value of baseList(level)) {
-    if (known.has(uid("kanji", value))) continue;
-    const item = newItem("kanji", value, level);
+  for (const value of baseList(type, level)) {
+    if (known.has(uid(type, value))) continue;
+    const item = newItem(type, value, level);
     item.source = "base-list";
     toSave.push(item);
   }
@@ -384,7 +426,10 @@ async function addBaseList(level) {
     items.push(...toSave);
   }
 
-  $("baseMessage").textContent = `Lista ${level}: ${plural(toSave.length, "kanji agregado", "kanjis agregados")}.`;
+  const [, one, many] = BASE_LABEL[type];
+  $("baseMessage").textContent =
+    t("Lista {level}: {n}.", { level, n: plural(toSave.length, one, many) }) +
+    (type === "word" ? " " + t("Cada palabra aparecerá en los repasos cuando hayas acertado sus kanjis.") : "");
 
   renderAll();
   scheduleSync();
@@ -396,9 +441,9 @@ async function addBaseList(level) {
    ========================================= */
 
 function itemState(item) {
-  if (!item.studied) return "Sin estudiar";
-  if (item.nextReview <= today()) return "Repasar hoy";
-  return `Próximo: ${formatDate(item.nextReview)}`;
+  if (!item.studied) return t("Sin estudiar");
+  if (item.nextReview <= today()) return t("Repasar hoy");
+  return t("Próximo: {date}", { date: formatDate(item.nextReview) });
 }
 
 function filteredItems() {
@@ -428,14 +473,14 @@ function renderItems() {
   $("moreBtn").classList.add("hidden");
 
   if (!items.length) {
-    list.innerHTML = `<div class="no-items">Todavía no has agregado kanjis ni palabras.</div>`;
+    list.innerHTML = `<div class="no-items">${t("Todavía no has agregado kanjis ni palabras.")}</div>`;
     return;
   }
 
   const filtered = filteredItems().sort((a, b) => a.value.localeCompare(b.value, "ja"));
 
   if (!filtered.length) {
-    list.innerHTML = `<div class="no-items">No se encontraron elementos.</div>`;
+    list.innerHTML = `<div class="no-items">${t("No se encontraron elementos.")}</div>`;
     return;
   }
 
@@ -443,7 +488,7 @@ function renderItems() {
     const readings = displayReadings(item);
     const info = readings.length
       ? escapeHTML(readings.slice(0, 4).join(" · "))
-      : item.lookupStatus === "error" ? "No se pudo consultar" : "Información pendiente";
+      : item.lookupStatus === "error" ? t("No se pudo consultar") : t("Información pendiente");
     const meanings = (item.dictionary?.meanings || []).slice(0, 3).join(", ");
     return `
     <article class="item-row">
@@ -451,21 +496,21 @@ function renderItems() {
       <div class="item-info">
         <div class="item-title">${info}</div>
         <div class="item-sub">
-          ${item.type === "kanji" ? "Kanji" : "Palabra"} · ${escapeHTML(item.level)}${
+          ${item.type === "kanji" ? "Kanji" : t("Palabra")} · ${escapeHTML(item.level)}${
             meanings ? ` · ${escapeHTML(meanings)}` : ""}
         </div>
       </div>
       <div class="item-state">${itemState(item)}</div>
       <button class="icon-btn" data-edit="${escapeHTML(item.id)}"
-        title="Editar" aria-label="Editar ${escapeHTML(item.value)}">✎</button>
+        title="${t("Editar")}" aria-label="${t("Editar")} ${escapeHTML(item.value)}">✎</button>
       <button class="icon-btn delete-btn" data-delete="${escapeHTML(item.id)}"
-        title="Eliminar" aria-label="Eliminar ${escapeHTML(item.value)}">×</button>
+        title="${t("Eliminar")}" aria-label="${t("Eliminar")} ${escapeHTML(item.value)}">×</button>
     </article>`;
   }).join("");
 
   if (filtered.length > listLimit) {
     $("moreBtn").classList.remove("hidden");
-    $("moreBtn").textContent = `Mostrar más (${filtered.length - listLimit} restantes)`;
+    $("moreBtn").textContent = t("Mostrar más ({n} restantes)", { n: filtered.length - listLimit });
   }
 }
 
@@ -487,7 +532,7 @@ function bindList() {
     const button = event.target.closest("[data-delete]");
     if (!button) return;
     const item = items.find((i) => i.id === button.dataset.delete);
-    if (item && confirm(`¿Eliminar ${item.value} y su progreso?`)) await deleteItem(item);
+    if (item && confirm(t("¿Eliminar {value} y su progreso?", { value: item.value }))) await deleteItem(item);
   });
 
   const resetAndRender = () => { listLimit = PAGE_SIZE; renderItems(); };
@@ -504,10 +549,11 @@ function openEditor(item) {
   if (!item) return;
   editingItem = item;
   $("editSymbol").textContent = item.value;
-  $("editTitle").textContent = item.type === "kanji" ? "Kanji" : "Palabra";
+  $("editTitle").textContent = item.type === "kanji" ? "Kanji" : t("Palabra");
   $("editSub").textContent = item.studied
-    ? `Aciertos: ${item.correctCount} · Fallos: ${item.incorrectCount} · ${itemState(item)}`
-    : "Sin estudiar";
+    ? t("Aciertos: {correct} · Fallos: {wrong} · {state}",
+        { correct: item.correctCount, wrong: item.incorrectCount, state: itemState(item) })
+    : t("Sin estudiar");
   $("editLevel").value = item.level;
   $("editReadings").value = displayReadings(item).join(", ");
   $("editMeanings").value = (item.dictionary?.meanings || []).join(", ");
@@ -556,7 +602,7 @@ async function saveEditor() {
 
 async function resetProgress() {
   const item = editingItem;
-  if (!confirm(`¿Reiniciar el progreso de ${item.value}?`)) return;
+  if (!confirm(t("¿Reiniciar el progreso de {value}?", { value: item.value }))) return;
   const { dictionary, lookupStatus, createdAt, source, level } = item;
   Object.assign(item, newItem(item.type, item.value, level),
     { dictionary, lookupStatus, createdAt, source });
@@ -612,13 +658,13 @@ function renderForecast(studied) {
   const peak = days.findIndex((d) => d.count === max);
 
   $("forecastChart").innerHTML = days.map((d, i) => {
-    const label = i === 0 ? "Hoy" : formatDate(d.date);
+    const label = i === 0 ? t("Hoy") : formatDate(d.date);
     const tip = `${label}: ${plural(d.count, "repaso", "repasos")}`;
     return `
     <div class="bar-col" tabindex="0" data-tip="${escapeHTML(tip)}" aria-label="${escapeHTML(tip)}">
       <span class="bar-value">${d.count && (i === 0 || i === peak) ? d.count : ""}</span>
       <div class="bar" style="height:${(d.count / max) * 100}%"></div>
-      <span class="bar-label">${i === 0 ? "Hoy" : i % 2 === 0 ? Number(d.date.slice(8)) : ""}</span>
+      <span class="bar-label">${i === 0 ? t("Hoy") : i % 2 === 0 ? Number(d.date.slice(8)) : ""}</span>
     </div>`;
   }).join("");
 }
@@ -654,22 +700,24 @@ function renderLevels() {
   }).filter((row) => row.total);
 
   if (!rows.length) {
-    $("levelChart").innerHTML = `<p class="helper">Todavía no hay elementos.</p>`;
+    $("levelChart").innerHTML = `<p class="helper">${t("Todavía no hay elementos.")}</p>`;
     return;
   }
 
-  const segment = (cls, count, total, name) => count
-    ? `<div class="seg ${cls}" style="flex-grow:${count}" tabindex="0"
-        data-tip="${name}: ${count} de ${total}" aria-label="${name}: ${count} de ${total}"></div>`
-    : "";
+  const segment = (cls, count, total, name) => {
+    if (!count) return "";
+    const tip = t("{name}: {count} de {total}", { name, count, total });
+    return `<div class="seg ${cls}" style="flex-grow:${count}" tabindex="0"
+        data-tip="${tip}" aria-label="${tip}"></div>`;
+  };
 
   $("levelChart").innerHTML = rows.map((row) => `
     <div class="level-row">
       <span class="level-name">${row.level}</span>
       <div class="stack">
-        ${segment("sw-mature", row.mature, row.total, "Consolidados")}
-        ${segment("sw-learning", row.learning, row.total, "Aprendiendo")}
-        ${segment("sw-new", row.fresh, row.total, "Sin estudiar")}
+        ${segment("sw-mature", row.mature, row.total, t("Consolidados"))}
+        ${segment("sw-learning", row.learning, row.total, t("Aprendiendo"))}
+        ${segment("sw-new", row.fresh, row.total, t("Sin estudiar"))}
       </div>
       <span class="level-total">${row.mature + row.learning} / ${row.total}</span>
     </div>`).join("");
@@ -688,7 +736,7 @@ function renderHardest() {
         <span class="hard-reading">${escapeHTML(displayReadings(item).slice(0, 2).join(" · "))}</span>
         <span class="hard-count">${plural(item.incorrectCount, "fallo", "fallos")}</span>
       </button>`).join("")
-    : `<p class="helper">Aquí aparecerán los elementos que más falles.</p>`;
+    : `<p class="helper">${t("Aquí aparecerán los elementos que más falles.")}</p>`;
 }
 
 /* =========================================
@@ -697,7 +745,8 @@ function renderHardest() {
 
 function chooseSession() {
   const count = Number($("studyCount").value) || Infinity; // 0 = todas
-  const candidates = items.filter(matchesStudyFilter);
+  const learned = learnedKanji();
+  const candidates = items.filter((i) => matchesStudyFilter(i) && isUnlocked(i, learned));
 
   // 1. Tarjetas cuya fecha de revisión ya llegó.
   const due = candidates.filter(isDue);
@@ -834,7 +883,7 @@ async function fetchDictionary(item) {
     }
   }
 
-  if (!readings.size) throw new Error("La palabra no está en el diccionario");
+  if (!readings.size) throw new Error(t("La palabra no está en el diccionario"));
 
   return {
     v: DICT_VERSION,
@@ -921,7 +970,7 @@ async function runLookups(includeErrors = false) {
       for (const item of pending) {
         if (!navigator.onLine) break;
         $("lookupMessage").textContent =
-          `Consultando el diccionario… ${++done} / ${pending.length}`;
+          t("Consultando el diccionario… {done} / {total}", { done: ++done, total: pending.length });
         if (items.includes(item)) await getDictionary(item);
         if (done % 10 === 0) renderItems();
         await sleep(80);
@@ -939,7 +988,7 @@ async function runLookups(includeErrors = false) {
    10. TARJETAS
    ========================================= */
 
-const KIND_LABEL = { due: "Repaso", new: "Nuevo", extra: "Práctica extra" };
+const KIND_LABEL = { due: t("Repaso"), new: t("Nuevo"), extra: t("Práctica extra") };
 
 function endSession() {
   const { total, firstTry, missed } = session;
@@ -953,15 +1002,16 @@ function endSession() {
   $("studyArea").innerHTML = `
     <div class="empty-state">
       <div class="empty-icon">✓</div>
-      <h3>Sesión terminada</h3>
+      <h3>${t("Sesión terminada")}</h3>
       <p>${total
-        ? `Has repasado ${plural(total, "elemento", "elementos")} · ${
-            Math.round((firstTry / total) * 100)} % a la primera.`
-        : "No quedaban tarjetas por repasar."}</p>
+        ? t("Has repasado {n} · {percent} % a la primera.", {
+            n: plural(total, "elemento", "elementos"),
+            percent: Math.round((firstTry / total) * 100) })
+        : t("No quedaban tarjetas por repasar.")}</p>
       ${missedList ? `<ul class="missed-list">${missedList}</ul>` : ""}
       <div class="row-actions">
-        <button id="againBtn" class="button button-primary" type="button">Otra sesión</button>
-        <button class="button button-outline" data-go="progress" type="button">Ver progreso</button>
+        <button id="againBtn" class="button button-primary" type="button">${t("Otra sesión")}</button>
+        <button class="button button-outline" data-go="progress" type="button">${t("Ver progreso")}</button>
       </div>
     </div>`;
   $("againBtn").onclick = startSession;
@@ -983,10 +1033,10 @@ function speak(text) {
 function answerHTML(item) {
   const dict = item.dictionary;
   const readings = item.type === "kanji" && !dict.display.imported?.length
-    ? `${dict.display.on.length
-        ? `<p class="reading">On: ${escapeHTML(dict.display.on.join(" · "))}</p>` : ""}
-       ${dict.display.kun.length
-        ? `<p class="reading">Kun: ${escapeHTML(dict.display.kun.join(" · "))}</p>` : ""}`
+    ? `${dict.display.kun.length
+        ? `<p class="reading">Kun: ${escapeHTML(dict.display.kun.join(" · "))}</p>` : ""}
+       ${dict.display.on.length
+        ? `<p class="reading">On: ${escapeHTML(dict.display.on.join(" · "))}</p>` : ""}`
     : `<p class="reading">${escapeHTML(displayReadings(item).join(" · "))}</p>`;
 
   // Palabras de tus listas que usan este kanji
@@ -1003,7 +1053,7 @@ function answerHTML(item) {
         return `<span>${escapeHTML(w.value)}${reading ? `（${escapeHTML(reading)}）` : ""}</span>`;
       }).join("")}</p>` : ""}
     ${"speechSynthesis" in window
-      ? `<button id="speakBtn" class="button button-quiet speak-btn" type="button">🔊 Escuchar</button>` : ""}`;
+      ? `<button id="speakBtn" class="button button-quiet speak-btn" type="button">🔊 ${t("Escuchar")}</button>` : ""}`;
 }
 
 async function showCard() {
@@ -1015,14 +1065,14 @@ async function showCard() {
   const area = $("studyArea");
 
   if (!hasReadings(item)) {
-    area.innerHTML = `<p class="message">Cargando…</p>`;
+    area.innerHTML = `<p class="message">${t("Cargando…")}</p>`;
     await getDictionary(item);
     if (session !== active || session.queue[0] !== card) return;
   }
 
   const header = `
     <div class="card-top">
-      <span class="pill">${card.failed ? "Otra vez" : KIND_LABEL[card.kind]}</span>
+      <span class="pill">${card.failed ? t("Otra vez") : KIND_LABEL[card.kind]}</span>
       <span class="card-progress">${session.done + 1} / ${session.total}</span>
     </div>
     <div class="meter" aria-hidden="true">
@@ -1034,11 +1084,11 @@ async function showCard() {
       <div class="card">
         ${header}
         <div class="card-symbol">${escapeHTML(item.value)}</div>
-        <p class="message incorrect">No se pudo obtener la lectura
-          (${escapeHTML(item.lookupError || "sin datos")}).</p>
+        <p class="message incorrect">${t("No se pudo obtener la lectura ({error}).",
+          { error: escapeHTML(item.lookupError || t("sin datos")) })}</p>
         <div class="row-actions">
-          <button id="retryBtn" class="button button-outline" type="button">Reintentar</button>
-          <button id="skipBtn" class="button button-secondary" type="button">Saltar</button>
+          <button id="retryBtn" class="button button-outline" type="button">${t("Reintentar")}</button>
+          <button id="skipBtn" class="button button-secondary" type="button">${t("Saltar")}</button>
         </div>
       </div>`;
     $("retryBtn").onclick = () => { item.lookupStatus = "pending"; showCard(); };
@@ -1051,6 +1101,8 @@ async function showCard() {
   }
 
   const typing = session.mode === "type";
+  const accepted = acceptedReadings(item);
+  const kunOnly = accepted !== item.dictionary.readings;
   area.innerHTML = `
     <div class="card">
       ${header}
@@ -1059,13 +1111,13 @@ async function showCard() {
       <form id="readingForm" autocomplete="off">
         <input id="readingInput" class="reading-input" type="text"
           lang="ja" inputmode="text"
-          placeholder="Escribe la lectura (hiragana o katakana)"
+          placeholder="${kunOnly ? t("Escribe una lectura kun (hiragana)") : t("Escribe la lectura (hiragana o katakana)")}"
           autocapitalize="off" autocomplete="off" spellcheck="false">
-        <button id="checkBtn" class="button button-primary" type="submit">Comprobar</button>
-        <button id="unknownBtn" class="button button-secondary" type="button">No lo sé</button>
+        <button id="checkBtn" class="button button-primary" type="submit">${t("Comprobar")}</button>
+        <button id="unknownBtn" class="button button-secondary" type="button">${t("No lo sé")}</button>
       </form>` : `
       <div id="readingForm">
-        <button id="revealBtn" class="button button-primary" type="button">Mostrar respuesta</button>
+        <button id="revealBtn" class="button button-primary" type="button">${t("Mostrar respuesta")}</button>
       </div>`}
       <p id="feedback" class="message"></p>
       <div id="answer"></div>
@@ -1087,7 +1139,7 @@ async function showCard() {
           <button class="button ${cls}" type="button" data-rate="${rating}">
             ${label}
             <small>${i + 1}${days === null || card.kind === "extra" && rating !== "again"
-              ? "" : ` · ${days ? `${days} d` : "hoy"}`}</small>
+              ? "" : ` · ${days ? `${days} d` : t("hoy")}`}</small>
           </button>`;
         }).join("")}
       </div>`;
@@ -1104,17 +1156,17 @@ async function showCard() {
     answer.querySelector(`[data-rate="${preferred}"]`).focus(); // Enter otra vez = siguiente
   }
 
-  const NEXT = [["next", "Siguiente", "button-primary"]];
+  const NEXT = [["next", t("Siguiente"), "button-primary"]];
   const PASSED = [
-    ["hard", "Difícil", "button-hard"],
-    ["good", "Bien", "button-good"],
-    ["easy", "Fácil", "button-easy"]
+    ["hard", t("Difícil"), "button-hard"],
+    ["good", t("Bien"), "button-good"],
+    ["easy", t("Fácil"), "button-easy"]
   ];
 
   if (!typing) {
     $("revealBtn").onclick = () => {
       $("revealBtn").remove();
-      reveal([["again", "Otra vez", "button-wrong"], ...PASSED], "good");
+      reveal([["again", t("Otra vez"), "button-wrong"], ...PASSED], "good");
     };
     $("revealBtn").focus();
     return;
@@ -1143,7 +1195,7 @@ async function showCard() {
   }
 
   $("unknownBtn").onclick = () => {
-    if (!answered) finish(false, "Esta es la respuesta:");
+    if (!answered) finish(false, t("Esta es la respuesta:"));
   };
 
   $("readingForm").addEventListener("submit", (event) => {
@@ -1152,11 +1204,18 @@ async function showCard() {
 
     const userAnswer = normalizeReading(input.value);
     if (!userAnswer) {
-      feedback.textContent = "Escribe una lectura primero.";
+      feedback.textContent = t("Escribe una lectura primero.");
       return;
     }
-    const correct = item.dictionary.readings.includes(userAnswer);
-    finish(correct, correct ? "¡Correcto!" : "No es correcto.");
+    const correct = accepted.includes(userAnswer);
+    // Una lectura on no cuenta como fallo: se pide la kun
+    if (!correct && kunOnly && item.dictionary.readings.includes(userAnswer)) {
+      feedback.textContent = t("Esa es una lectura on. Escribe una lectura kun.");
+      feedback.className = "message";
+      input.select();
+      return;
+    }
+    finish(correct, correct ? t("¡Correcto!") : t("No es correcto."));
   });
 }
 
@@ -1187,6 +1246,257 @@ function bindShortcuts() {
       button.click();
     }
   });
+}
+
+/* =========================================
+   ESCRITURA (trazos de KanjiVG)
+   -----------------------------------------
+   Cada kanji es un SVG de 109 × 109 con un <path> por trazo, en orden.
+   Se busca primero en la carpeta kanjivg/ de la app y, si no está,
+   en el repositorio de KanjiVG. El nombre es el código Unicode del
+   kanji en hexadecimal con 5 cifras: 日 (U+65E5) -> 065e5.svg
+   ========================================= */
+
+const KVG_SOURCES = ["kanjivg/", "https://cdn.jsdelivr.net/gh/KanjiVG/kanjivg@master/kanji/"];
+const KVG_SIZE = 109;
+const STROKE_SAMPLES = 12;
+const STROKE_TOLERANCE = 15; // distancia media admitida, en unidades del SVG
+
+const kvgFile = (kanji) => kanji.codePointAt(0).toString(16).padStart(5, "0") + ".svg";
+const strokeCache = new Map(); // kanji -> lista de atributos "d"
+let draw = null;
+
+async function fetchStrokes(kanji) {
+  if (strokeCache.has(kanji)) return strokeCache.get(kanji);
+  for (const base of KVG_SOURCES) {
+    try {
+      const response = await fetch(base + kvgFile(kanji));
+      if (!response.ok) continue;
+      const strokes = [...(await response.text()).matchAll(/<path\b[^>]*?\sd="([^"]+)"/g)]
+        .map((match) => match[1]);
+      if (!strokes.length) continue;
+      strokeCache.set(kanji, strokes);
+      return strokes;
+    } catch { /* se prueba la siguiente fuente */ }
+  }
+  throw new Error(t("No se encontró {file}", { file: kvgFile(kanji) }));
+}
+
+/* n puntos repartidos a distancias iguales a lo largo del trazo dibujado */
+function resample(points, n = STROKE_SAMPLES) {
+  const lengths = [0];
+  for (let i = 1; i < points.length; i++) {
+    lengths.push(lengths[i - 1] +
+      Math.hypot(points[i][0] - points[i - 1][0], points[i][1] - points[i - 1][1]));
+  }
+  const total = lengths[lengths.length - 1];
+  if (!total) return Array(n).fill(points[0]);
+
+  const result = [];
+  let j = 1;
+  for (let i = 0; i < n; i++) {
+    const at = (total * i) / (n - 1);
+    while (j < points.length - 1 && lengths[j] < at) j++;
+    const t = (at - lengths[j - 1]) / (lengths[j] - lengths[j - 1] || 1);
+    result.push([
+      points[j - 1][0] + (points[j][0] - points[j - 1][0]) * t,
+      points[j - 1][1] + (points[j][1] - points[j - 1][1]) * t
+    ]);
+  }
+  return result;
+}
+
+function samplePath(path, n = STROKE_SAMPLES) {
+  const length = path.getTotalLength();
+  return Array.from({ length: n }, (_, i) => {
+    const point = path.getPointAtLength((length * i) / (n - 1));
+    return [point.x, point.y];
+  });
+}
+
+const meanDistance = (a, b) =>
+  a.reduce((sum, p, i) => sum + Math.hypot(p[0] - b[i][0], p[1] - b[i][1]), 0) / a.length;
+
+/* Compara lo dibujado con el trazo esperado: "ok", "reversed" o "no" */
+function matchStroke(points, path) {
+  const user = resample(points);
+  const target = samplePath(path);
+  const forward = meanDistance(user, target);
+  const backward = meanDistance(user, [...target].reverse());
+
+  // En un punto o trazo muy corto solo importa la posición
+  if (path.getTotalLength() < 14) {
+    return Math.min(forward, backward) <= STROKE_TOLERANCE ? "ok" : "no";
+  }
+  if (forward <= STROKE_TOLERANCE && forward <= backward) return "ok";
+  return backward <= STROKE_TOLERANCE ? "reversed" : "no";
+}
+
+function drawCandidates() {
+  const level = $("drawLevel").value;
+  return items.filter((i) => isLearned(i) && (level === "ALL" || i.level === level));
+}
+
+function renderDraw() {
+  const candidates = drawCandidates();
+  $("drawCount").textContent = plural(items.filter(isLearned).length, "aprendido", "aprendidos");
+
+  if (!candidates.length) {
+    draw = null;
+    $("drawArea").innerHTML = `
+      <div class="empty-state">
+        <div class="empty-icon">書</div>
+        <h3>${$("drawLevel").value === "ALL"
+          ? t("Aún no hay kanjis aprendidos") : t("Aún no hay kanjis aprendidos en este nivel")}</h3>
+        <p>${t("Cuando aciertes un kanji en un repaso podrás practicar aquí su escritura.")}</p>
+      </div>`;
+    return;
+  }
+  // Se conserva el kanji a medias si sigue siendo válido
+  if (!draw || !candidates.includes(draw.item)) nextDraw();
+}
+
+async function nextDraw() {
+  const candidates = drawCandidates();
+  if (!candidates.length) return renderDraw();
+
+  let queue = (draw?.queue || []).filter((i) => candidates.includes(i));
+  if (!queue.length) {
+    queue = shuffle(candidates);
+    if (queue.length > 1 && queue[0] === draw?.item) queue.push(queue.shift());
+  }
+  const item = queue.shift();
+  const current = draw = { item, queue };
+  const area = $("drawArea");
+  area.innerHTML = `<p class="message">${t("Cargando…")}</p>`;
+
+  let strokes;
+  try {
+    [strokes] = await Promise.all([fetchStrokes(item.value), getDictionary(item)]);
+  } catch (error) {
+    if (draw !== current) return;
+    area.innerHTML = `
+      <div class="card">
+        <p class="message incorrect">${t("No se pudieron cargar los trazos ({error}).",
+          { error: escapeHTML(error.message) })}</p>
+        <div class="row-actions">
+          <button id="drawNextBtn" class="button button-outline" type="button">${t("Otro kanji")}</button>
+        </div>
+      </div>`;
+    $("drawNextBtn").onclick = nextDraw;
+    return;
+  }
+  if (draw !== current) return;
+
+  const dict = item.dictionary;
+  const half = KVG_SIZE / 2;
+  area.innerHTML = `
+    <div class="card draw-card">
+      <div class="card-top">
+        <span class="pill">${escapeHTML(item.level)}</span>
+        <span id="drawProgress" class="card-progress"></span>
+      </div>
+      ${dict?.meanings?.length
+        ? `<p class="meaning">${escapeHTML(dict.meanings.join(", "))}</p>` : ""}
+      <p class="reading" lang="ja">${escapeHTML(displayReadings(item).join(" · "))}</p>
+      <svg id="drawPad" class="draw-pad" viewBox="0 0 ${KVG_SIZE} ${KVG_SIZE}"
+        role="img" aria-label="${t("Zona de dibujo")}">
+        <line class="guide" x1="${half}" y1="0" x2="${half}" y2="${KVG_SIZE}"/>
+        <line class="guide" x1="0" y1="${half}" x2="${KVG_SIZE}" y2="${half}"/>
+        ${strokes.map((d) => `<path class="stroke" d="${escapeHTML(d)}"/>`).join("")}
+        <polyline id="drawInk" class="ink" points=""/>
+      </svg>
+      <p id="drawFeedback" class="message"></p>
+      <div class="row-actions">
+        <button id="drawHintBtn" class="button button-outline" type="button">${t("Pista")}</button>
+        <button id="drawShowBtn" class="button button-outline" type="button">${t("Mostrar")}</button>
+        <button id="drawClearBtn" class="button button-quiet" type="button">${t("Reiniciar")}</button>
+        <button id="drawNextBtn" class="button button-primary" type="button">${t("Siguiente")} →</button>
+      </div>
+    </div>`;
+
+  const pad = $("drawPad");
+  const ink = $("drawInk");
+  const feedback = $("drawFeedback");
+  const paths = [...pad.querySelectorAll(".stroke")];
+  let index = 0, misses = 0, mistakes = 0, points = null;
+
+  const say = (text, cls = "") => {
+    feedback.textContent = text;
+    feedback.className = `message ${cls}`;
+  };
+  const progress = () => {
+    $("drawProgress").textContent = index < paths.length
+      ? t("Trazo {i} / {n}", { i: index + 1, n: paths.length }) : plural(paths.length, "trazo", "trazos");
+    $("drawHintBtn").disabled = $("drawShowBtn").disabled = index >= paths.length;
+  };
+  const reset = () => {
+    paths.forEach((path) => { path.className.baseVal = "stroke"; });
+    index = misses = mistakes = 0;
+    say("");
+    progress();
+  };
+
+  function check(drawn) {
+    const result = matchStroke(drawn, paths[index]);
+    if (result !== "ok") {
+      misses++;
+      mistakes++;
+      say(result === "reversed"
+        ? t("El trazo va en la dirección contraria.") : t("Ese no es el trazo que toca."), "incorrect");
+      if (misses >= 3) paths[index].classList.add("hint");
+      return;
+    }
+    paths[index].className.baseVal = "stroke done";
+    index++;
+    misses = 0;
+    progress();
+    if (index < paths.length) return say("");
+    say(mistakes ? t("Completado con {n}.", { n: plural(mistakes, "fallo", "fallos") }) : t("¡Perfecto!"),
+      mistakes ? "" : "correct");
+    $("drawNextBtn").focus();
+  }
+
+  const position = (event) => {
+    const rect = pad.getBoundingClientRect();
+    return [
+      ((event.clientX - rect.left) / rect.width) * KVG_SIZE,
+      ((event.clientY - rect.top) / rect.height) * KVG_SIZE
+    ];
+  };
+  const trace = () => ink.setAttribute("points",
+    points ? points.map((p) => `${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(" ") : "");
+
+  pad.onpointerdown = (event) => {
+    if (index >= paths.length) return;
+    event.preventDefault();
+    try { pad.setPointerCapture(event.pointerId); } catch { /* puntero ya liberado */ }
+    points = [position(event)];
+    trace();
+  };
+  pad.onpointermove = (event) => {
+    if (!points) return;
+    points.push(position(event));
+    trace();
+  };
+  pad.onpointerup = pad.onpointercancel = () => {
+    if (!points) return;
+    const drawn = points;
+    points = null;
+    trace();
+    check(drawn);
+  };
+
+  $("drawHintBtn").onclick = () => paths[index]?.classList.add("hint");
+  $("drawShowBtn").onclick = () => {
+    paths.slice(index).forEach((path) => { path.className.baseVal = "stroke done shown"; });
+    index = paths.length;
+    progress();
+    say(t("Así se escribe. Pulsa “Reiniciar” para intentarlo."));
+  };
+  $("drawClearBtn").onclick = reset;
+  $("drawNextBtn").onclick = nextDraw;
+  reset();
 }
 
 /* =========================================
@@ -1448,7 +1758,7 @@ function parsePayload(text) {
   if (parsed?.app !== "kanji-learning-app" ||
       ![1, 2].includes(parsed.schemaVersion) ||
       !Array.isArray(parsed.items)) {
-    throw new Error("El archivo no tiene un formato compatible.");
+    throw new Error(t("El archivo no tiene un formato compatible."));
   }
   return parsed;
 }
@@ -1460,14 +1770,14 @@ async function importData() {
     const result = await mergeData(parsePayload(await pendingImport.text()));
 
     $("importMessage").textContent =
-      `Importación completada. Nuevos: ${result.added}; actualizados: ${result.updated}.`;
+      t("Importación completada. Nuevos: {added}; actualizados: {updated}.", result);
     pendingImport = null;
     $("mergeBtn").disabled = true;
     $("importFile").value = "";
     scheduleSync();
     runLookups();
   } catch (error) {
-    $("importMessage").textContent = error.message || "No se pudo importar el archivo.";
+    $("importMessage").textContent = error.message || t("No se pudo importar el archivo.");
   }
 }
 
@@ -1489,11 +1799,11 @@ const sync = {
 
 function setSyncState(state, message = "") {
   const labels = {
-    off: "Solo en este dispositivo",
-    syncing: "Sincronizando…",
-    ok: "Sincronizado",
-    offline: "Sin conexión",
-    error: "Error al sincronizar"
+    off: t("Solo en este dispositivo"),
+    syncing: t("Sincronizando…"),
+    ok: t("Sincronizado"),
+    offline: t("Sin conexión"),
+    error: t("Error al sincronizar")
   };
   $("syncBtn").dataset.state = state;
   $("syncLabel").textContent = labels[state];
@@ -1501,8 +1811,8 @@ function setSyncState(state, message = "") {
   $("syncMessage").textContent = message;
   $("syncMessage").classList.toggle("incorrect", state === "error");
   $("footerNote").textContent = state === "off"
-    ? "Datos guardados localmente en este navegador"
-    : "Datos guardados en este navegador y en tu gist privado";
+    ? t("Datos guardados localmente en este navegador")
+    : t("Datos guardados en este navegador y en tu gist privado");
 }
 
 async function github(path, options = {}) {
@@ -1517,9 +1827,9 @@ async function github(path, options = {}) {
   });
   if (!response.ok) {
     const error = new Error(
-      response.status === 401 ? "GitHub rechazó el token. Comprueba que sea válido."
-      : response.status === 403 ? "El token no tiene el permiso “gist” o se alcanzó el límite de GitHub."
-      : `GitHub respondió ${response.status}.`);
+      response.status === 401 ? t("GitHub rechazó el token. Comprueba que sea válido.")
+      : response.status === 403 ? t("El token no tiene el permiso “gist” o se alcanzó el límite de GitHub.")
+      : t("GitHub respondió {status}.", { status: response.status }));
     error.status = response.status;
     throw error;
   }
@@ -1570,7 +1880,7 @@ async function syncNow() {
       if (error.status === 404) { // el gist se borró: se creará otro en el siguiente intento
         sync.config.gistId = "";
         saveLocal("kanji-sync", sync.config);
-        throw new Error("No se encontró el gist. Vuelve a sincronizar para crearlo de nuevo.");
+        throw new Error(t("No se encontró el gist. Vuelve a sincronizar para crearlo de nuevo."));
       }
       throw error;
     }
@@ -1590,8 +1900,8 @@ async function syncNow() {
 
     sync.config.lastSync = Date.now();
     saveLocal("kanji-sync", sync.config);
-    setSyncState("ok", `Última sincronización: ${new Date().toLocaleTimeString("es", {
-      hour: "2-digit", minute: "2-digit" })}.`);
+    setSyncState("ok", t("Última sincronización: {time}.", {
+      time: new Date().toLocaleTimeString(lang, { hour: "2-digit", minute: "2-digit" }) }));
     if (result.added) runLookups();
   } catch (error) {
     console.error("Error de sincronización:", error);
@@ -1620,7 +1930,7 @@ function scheduleSync(delay = 4000) {
 async function connectSync() {
   const token = $("syncToken").value.trim();
   if (!token) {
-    $("syncMessage").textContent = "Pega primero el token.";
+    $("syncMessage").textContent = t("Pega primero el token.");
     return;
   }
   sync.config = { token, gistId: "", lastSync: 0 };
@@ -1640,7 +1950,7 @@ async function connectSync() {
 }
 
 function disconnectSync() {
-  if (!confirm("¿Dejar de sincronizar en este dispositivo? Los datos locales y el gist se conservan.")) return;
+  if (!confirm(t("¿Dejar de sincronizar en este dispositivo? Los datos locales y el gist se conservan."))) return;
   clearTimeout(sync.timer);
   sync.config = { token: "", gistId: "", lastSync: 0 };
   saveLocal("kanji-sync", sync.config);
@@ -1660,8 +1970,9 @@ function renderDataView() {
 
   const missing = items.filter((i) => !hasReadings(i)).length;
   $("dictSummary").textContent = missing
-    ? `${plural(missing, "elemento", "elementos")} sin lectura. Puedes reintentar la consulta o escribirla a mano desde “Mis listas”.`
-    : "Todos los elementos tienen lectura.";
+    ? t("{n} sin lectura. Puedes reintentar la consulta o escribirla a mano desde “Mis listas”.",
+        { n: plural(missing, "elemento", "elementos") })
+    : t("Todos los elementos tienen lectura.");
   $("retryLookupsBtn").disabled = !missing;
 }
 
@@ -1711,14 +2022,15 @@ function bindSettings() {
 
   $("importType").addEventListener("change", () => {
     const kanji = $("importType").value === "kanji";
-    $("listLabel").textContent = kanji ? "Lista de kanjis" : "Lista de palabras";
+    $("listLabel").textContent = kanji ? t("Lista de kanjis") : t("Lista de palabras");
     $("listInput").placeholder = kanji ? "政, 議, 民, 経, 済" : "政治, 政府, 行政";
   });
 
+  $("drawLevel").addEventListener("change", () => { draw = null; renderDraw(); });
   $("addBtn").addEventListener("click", addList);
   $("baseLists").addEventListener("click", (event) => {
     const button = event.target.closest("[data-base]");
-    if (button && !button.disabled) addBaseList(button.dataset.base);
+    if (button && !button.disabled) addBaseList(...button.dataset.base.split(":"));
   });
   $("startBtn").addEventListener("click", startSession);
   $("exportBtn").addEventListener("click", exportData);
@@ -1731,7 +2043,7 @@ function bindSettings() {
     pendingImport = event.target.files?.[0] || null;
     $("mergeBtn").disabled = !pendingImport;
     $("importMessage").textContent = pendingImport
-      ? `Archivo seleccionado: ${pendingImport.name}` : "";
+      ? t("Archivo seleccionado: {name}", { name: pendingImport.name }) : "";
   });
   $("mergeBtn").addEventListener("click", importData);
 
@@ -1758,8 +2070,8 @@ async function init() {
     console.error("Error al iniciar la aplicación:", error);
     $("studyArea").innerHTML = `
       <div class="empty-state">
-        <h3>No se pudo abrir el almacenamiento local</h3>
-        <p>Abre la aplicación desde un navegador compatible con IndexedDB.</p>
+        <h3>${t("No se pudo abrir el almacenamiento local")}</h3>
+        <p>${t("Abre la aplicación desde un navegador compatible con IndexedDB.")}</p>
       </div>`;
     return;
   }

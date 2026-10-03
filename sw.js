@@ -5,11 +5,12 @@
    y, si falla, la copia guardada.
    ========================================= */
 
-const CACHE = "kanji-learning-v2";
+const CACHE = "kanji-learning-v3";
 const SHELL = [
   "./",
   "index.html",
   "style.css",
+  "i18n.js",
   "jlpt-lists.js",
   "app.js",
   "manifest.webmanifest",
@@ -17,9 +18,9 @@ const SHELL = [
   "https://unpkg.com/wanakana@5.3.1/wanakana.min.js"
 ];
 
-// Solo se guardan la propia app, WanaKana y las fuentes;
+// Solo se guardan la propia app, WanaKana, las fuentes y los trazos de KanjiVG;
 // las consultas al diccionario y a GitHub van siempre a la red.
-const CACHEABLE = [self.location.origin, "https://unpkg.com",
+const CACHEABLE = [self.location.origin, "https://unpkg.com", "https://cdn.jsdelivr.net",
   "https://fonts.googleapis.com", "https://fonts.gstatic.com"];
 
 self.addEventListener("install", (event) => {

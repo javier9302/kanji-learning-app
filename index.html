@@ -14,6 +14,7 @@
   <link rel="apple-touch-icon" href="icons/icon-180.png">
   <link rel="stylesheet" href="style.css">
   <script src="https://unpkg.com/wanakana@5.3.1/wanakana.min.js" defer></script>
+  <script src="i18n.js" defer></script>
   <script src="jlpt-lists.js" defer></script>
   <script src="app.js" defer></script>
 </head>
@@ -26,11 +27,17 @@
         <span class="brand-sub">Tu espacio de estudio japonés</span>
       </span>
     </a>
-    <button id="syncBtn" class="button button-quiet sync-btn" type="button"
-      data-state="off" title="Sincronización">
-      <span class="sync-dot" aria-hidden="true"></span>
-      <span id="syncLabel">Solo en este dispositivo</span>
-    </button>
+    <div class="topbar-actions">
+      <select id="langSelect" class="lang-select" aria-label="Idioma">
+        <option value="es">Español</option>
+        <option value="en">English</option>
+      </select>
+      <button id="syncBtn" class="button button-quiet sync-btn" type="button"
+        data-state="off" title="Sincronización">
+        <span class="sync-dot" aria-hidden="true"></span>
+        <span id="syncLabel">Solo en este dispositivo</span>
+      </button>
+    </div>
   </header>
 
   <main class="container">
@@ -48,6 +55,9 @@
     <nav class="tabs" aria-label="Secciones">
       <button class="tab active" data-view="study" type="button">
         Estudiar
+      </button>
+      <button class="tab" data-view="draw" type="button">
+        Escribir
       </button>
       <button class="tab" data-view="manage" type="button">
         Mis listas
@@ -135,6 +145,37 @@
       </div>
     </section>
 
+    <!-- ESCRITURA -->
+    <section id="view-draw" class="view hidden">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">ESCRITURA</p>
+          <h2>Dibuja el kanji</h2>
+        </div>
+        <span id="drawCount" class="pill">0 aprendidos</span>
+      </div>
+
+      <div class="panel draw-settings">
+        <label class="field">
+          <span>Nivel JLPT</span>
+          <select id="drawLevel">
+            <option value="ALL">Todos</option>
+            <option>N5</option>
+            <option>N4</option>
+            <option>N3</option>
+            <option>N2</option>
+            <option>N1</option>
+          </select>
+        </label>
+        <p class="helper">
+          Aparecen los kanjis que ya has acertado al menos una vez.
+          Dibuja cada trazo en su orden y dirección.
+        </p>
+      </div>
+
+      <div id="drawArea" class="study-area"></div>
+    </section>
+
     <!-- ADMINISTRAR LISTAS -->
     <section id="view-manage" class="view hidden">
       <div class="section-heading">
@@ -148,10 +189,10 @@
       <div class="panel">
         <h3>Listas base JLPT</h3>
         <p class="helper">
-          Kanjis de cada nivel, listos para agregar con un clic. Las lecturas
-          y los significados se buscan automáticamente.
+          Kanjis y palabras de cada nivel, listos para agregar con un clic. Las
+          lecturas y los significados se buscan automáticamente.
         </p>
-        <div id="baseLists" class="base-lists"></div>
+        <div id="baseLists"></div>
         <p id="baseMessage" class="message" role="status"></p>
       </div>
 
@@ -324,7 +365,7 @@
             <li>
               <a href="https://github.com/settings/tokens/new?scopes=gist&description=Kanji%20Learning%20App"
                 target="_blank" rel="noopener">Crea un token de GitHub</a>
-              con el único permiso <strong>gist</strong>.
+              (el único permiso que necesita es <strong>gist</strong>).
             </li>
             <li>Pégalo aquí. Repite este paso en cada dispositivo.</li>
           </ol>
