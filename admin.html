@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <meta name="color-scheme" content="light dark">
+  <title>Administración · Kanji Learning App</title>
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js" defer></script>
+  <script src="config.js" defer></script>
+  <script src="admin.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="./">
+      <span class="brand-mark">漢</span>
+      <span>
+        Kanji Learning
+        <span class="brand-sub">Administración</span>
+      </span>
+    </a>
+    <div class="topbar-actions">
+      <span id="adminUser" class="helper"></span>
+      <button id="adminSignOutBtn" class="button button-quiet hidden" type="button">Cerrar sesión</button>
+    </div>
+  </header>
+
+  <main class="container">
+    <!-- Acceso -->
+    <section id="adminLogin" class="panel admin-login hidden">
+      <h3>Acceso de administrador</h3>
+      <p class="helper">Inicia sesión con una cuenta que tenga permiso de administración.</p>
+      <form id="adminForm" autocomplete="on">
+        <label class="field">
+          <span>Correo electrónico</span>
+          <input id="adminEmail" class="search" type="email" autocomplete="email" required>
+        </label>
+        <label class="field">
+          <span>Contraseña</span>
+          <input id="adminPassword" class="search" type="password" autocomplete="current-password" required>
+        </label>
+        <button id="adminSubmitBtn" class="button button-primary" type="submit">Entrar</button>
+      </form>
+    </section>
+
+    <p id="adminMessage" class="message" role="status"></p>
+
+    <!-- Panel -->
+    <section id="adminPanel" class="hidden">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">TEXTOS DE LOS USUARIOS</p>
+          <h2>Aprobación de textos</h2>
+        </div>
+        <span id="adminCount" class="pill"></span>
+      </div>
+
+      <nav class="subtabs" aria-label="Estado">
+        <button class="subtab active" data-status="pending" type="button">Pendientes</button>
+        <button class="subtab" data-status="approved" type="button">Aprobados</button>
+        <button class="subtab" data-status="rejected" type="button">Rechazados</button>
+      </nav>
+
+      <div id="adminList" class="items-list"></div>
+    </section>
+  </main>
+</body>
+</html>

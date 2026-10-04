@@ -16,9 +16,11 @@ Los nombres de los menús de Supabase y Cloudflare cambian de vez en cuando; si 
 
 1. En el proyecto, abre **SQL Editor** y pulsa **New query**.
 2. Copia el contenido completo de [`supabase/schema.sql`](supabase/schema.sql), pégalo y pulsa **Run**.
-3. Comprueba en **Table Editor** que existen las tablas `items` y `days`, y que las dos indican que RLS está activado.
+3. Comprueba en **Table Editor** que existen estas tablas, todas con RLS activado:
+   - `items` y `days` (repaso de kanjis y palabras);
+   - `texts`, `text_states`, `user_words`, `reading_sessions` y `profiles` (lectura).
 
-El archivo se puede volver a ejecutar sin perder datos.
+El archivo se puede volver a ejecutar sin perder datos. **Si ya lo ejecutaste antes de que existiera la lectura, ejecútalo otra vez**: crea las tablas nuevas y deja las anteriores como están. Hasta entonces la app mostrará «Faltan las tablas en Supabase».
 
 ## 3. Configurar la autenticación
 
@@ -40,6 +42,40 @@ El servicio de correo incluido en Supabase solo envía unos pocos mensajes por h
 1. En Google Cloud Console crea unas credenciales **OAuth client ID** de tipo «Web application». Como «Authorized redirect URI» pon la dirección que muestra Supabase en **Authentication → Sign In / Providers → Google** (termina en `/auth/v1/callback`).
 2. Copia el Client ID y el Client Secret en esa misma pantalla de Supabase y activa el proveedor.
 3. En `config.js` cambia `google: false` por `google: true`. Aparecerá el botón «Continuar con Google».
+
+## Aprobar textos para compartirlos
+
+Cada texto que un usuario agrega se sube con estado `pending` y solo lo ve él. Para que lo vean todos hay que aprobarlo.
+
+### Con la página de administración
+
+1. Crea tu cuenta en la app, como cualquier usuario.
+2. Date permiso de administrador una sola vez, desde **SQL Editor**, con tu correo:
+
+```sql
+insert into public.admins (user_id)
+select id from auth.users where email = 'tu-correo@ejemplo.com';
+```
+
+3. Abre `admin.html` en la dirección de la app (por ejemplo `https://javier9302.github.io/kanji-learning-app/admin.html`) e inicia sesión.
+
+La página lista los textos pendientes, deja leer cada uno con su traducción y tiene los botones **Aprobar** y **Rechazar**. Una cuenta sin permiso puede iniciar sesión ahí, pero no ve ningún texto ajeno ni puede cambiar estados: el permiso lo comprueba la base de datos, no la página. Para quitar un administrador, borra su fila de la tabla `admins`.
+
+### Desde el panel de Supabase
+
+- **Desde Table Editor:** abre la tabla `texts`, revisa las columnas `title` y `data` de las filas con `status` = `pending` y cambia `status` a `approved` (o a `rejected`).
+- **Desde SQL Editor:**
+
+```sql
+-- Ver los pendientes
+select id, title, level, topic, created_at from texts
+where status = 'pending' and deleted_at is null order by created_at;
+
+-- Aprobar uno
+update texts set status = 'approved' where id = 'PEGA-AQUI-EL-ID';
+```
+
+Los usuarios no pueden aprobar sus propios textos: un trigger de la base de datos ignora cualquier cambio de `status` que no venga de un administrador o del panel. Un texto aprobado llega a los demás usuarios en su siguiente sincronización, con la etiqueta «De la comunidad».
 
 ## 4. Rellenar `config.js`
 
@@ -102,7 +138,9 @@ Abre <http://localhost:8000/>. Las cuentas funcionan en local si añadiste esa d
 - Con la sesión iniciada, sube los cambios a Supabase y descarga los de otros dispositivos. Si un mismo elemento cambió en dos sitios, gana el cambio más reciente.
 - La primera vez que alguien inicia sesión en un dispositivo, el progreso que ya había en ese navegador se guarda en su cuenta.
 - Al cerrar sesión, los datos se quedan en el dispositivo. Si después entra una cuenta distinta, la app avisa y los quita antes de cargar los de esa cuenta.
-- Las preferencias de estudio, el idioma y la meta diaria son de cada dispositivo y no se sincronizan.
+- De la lectura se sincronizan los textos, el estado de cada texto (leído, descartado), el progreso por palabra, las sesiones y el nivel de lectura.
+- Si alguien borra un texto suyo, desaparece para todos. Si quita de su biblioteca un texto de otro usuario, solo se oculta para él.
+- Las preferencias de estudio, el furigana, el idioma y la meta diaria son de cada dispositivo y no se sincronizan.
 
 ## Límites del plan gratuito de Supabase
 

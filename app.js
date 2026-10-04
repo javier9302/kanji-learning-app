@@ -3,7 +3,7 @@
    ========================================= */
 
 const DB_NAME = "kanji-learning-app";
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 const DICT_VERSION = 2; // sube este número para forzar nuevas consultas
 const SCHEMA_VERSION = 2;
 const LEVELS = ["N5", "N4", "N3", "N2", "N1"];
@@ -11,9 +11,8 @@ const PAGE_SIZE = 150;
 
 let db;
 let items = [];
-let meta = { days: {}, deleted: {} }; // historial diario y elementos borrados
+let meta = { days: {}, deleted: {}, reading: {} }; // historial diario, borrados y perfil de lectura
 let session = null;
-let pendingImport = null;
 let listLimit = PAGE_SIZE;
 let editingItem = null;
 let emptyStudyHTML = ""; // mensaje inicial de la pantalla de estudio
@@ -50,6 +49,12 @@ function openDatabase() {
       }
       if (!database.objectStoreNames.contains("meta")) {
         database.createObjectStore("meta", { keyPath: "key" });
+      }
+      // Lectura (reading.js): textos, diccionario, progreso por palabra y sesiones
+      for (const name of READING_STORES) {
+        if (!database.objectStoreNames.contains(name)) {
+          database.createObjectStore(name, { keyPath: "id" });
+        }
       }
     };
     request.onsuccess = () => resolve(request.result);
@@ -113,7 +118,8 @@ function saveLocal(key, value) {
 }
 
 const prefs = loadLocal("kanji-prefs", {
-  studyType: "kanji", studyLevel: "N3", studyMode: "type", studyCount: "10", goal: 20
+  studyType: "kanji", studyLevel: "N3", studyMode: "type", studyCount: "10", goal: 20,
+  furigana: "unknown" // furigana al leer: unknown | all | none
 });
 
 /* =========================================
@@ -154,14 +160,41 @@ const hasReadings = (item) =>
   item.dictionary?.v === DICT_VERSION && item.dictionary.readings?.length > 0;
 const isDue = (item) => item.studied && item.nextReview <= today();
 
-/* Lecturas que se aceptan como respuesta. En los kanjis solo valen las kun;
-   si el kanji no tiene ninguna (o la lectura se escribió a mano) valen todas. */
-function acceptedReadings(item) {
-  const { readings, display } = item.dictionary;
-  if (item.type !== "kanji" || display.imported?.length || !display.kun?.length) return readings;
-  return [...new Set(display.kun
-    .flatMap((r) => [normalizeReading(r), normalizeReading(r.split(".")[0])])
-    .filter(Boolean))];
+/* Datos propios del kanji (kanji-data.js), salvo que el usuario haya
+   escrito sus propias lecturas en el editor */
+const kanjiData = (item) =>
+  item.type === "kanji" && item.dictionary?.source !== "user" ? KANJI_DATA[item.value] : undefined;
+
+/* Rellena el diccionario de un kanji con su palabra ancla: la única lectura
+   que se acepta es la de esa palabra. Devuelve true si modificó el elemento. */
+function applyKanjiData(item) {
+  const data = kanjiData(item);
+  if (!data) return false;
+  const reading = normalizeReading(data.r);
+  const current = item.dictionary;
+  if (current?.v === DICT_VERSION && current.word === data.w && current.readings?.[0] === reading) return false;
+
+  item.dictionary = {
+    v: DICT_VERSION,
+    source: "local",
+    word: data.w,
+    readings: [reading],
+    display: { on: data.on, kun: data.kun, anchor: [data.r] },
+    meanings: data.ken
+  };
+  item.lookupStatus = "found";
+  delete item.lookupError;
+  return true;
+}
+
+/* Significados que se muestran: los del kanji en el idioma de la interfaz */
+function meaningsOf(item) {
+  const data = kanjiData(item);
+  if (data) return lang === "es" && data.kes.length ? data.kes : data.ken;
+  // Las palabras de la lectura tienen también significado en español
+  const reading = item.dictionary?.readings?.[0];
+  const entry = lang === "es" && item.type === "word" && reading && words.get(wordKey(item.value, reading));
+  return entry?.meaningsEs?.length ? entry.meaningsEs : item.dictionary?.meanings || [];
 }
 
 /* Un kanji está aprendido cuando se ha acertado al menos una vez */
@@ -169,8 +202,10 @@ const isLearned = (item) => item.type === "kanji" && item.correctCount > 0;
 const learnedKanji = () => new Set(items.filter(isLearned).map((i) => i.value));
 
 /* Una palabra solo se estudia cuando todos sus kanjis están aprendidos */
+/* (las que vienen de la lectura ya se han visto en un texto: no esperan) */
 const isUnlocked = (item, learned) =>
-  item.type !== "word" || splitKanji(item.value).every((k) => learned.has(k));
+  item.type !== "word" || item.source === "reading" ||
+  splitKanji(item.value).every((k) => learned.has(k));
 const plural = (n, one, many) => `${n} ${t(n === 1 ? one : many)}`;
 
 function formatDate(iso) {
@@ -183,6 +218,7 @@ function displayReadings(item) {
   const display = item.dictionary?.display;
   if (!display) return [];
   if (item.type !== "kanji") return display.words || [];
+  if (display.anchor?.length) return display.anchor;
   return display.imported?.length
     ? display.imported
     : [...(display.on || []), ...(display.kun || [])];
@@ -192,12 +228,32 @@ function displayReadings(item) {
    3. NAVEGACIÓN (delegación: sin listeners duplicados)
    ========================================= */
 
+/* Secciones principales y las vistas que agrupa cada una */
+const NAV = {
+  study: ["read", "study", "draw"],
+  library: ["library"],
+  words: ["progress", "manage"],
+  settings: ["data"]
+};
+// Vista que se abre al pulsar cada sección: la última usada
+const lastView = {};
+
 function switchView(name) {
+  const group = Object.keys(NAV).find((g) => NAV[g].includes(name));
+  lastView[group] = name;
+  closeWordPop();
+
   document.querySelectorAll(".view").forEach((v) =>
     v.classList.toggle("hidden", v.id !== `view-${name}`));
   document.querySelectorAll(".tab").forEach((t) =>
+    t.classList.toggle("active", t.dataset.group === group));
+  document.querySelectorAll(".subtabs").forEach((n) =>
+    n.classList.toggle("hidden", n.dataset.group !== group));
+  document.querySelectorAll(".subtab").forEach((t) =>
     t.classList.toggle("active", t.dataset.view === name));
   document.body.dataset.view = name;
+  if (name === "read") renderRead();
+  if (name === "library") renderLibrary();
   if (name === "draw") renderDraw();
   if (name === "manage") renderItems();
   if (name === "progress") renderStats();
@@ -207,9 +263,9 @@ function switchView(name) {
 function bindNavigation() {
   document.addEventListener("click", (event) => {
     const tab = event.target.closest(".tab");
-    if (tab) return switchView(tab.dataset.view);
-    const go = event.target.closest("[data-go]");
-    if (go) switchView(go.dataset.go);
+    if (tab) return switchView(lastView[tab.dataset.group] || NAV[tab.dataset.group][0]);
+    const go = event.target.closest(".subtab, [data-go]");
+    if (go) switchView(go.dataset.view || go.dataset.go);
   });
 }
 
@@ -464,7 +520,7 @@ function filteredItems() {
     if (!text) return true;
     return i.value.toLowerCase().includes(text) ||
       (i.dictionary?.readings || []).some((r) => kana && r.includes(kana)) ||
-      (i.dictionary?.meanings || []).some((m) => String(m).toLowerCase().includes(text));
+      meaningsOf(i).some((m) => String(m).toLowerCase().includes(text));
   });
 }
 
@@ -489,7 +545,7 @@ function renderItems() {
     const info = readings.length
       ? escapeHTML(readings.slice(0, 4).join(" · "))
       : item.lookupStatus === "error" ? t("No se pudo consultar") : t("Información pendiente");
-    const meanings = (item.dictionary?.meanings || []).slice(0, 3).join(", ");
+    const meanings = meaningsOf(item).slice(0, 3).join(", ");
     return `
     <article class="item-row">
       <div class="item-symbol">${escapeHTML(item.value)}</div>
@@ -556,7 +612,7 @@ function openEditor(item) {
     : t("Sin estudiar");
   $("editLevel").value = item.level;
   $("editReadings").value = displayReadings(item).join(", ");
-  $("editMeanings").value = (item.dictionary?.meanings || []).join(", ");
+  $("editMeanings").value = meaningsOf(item).join(", ");
   $("editDialog").showModal();
 }
 
@@ -581,7 +637,7 @@ async function saveEditor() {
 
   const changed =
     readings.join("|") !== displayReadings(item).join("|") ||
-    meanings.join("|") !== (item.dictionary?.meanings || []).join("|");
+    meanings.join("|") !== meaningsOf(item).join("|");
   if (changed) {
     if (readings.length) {
       item.dictionary = userDictionary(item, readings, meanings);
@@ -644,6 +700,7 @@ function renderStats() {
   renderHeatmap();
   renderLevels();
   renderHardest();
+  renderReadingStats();
 }
 
 function renderForecast(studied) {
@@ -920,6 +977,7 @@ function normalizeDictionary(item) {
 }
 
 async function getDictionary(item) {
+  if (applyKanjiData(item)) await saveItem(item);
   if (hasReadings(item)) return item.dictionary;
 
   if (normalizeDictionary(item)) {
@@ -951,6 +1009,15 @@ async function getDictionary(item) {
   return item.dictionary;
 }
 
+/* Los kanjis de la base propia se rellenan al momento, sin consultar nada */
+async function fillKanjiData() {
+  const changed = items.filter(applyKanjiData);
+  if (changed.length) {
+    await saveItems(changed);
+    renderAll();
+  }
+}
+
 /* Consulta en segundo plano todo lo que aún no tiene lectura */
 let lookupsRunning = false;
 
@@ -961,6 +1028,7 @@ async function runLookups(includeErrors = false) {
   try {
     // Se repite por si se agregan elementos mientras tanto.
     for (let round = 0; round < 20; round++) {
+      await fillKanjiData();
       const pending = items.filter((i) =>
         !hasReadings(i) && (includeErrors || i.lookupStatus !== "error"));
       if (!pending.length || !navigator.onLine) break;
@@ -1030,14 +1098,35 @@ function speak(text) {
   speechSynthesis.speak(utterance);
 }
 
+/* La palabra ancla con su kanji resaltado */
+function anchorHTML(item, data) {
+  return [...data.w].map((ch) =>
+    ch === item.value && data.w !== item.value ? `<b>${escapeHTML(ch)}</b>` : escapeHTML(ch)).join("");
+}
+
 function answerHTML(item) {
   const dict = item.dictionary;
-  const readings = item.type === "kanji" && !dict.display.imported?.length
-    ? `${dict.display.kun.length
+  const data = kanjiData(item);
+  const spanish = lang === "es";
+  const onKun = (on, kun) => `
+    <p class="kanji-note">${escapeHTML(item.value)}${
+      meaningsOf(item).length ? ` · ${escapeHTML(meaningsOf(item).join(", "))}` : ""}${
+      kun.length ? ` · Kun: ${escapeHTML(kun.join(" · "))}` : ""}${
+      on.length ? ` · On: ${escapeHTML(on.join(" · "))}` : ""}</p>`;
+
+  let readings, meanings = meaningsOf(item);
+  if (data) {
+    // Primero la palabra; debajo, el kanji y sus otras lecturas como información
+    readings = `<p class="reading">${escapeHTML(data.w)}（${escapeHTML(data.r)}）</p>`;
+    meanings = spanish && data.es.length ? data.es : data.en;
+  } else if (item.type === "kanji" && !dict.display.imported?.length) {
+    readings = `${dict.display.kun.length
         ? `<p class="reading">Kun: ${escapeHTML(dict.display.kun.join(" · "))}</p>` : ""}
        ${dict.display.on.length
-        ? `<p class="reading">On: ${escapeHTML(dict.display.on.join(" · "))}</p>` : ""}`
-    : `<p class="reading">${escapeHTML(displayReadings(item).join(" · "))}</p>`;
+        ? `<p class="reading">On: ${escapeHTML(dict.display.on.join(" · "))}</p>` : ""}`;
+  } else {
+    readings = `<p class="reading">${escapeHTML(displayReadings(item).join(" · "))}</p>`;
+  }
 
   // Palabras de tus listas que usan este kanji
   const related = item.type === "kanji"
@@ -1046,8 +1135,9 @@ function answerHTML(item) {
 
   return `
     ${readings}
-    ${dict.meanings?.length
-      ? `<p class="meaning">${escapeHTML(dict.meanings.join(", "))}</p>` : ""}
+    ${meanings.length
+      ? `<p class="meaning">${escapeHTML(meanings.join(", "))}</p>` : ""}
+    ${data ? onKun(data.on, data.kun) : ""}
     ${related.length ? `<p class="related">${related.map((w) => {
         const reading = displayReadings(w)[0];
         return `<span>${escapeHTML(w.value)}${reading ? `（${escapeHTML(reading)}）` : ""}</span>`;
@@ -1101,17 +1191,22 @@ async function showCard() {
   }
 
   const typing = session.mode === "type";
-  const accepted = acceptedReadings(item);
-  const kunOnly = accepted !== item.dictionary.readings;
+  const data = kanjiData(item);
+  const accepted = item.dictionary.readings;
+  // Otras lecturas reales del kanji: no son la respuesta, pero tampoco un fallo
+  const otherReadings = data
+    ? [...data.on, ...data.kun].flatMap((r) => [normalizeReading(r), normalizeReading(r.split(".")[0])])
+    : [];
   area.innerHTML = `
     <div class="card">
       ${header}
-      <div class="card-symbol ${item.type === "word" ? "word" : ""}" lang="ja">${escapeHTML(item.value)}</div>
+      <div class="card-symbol ${item.type === "word" || data?.w.length > 1 ? "word" : ""}" lang="ja">${
+        data ? anchorHTML(item, data) : escapeHTML(item.value)}</div>
       ${typing ? `
       <form id="readingForm" autocomplete="off">
         <input id="readingInput" class="reading-input" type="text"
           lang="ja" inputmode="text"
-          placeholder="${kunOnly ? t("Escribe una lectura kun (hiragana)") : t("Escribe la lectura (hiragana o katakana)")}"
+          placeholder="${data?.w.length > 1 ? t("Escribe la lectura de la palabra (hiragana)") : t("Escribe la lectura (hiragana o katakana)")}"
           autocapitalize="off" autocomplete="off" spellcheck="false">
         <button id="checkBtn" class="button button-primary" type="submit">${t("Comprobar")}</button>
         <button id="unknownBtn" class="button button-secondary" type="button">${t("No lo sé")}</button>
@@ -1144,7 +1239,7 @@ async function showCard() {
         }).join("")}
       </div>`;
 
-    if ($("speakBtn")) $("speakBtn").onclick = () => speak(item.value);
+    if ($("speakBtn")) $("speakBtn").onclick = () => speak(data ? data.w : item.value);
 
     answer.querySelectorAll("[data-rate]").forEach((button) => {
       button.onclick = async () => {
@@ -1208,9 +1303,11 @@ async function showCard() {
       return;
     }
     const correct = accepted.includes(userAnswer);
-    // Una lectura on no cuenta como fallo: se pide la kun
-    if (!correct && kunOnly && item.dictionary.readings.includes(userAnswer)) {
-      feedback.textContent = t("Esa es una lectura on. Escribe una lectura kun.");
+    // Otra lectura del kanji no cuenta como fallo: se pide la de la palabra
+    if (!correct && otherReadings.includes(userAnswer)) {
+      feedback.textContent = data.w === item.value
+        ? t("Esa lectura existe, pero aquí se pide la más común del kanji solo.")
+        : t("Esa lectura existe, pero aquí se pide la de la palabra completa.");
       feedback.className = "message";
       input.select();
       return;
@@ -1396,8 +1493,8 @@ async function nextDraw() {
         <span class="pill">${escapeHTML(item.level)}</span>
         <span id="drawProgress" class="card-progress"></span>
       </div>
-      ${dict?.meanings?.length
-        ? `<p class="meaning">${escapeHTML(dict.meanings.join(", "))}</p>` : ""}
+      ${meaningsOf(item).length
+        ? `<p class="meaning">${escapeHTML(meaningsOf(item).join(", "))}</p>` : ""}
       <p class="reading" lang="ja">${escapeHTML(displayReadings(item).join(" · "))}</p>
       <svg id="drawPad" class="draw-pad" viewBox="0 0 ${KVG_SIZE} ${KVG_SIZE}"
         role="img" aria-label="${t("Zona de dibujo")}">
@@ -1571,21 +1668,18 @@ async function grade(card, rating) {
 
   await saveItem(item);
   await saveMeta();
+  await onReviewGraded(item, correct);
 
   updateCounts();
   scheduleSync();
 }
 
 /* =========================================
-   12. COMBINAR DATOS (importación y sincronización)
+   12. DATOS PARA EXPORTAR Y SINCRONIZAR
    ========================================= */
 
 const stamp = (item) =>
   item.updatedAt || Date.parse(item.lastReviewed || item.createdAt || "") || 0;
-
-/* JSON con las claves ordenadas, para comparar objetos */
-const stable = (object) => JSON.stringify(
-  Object.keys(object).sort().map((key) => [key, object[key]]));
 
 function buildPayload() {
   return {
@@ -1645,100 +1739,8 @@ function sanitizeRecord(raw) {
   return record;
 }
 
-/* Combina los datos locales con otros (un archivo o la copia remota).
-   En cada elemento gana la versión modificada más recientemente; los borrados
-   se recuerdan para que no reaparezcan. Devuelve qué lado ha cambiado. */
-async function mergeData(incoming) {
-  const result = { added: 0, updated: 0, removed: 0, localChanged: false, remoteChanged: false };
-
-  const incomingDeleted = incoming.deleted && typeof incoming.deleted === "object" ? incoming.deleted : {};
-  const incomingDays = incoming.days && typeof incoming.days === "object" ? incoming.days : {};
-
-  const deleted = { ...meta.deleted };
-  for (const [id, when] of Object.entries(incomingDeleted)) {
-    if (Number(when) > (deleted[id] || 0)) deleted[id] = Number(when);
-  }
-
-  const local = new Map(items.map((i) => [i.id, i]));
-  const remote = new Map();
-  for (const raw of Array.isArray(incoming.items) ? incoming.items : []) {
-    if (!raw || !["kanji", "word"].includes(raw.type) ||
-        typeof raw.value !== "string" || !raw.value.trim()) continue;
-    const clean = sanitizeRecord(raw);
-    remote.set(clean.id, clean);
-  }
-
-  const merged = [], toSave = [], toDelete = [];
-
-  for (const id of new Set([...local.keys(), ...remote.keys()])) {
-    const mine = local.get(id);
-    const theirs = remote.get(id);
-    const winner = !mine ? theirs : !theirs ? mine : stamp(theirs) > stamp(mine) ? theirs : mine;
-    const loser = winner === mine ? theirs : mine;
-
-    if (deleted[id] && deleted[id] >= stamp(winner)) {
-      if (mine) { toDelete.push(id); result.removed++; result.localChanged = true; }
-      if (theirs) result.remoteChanged = true;
-      continue;
-    }
-    delete deleted[id]; // se volvió a agregar después de borrarlo
-
-    // La lectura ya consultada no se pierde aunque gane la otra versión.
-    let record = winner;
-    if (loser && !hasReadings(winner) && hasReadings(loser)) {
-      record = {
-        ...winner,
-        dictionary: loser.dictionary,
-        lookupStatus: loser.lookupStatus,
-        lookupDate: loser.lookupDate
-      };
-      delete record.lookupError;
-    }
-
-    if (record !== mine) {
-      toSave.push(record);
-      result.localChanged = true;
-      if (mine) result.updated++; else result.added++;
-    }
-    if (!theirs || record !== theirs &&
-        (stamp(record) !== stamp(theirs) || hasReadings(record) !== hasReadings(theirs))) {
-      result.remoteChanged = true;
-    }
-    merged.push(record);
-  }
-
-  // Historial diario: el máximo de cada contador (no duplica al repetir la combinación)
-  const days = { ...meta.days };
-  for (const [date, theirs] of Object.entries(incomingDays)) {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !theirs) continue;
-    const mine = days[date] || {};
-    days[date] = {
-      r: Math.max(mine.r || 0, Number(theirs.r) || 0),
-      c: Math.max(mine.c || 0, Number(theirs.c) || 0),
-      n: Math.max(mine.n || 0, Number(theirs.n) || 0)
-    };
-  }
-
-  const daysText = stable(days), deletedText = stable(deleted);
-  if (daysText !== stable(incomingDays) || deletedText !== stable(incomingDeleted)) {
-    result.remoteChanged = true;
-  }
-  const metaChanged = daysText !== stable(meta.days) || deletedText !== stable(meta.deleted);
-
-  meta.days = days;
-  meta.deleted = deleted;
-
-  if (toSave.length || toDelete.length) await writeItems(toSave, toDelete);
-  if (metaChanged) await saveMeta();
-  if (result.localChanged || metaChanged) {
-    adoptItems(merged);
-    renderAll();
-  }
-  return result;
-}
-
 /* =========================================
-   13. EXPORTAR E IMPORTAR
+   13. EXPORTAR
    ========================================= */
 
 function exportData() {
@@ -1751,34 +1753,6 @@ function exportData() {
   link.click();
   link.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000); // revocar de inmediato puede cancelar la descarga
-}
-
-function parsePayload(text) {
-  const parsed = JSON.parse(text);
-  if (parsed?.app !== "kanji-learning-app" ||
-      ![1, 2].includes(parsed.schemaVersion) ||
-      !Array.isArray(parsed.items)) {
-    throw new Error(t("El archivo no tiene un formato compatible."));
-  }
-  return parsed;
-}
-
-async function importData() {
-  if (!pendingImport) return;
-
-  try {
-    const result = await mergeData(parsePayload(await pendingImport.text()));
-
-    $("importMessage").textContent =
-      t("Importación completada. Nuevos: {added}; actualizados: {updated}.", result);
-    pendingImport = null;
-    $("mergeBtn").disabled = true;
-    $("importFile").value = "";
-    scheduleSync();
-    runLookups();
-  } catch (error) {
-    $("importMessage").textContent = error.message || t("No se pudo importar el archivo.");
-  }
 }
 
 /* =========================================
@@ -1795,7 +1769,10 @@ async function importData() {
 
 const SYNC_PAGE = 1000;  // filas por descarga (máximo de Supabase por petición)
 const SYNC_BATCH = 500;  // filas por subida
-const SYNC_DEFAULT = { userId: "", cursor: "", daysCursor: "", lastSync: 0 };
+const SYNC_DEFAULT = { userId: "", cursor: "", daysCursor: "", cursors: {}, lastSync: 0 };
+// Huellas de lo que ya está en el servidor (las de lectura las usa reading.js)
+const blankPushed = () =>
+  ({ items: {}, days: {}, texts: {}, states: {}, words: {}, sessions: {}, profile: "" });
 
 const accountsReady = typeof SUPABASE_CONFIG === "object" &&
   /^https:\/\/.+/.test(SUPABASE_CONFIG.url) &&
@@ -1810,7 +1787,7 @@ const sb = accountsReady && window.supabase
 
 const sync = {
   config: loadLocal("kanji-sync", SYNC_DEFAULT),
-  pushed: loadLocal("kanji-pushed", { items: {}, days: {} }),
+  pushed: loadLocal("kanji-pushed", blankPushed()),
   user: null,
   running: false,
   queued: false,
@@ -1908,11 +1885,12 @@ const itemPrint = (item) => `${stamp(item)}:${hasReadings(item) ? 1 : 0}`;
 const dayPrint = (day) => `${day.r || 0},${day.c || 0},${day.n || 0}`;
 
 /* Filas del usuario cambiadas desde `cursor`, de página en página */
-async function fetchChanged(table, key, userId, cursor) {
+async function fetchChanged(table, key, userId, cursor, ownOnly = true) {
   const rows = [];
   for (let from = 0; ; from += SYNC_PAGE) {
-    let query = sb.from(table).select("*").eq("user_id", userId)
-      .order("updated_at").order(key).range(from, from + SYNC_PAGE - 1);
+    let query = sb.from(table).select("*");
+    if (ownOnly) query = query.eq("user_id", userId); // si no, lo que permita Row Level Security
+    query = query.order("updated_at").order(key).range(from, from + SYNC_PAGE - 1);
     if (cursor) query = query.gt("updated_at", cursor);
     const { data, error } = await query;
     if (error) throw error;
@@ -1997,10 +1975,10 @@ async function pullDays(userId) {
   sync.config.daysCursor = rows[rows.length - 1].updated_at;
 }
 
-async function pushRows(table, conflict, rows, marks, pushed) {
+async function pushRows(table, conflict, rows, marks, pushed, options = {}) {
   for (let i = 0; i < rows.length; i += SYNC_BATCH) {
     const { error } = await sb.from(table)
-      .upsert(rows.slice(i, i + SYNC_BATCH), { onConflict: conflict });
+      .upsert(rows.slice(i, i + SYNC_BATCH), { onConflict: conflict, ...options });
     if (error) throw error;
     for (const [key, print] of marks.slice(i, i + SYNC_BATCH)) pushed[key] = print;
   }
@@ -2041,8 +2019,10 @@ async function pushDays(userId) {
   await pushRows("days", "user_id,day", rows, marks, sync.pushed.days);
 }
 
+// supabase-js devuelve los fallos de red como un error con este texto; un TypeError
+// lanzado por nuestro código es un fallo real y debe verse como tal
 const isNetworkError = (error) =>
-  !navigator.onLine || error instanceof TypeError || /fetch|network/i.test(error?.message || "");
+  !navigator.onLine || /failed to fetch|networkerror|load failed/i.test(error?.message || "");
 
 function syncErrorMessage(error) {
   if (["PGRST205", "42P01"].includes(error.code)) {
@@ -2069,6 +2049,8 @@ async function syncNow() {
     if (sync.user?.id === userId) {
       await pushItems(userId);
       await pushDays(userId);
+      await pullReading(userId);
+      if (sync.user?.id === userId) await pushReading(userId);
     }
 
     sync.config.lastSync = Date.now();
@@ -2103,8 +2085,8 @@ function scheduleSync(delay = 4000) {
 /* ---------- Sesión ---------- */
 
 function resetSyncMemory(userId) {
-  sync.config = { ...SYNC_DEFAULT, userId };
-  sync.pushed = { items: {}, days: {} };
+  sync.config = { ...SYNC_DEFAULT, cursors: {}, userId };
+  sync.pushed = blankPushed();
   saveLocal("kanji-sync", sync.config);
   saveLocal("kanji-pushed", sync.pushed);
 }
@@ -2118,7 +2100,10 @@ async function clearLocalData() {
   items = [];
   meta.days = {};
   meta.deleted = {};
+  meta.reading = {};
+  reader = placement = evaluation = null;
   await saveMeta();
+  await clearReadingData();
   $("studyArea").innerHTML = emptyStudyHTML;
   renderAll();
 }
@@ -2396,13 +2381,6 @@ function bindSettings() {
     runLookups(true);
   });
 
-  $("importFile").addEventListener("change", (event) => {
-    pendingImport = event.target.files?.[0] || null;
-    $("mergeBtn").disabled = !pendingImport;
-    $("importMessage").textContent = pendingImport
-      ? t("Archivo seleccionado: {name}", { name: pendingImport.name }) : "";
-  });
-  $("mergeBtn").addEventListener("click", importData);
 
   $("hardList").addEventListener("click", (event) => {
     const button = event.target.closest("[data-hard]");
@@ -2419,9 +2397,10 @@ async function init() {
     db = await openDatabase();
     await loadMeta();
     items = await getAll("items");
+    await loadReadingData();
 
     // Diccionarios que venían en un JSON importado con el formato antiguo
-    const migrated = items.filter(normalizeDictionary);
+    const migrated = items.filter((i) => applyKanjiData(i) | normalizeDictionary(i));
     if (migrated.length) await saveItems(migrated);
 
     // Las listas base de palabras ya no traen kanjis sueltos (van solo como kanji):
@@ -2450,10 +2429,15 @@ async function init() {
   bindEditor();
   bindShortcuts();
   bindSettings();
+  bindLibrary();
+  bindReader();
+  bindReadingStats();
   bindSync();
 
   setSyncState("off");
   renderAll();
+  switchView("read"); // la lectura es la pantalla principal
+  await addLearningToReview();
 
   if ("serviceWorker" in navigator && location.protocol === "https:") {
     navigator.serviceWorker.register("sw.js").catch(() => {});

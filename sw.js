@@ -5,7 +5,7 @@
    y, si falla, la copia guardada.
    ========================================= */
 
-const CACHE = "kanji-learning-v4";
+const CACHE = "kanji-learning-v7";
 const SHELL = [
   "./",
   "index.html",
@@ -13,6 +13,8 @@ const SHELL = [
   "config.js",
   "i18n.js",
   "jlpt-lists.js",
+  "kanji-data.js",
+  "reading.js",
   "app.js",
   "manifest.webmanifest",
   "icons/icon.svg",

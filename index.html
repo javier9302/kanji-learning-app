@@ -18,6 +18,8 @@
   <script src="config.js" defer></script>
   <script src="i18n.js" defer></script>
   <script src="jlpt-lists.js" defer></script>
+  <script src="kanji-data.js" defer></script>
+  <script src="reading.js" defer></script>
   <script src="app.js" defer></script>
 </head>
 <body>
@@ -55,22 +57,92 @@
     </section>
 
     <nav class="tabs" aria-label="Secciones">
-      <button class="tab active" data-view="study" type="button">
-        Estudiar
+      <button class="tab active" data-group="study" type="button">
+        <span class="tab-icon" aria-hidden="true" lang="ja">学</span>
+        <span>Estudiar</span>
       </button>
-      <button class="tab" data-view="draw" type="button">
-        Escribir
+      <button class="tab" data-group="library" type="button">
+        <span class="tab-icon" aria-hidden="true" lang="ja">本</span>
+        <span>Biblioteca</span>
       </button>
-      <button class="tab" data-view="manage" type="button">
-        Mis listas
+      <button class="tab" data-group="words" type="button">
+        <span class="tab-icon" aria-hidden="true" lang="ja">語</span>
+        <span>Mis palabras</span>
       </button>
-      <button class="tab" data-view="progress" type="button">
-        Progreso
-      </button>
-      <button class="tab" data-view="data" type="button">
-        Datos
+      <button class="tab" data-group="settings" type="button">
+        <span class="tab-icon" aria-hidden="true" lang="ja">設</span>
+        <span>Ajustes</span>
       </button>
     </nav>
+
+    <nav class="subtabs" data-group="study" aria-label="Modos de estudio">
+      <button class="subtab active" data-view="read" type="button">Leer</button>
+      <button class="subtab" data-view="study" type="button">Repasar</button>
+      <button class="subtab" data-view="draw" type="button">Escribir</button>
+    </nav>
+
+    <nav class="subtabs hidden" data-group="words" aria-label="Mis palabras">
+      <button class="subtab" data-view="progress" type="button">Estadísticas</button>
+      <button class="subtab" data-view="manage" type="button">Mis listas</button>
+    </nav>
+
+    <!-- LECTURA -->
+    <section id="view-read" class="view hidden">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">LECTURA</p>
+          <h2>Lee a tu nivel</h2>
+        </div>
+        <span id="readLevel" class="pill hidden"></span>
+      </div>
+
+      <div id="readArea" class="read-area"></div>
+    </section>
+
+    <!-- BIBLIOTECA -->
+    <section id="view-library" class="view hidden">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">TUS TEXTOS</p>
+          <h2>Biblioteca</h2>
+        </div>
+        <span id="textCount" class="pill">0 textos</span>
+      </div>
+
+      <div class="panel">
+        <h3>Agregar un texto</h3>
+        <label class="field">
+          <span>JSON del texto</span>
+          <textarea id="textInput" rows="6" spellcheck="false"
+            placeholder='{ "title": "…", "level": "N5", "sentences": [ … ] }'></textarea>
+        </label>
+        <div class="form-footer">
+          <p class="helper">
+            Pega el JSON que te devolvió la IA. Se comprueba antes de guardarlo
+            y, si algo falla, verás exactamente qué corregir.
+          </p>
+          <div class="import-actions">
+            <button id="sampleTextBtn" class="button button-quiet" type="button">
+              Cargar ejemplo
+            </button>
+            <button id="addTextBtn" class="button button-primary" type="button">
+              Validar y guardar
+            </button>
+          </div>
+        </div>
+        <div id="textMessage" class="message" role="status"></div>
+      </div>
+
+      <div id="textList" class="items-list"></div>
+
+      <div id="libraryEmpty" class="study-area">
+        <div class="empty-state">
+          <div class="empty-icon" lang="ja">本</div>
+          <h3>Tu biblioteca está vacía</h3>
+          <p>Los textos que agregues se guardarán aquí, con el porcentaje de sus palabras que ya conoces.</p>
+        </div>
+      </div>
+    </section>
 
     <!-- ESTUDIO -->
     <section id="view-study" class="view">
@@ -280,9 +352,80 @@
       <div class="section-heading">
         <div>
           <p class="eyebrow">TU CONSTANCIA</p>
-          <h2>Progreso</h2>
+          <h2>Estadísticas</h2>
         </div>
       </div>
+
+      <h3 class="block-title">Lectura</h3>
+
+      <div class="stats-grid">
+        <article class="stat-card">
+          <span>Palabras vistas</span>
+          <strong id="statWords">0</strong>
+        </article>
+        <article class="stat-card">
+          <span>Sabes leer</span>
+          <strong id="statWordsRead">0</strong>
+        </article>
+        <article class="stat-card">
+          <span>Entiendes</span>
+          <strong id="statWordsMeaning">0</strong>
+        </article>
+        <article class="stat-card">
+          <span>Sabes escribir</span>
+          <strong class="soon">Próximamente</strong>
+        </article>
+        <article class="stat-card">
+          <span>Textos leídos</span>
+          <strong id="statTexts">0</strong>
+        </article>
+        <article class="stat-card">
+          <span>Racha de lectura</span>
+          <strong id="statReadStreak">0</strong>
+        </article>
+      </div>
+
+      <div class="panel chart-panel">
+        <h3>Palabras por estado</h3>
+        <div id="wordStateBar" class="level-chart"></div>
+      </div>
+
+      <div class="panel chart-panel">
+        <h3>Palabras nuevas por semana</h3>
+        <p class="helper">Palabras que viste por primera vez en las últimas 8 semanas.</p>
+        <div id="weekChart" class="bar-chart"></div>
+      </div>
+
+      <div class="panel chart-panel">
+        <h3>Las que más consultas</h3>
+        <div id="lookedList" class="hard-list"></div>
+      </div>
+
+      <div class="panel chart-panel">
+        <h3>Las que más fallas en las evaluaciones</h3>
+        <div id="failedList" class="hard-list"></div>
+      </div>
+
+      <div class="list-toolbar">
+        <h3>Palabras de tus lecturas</h3>
+        <div class="list-filters">
+          <select id="wordStatus" aria-label="Filtrar por estado">
+            <option value="">Estado: todos</option>
+            <option value="mastered">Dominadas</option>
+            <option value="pre_known">Por confirmar</option>
+            <option value="learning">Aprendiendo</option>
+            <option value="unknown">Desconocidas</option>
+          </select>
+          <input id="wordSearch" class="search" type="search"
+            placeholder="Buscar palabra, lectura o significado…">
+        </div>
+      </div>
+      <div id="wordList" class="items-list"></div>
+      <button id="wordMoreBtn" class="button button-outline more-btn hidden" type="button">
+        Mostrar más
+      </button>
+
+      <h3 class="block-title">Repaso de kanjis y palabras</h3>
 
       <div class="stats-grid">
         <article class="stat-card">
@@ -349,8 +492,8 @@
     <section id="view-data" class="view hidden">
       <div class="section-heading">
         <div>
-          <p class="eyebrow">TUS DATOS</p>
-          <h2>Sincronización y copias</h2>
+          <p class="eyebrow">CUENTA Y PREFERENCIAS</p>
+          <h2>Ajustes</h2>
         </div>
       </div>
 
@@ -388,27 +531,41 @@
 
       <div class="panel import-panel">
         <div>
-          <h3>Copia de seguridad</h3>
+          <h3>Descargar mis datos</h3>
           <p class="helper">
-            Descarga un archivo JSON con todo, o carga uno exportado
-            previamente: se combina con los datos actuales.
+            Descarga un archivo JSON con tus kanjis, palabras y progreso de repaso.
+            Para tenerlos en otro dispositivo, inicia sesión con tu cuenta.
           </p>
         </div>
         <div class="import-actions">
           <button id="exportBtn" class="button button-outline" type="button">
             ↓ Exportar JSON
           </button>
-          <label class="button button-outline file-button">
-            Elegir JSON
-            <input id="importFile" type="file"
-              accept=".json,application/json" hidden>
-          </label>
-          <button id="mergeBtn" class="button button-quiet"
-            type="button" disabled>
-            Importar archivo
+        </div>
+      </div>
+
+      <div class="panel import-panel">
+        <div>
+          <h3>Lectura</h3>
+          <p class="helper">Furigana sobre las palabras y nivel de los textos que se te proponen.</p>
+        </div>
+        <div class="import-actions">
+          <select id="furiganaSelect" class="lang-select" aria-label="Furigana">
+            <option value="unknown">Furigana: solo palabras desconocidas</option>
+            <option value="all">Furigana: siempre</option>
+            <option value="none">Furigana: nunca</option>
+          </select>
+          <select id="readLevelSelect" class="lang-select" aria-label="Nivel de lectura">
+            <option>N5</option>
+            <option>N4</option>
+            <option>N3</option>
+            <option>N2</option>
+            <option>N1</option>
+          </select>
+          <button id="placementRedoBtn" class="button button-outline" type="button">
+            Repetir evaluación
           </button>
         </div>
-        <p id="importMessage" class="message" role="status"></p>
       </div>
 
       <div class="panel import-panel">
@@ -524,6 +681,8 @@
       </div>
     </form>
   </dialog>
+
+  <div id="wordPop" class="word-pop hidden" role="dialog" aria-label="Palabra"></div>
 
   <footer>
     <span>Kanji Learning App</span>

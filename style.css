@@ -236,6 +236,9 @@ body.studying .intro {
 }
 
 .tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   padding: 13px 18px;
   background: none;
   border: 0;
@@ -247,11 +250,76 @@ body.studying .intro {
   cursor: pointer;
   margin-bottom: -1px;
   white-space: nowrap;
+  transition: color .15s, border-color .15s;
+}
+
+.tab:hover {
+  color: var(--ink);
 }
 
 .tab.active {
   color: var(--green);
   border-bottom-color: var(--green);
+}
+
+.tab-icon {
+  font: 500 15px 'Noto Sans JP', sans-serif;
+  line-height: 1;
+}
+
+/* Vistas dentro de una sección (Leer · Repasar · Escribir) */
+.subtabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: -10px 0 24px;
+}
+
+.subtab {
+  padding: 8px 15px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: var(--white);
+  color: var(--muted);
+  font: 600 12px 'DM Sans', sans-serif;
+  cursor: pointer;
+  transition: background .15s, color .15s, border-color .15s, transform .15s;
+}
+
+.subtab:hover {
+  color: var(--ink);
+}
+
+.subtab:active {
+  transform: translateY(1px);
+}
+
+.subtab.active {
+  background: var(--mint);
+  border-color: var(--focus);
+  color: var(--green);
+}
+
+.subtab:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.view {
+  animation: view-in .2s ease;
+}
+
+@keyframes view-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .view {
+    animation: none;
+  }
 }
 
 .view.hidden,
@@ -712,10 +780,6 @@ body.studying .intro {
 
 .goal-input {
   width: 90px;
-}
-
-.file-button {
-  display: inline-block;
 }
 
 .list-toolbar {
@@ -1457,4 +1521,448 @@ footer {
 .link-btn:focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 2px;
+}
+
+/* Móvil: las secciones pasan a una barra fija inferior */
+
+@media (max-width: 760px) {
+  body {
+    padding-bottom: calc(62px + env(safe-area-inset-bottom));
+  }
+
+  .tabs {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 20;
+    gap: 0;
+    margin: 0;
+    padding-bottom: env(safe-area-inset-bottom);
+    overflow: visible;
+    background: var(--white);
+    border-top: 1px solid var(--line);
+    border-bottom: 0;
+    box-shadow: 0 -6px 18px rgba(26, 58, 45, .05);
+  }
+
+  .tab {
+    flex: 1;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+    margin: 0;
+    padding: 9px 4px 8px;
+    border-bottom: 0;
+    border-top: 2px solid transparent;
+    font-size: 10px;
+  }
+
+  .tab.active {
+    border-top-color: var(--green);
+  }
+
+  .tab-icon {
+    font-size: 19px;
+  }
+
+  .subtabs {
+    margin-top: 0;
+  }
+
+  .subtab {
+    flex: 1;
+    padding: 10px 8px;
+    text-align: center;
+  }
+}
+
+/* Tarjeta de kanji con palabra ancla */
+
+.card-symbol b {
+  font-weight: inherit;
+  color: var(--green);
+}
+
+.kanji-note {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+/* Biblioteca */
+
+.text-row .item-state {
+  text-align: right;
+  line-height: 1.5;
+}
+
+.error-list {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  line-height: 1.6;
+}
+
+/* Lectura */
+
+.read-next {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+}
+
+.read-next h3 {
+  margin: 4px 0;
+  font: 500 20px 'Noto Sans JP', sans-serif;
+}
+
+.prompt-grid {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.placement-start {
+  justify-content: center;
+}
+
+.placement-start select {
+  border: 1px solid var(--line-strong);
+  background: var(--field);
+  border-radius: 9px;
+  padding: 10px 12px;
+  color: var(--ink);
+  font: 600 13px 'DM Sans', sans-serif;
+}
+
+.choices {
+  width: 100%;
+  max-width: 420px;
+  display: grid;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.choice {
+  white-space: normal;
+  text-align: left;
+  transition: background .15s, border-color .15s, transform .15s;
+}
+
+.choice-right {
+  background: var(--good-bg);
+  border-color: var(--ok);
+  color: var(--ok);
+  opacity: 1 !important;
+}
+
+.choice-wrong {
+  background: var(--wrong-bg);
+  border-color: var(--red);
+  color: var(--red);
+  opacity: 1 !important;
+}
+
+.reader {
+  background: var(--white);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  box-shadow: var(--shadow);
+  padding: 22px 24px 24px;
+}
+
+.reader-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+
+.reader-head h3 {
+  margin: 0 0 4px;
+  font: 500 22px 'Noto Sans JP', sans-serif;
+}
+
+.reading-text {
+  margin: 18px 0 24px;
+  font: 400 22px 'Noto Sans JP', sans-serif;
+  line-height: 2.4;
+}
+
+.reading-text p {
+  margin: 0 0 14px;
+}
+
+/* La frase entera se resalta al pasar por ella (o al abrir una de sus palabras) */
+.sent {
+  padding: 5px 0;
+  border-radius: 6px;
+  transition: background .15s;
+}
+
+.sent:hover,
+.sent.active {
+  background: var(--mint);
+}
+
+.tok {
+  padding: 2px 1px;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background .15s;
+}
+
+.tok:hover,
+.tok.active {
+  background: var(--line-strong);
+}
+
+.tok:focus-visible {
+  outline: 2px solid var(--focus);
+}
+
+.tok rt {
+  font-size: 11px;
+  color: var(--muted);
+  user-select: none;
+}
+
+.tok-looked {
+  border-bottom: 2px dotted var(--line-strong);
+}
+
+.tok-new {
+  background: var(--wrong-bg);
+  border-bottom: 2px solid var(--red);
+}
+
+.tok-kanji {
+  background: var(--hard-bg);
+  border-bottom: 2px solid var(--gold);
+}
+
+.tok-check {
+  background: var(--good-bg);
+  border-bottom: 2px solid var(--ok);
+}
+
+.word-pop {
+  position: absolute;
+  z-index: 30;
+  width: min(340px, calc(100vw - 24px));
+  padding: 16px 16px 14px;
+  background: var(--white);
+  color: var(--ink);
+  border: 1px solid var(--line-strong);
+  border-radius: 14px;
+  box-shadow: 0 16px 40px rgba(20, 30, 60, .18);
+  animation: view-in .15s ease;
+}
+
+.pop-close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+}
+
+.pop-word {
+  font: 500 26px 'Noto Sans JP', sans-serif;
+  padding-right: 34px;
+}
+
+.pop-reading {
+  color: var(--green);
+  font: 500 15px 'Noto Sans JP', sans-serif;
+  margin-top: 2px;
+}
+
+.pop-lemma {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.word-pop .meaning {
+  margin: 8px 0 2px;
+}
+
+.pop-example {
+  margin: 10px 0 0;
+  padding: 8px 10px;
+  background: var(--paper);
+  border-radius: 8px;
+  font: 400 13px 'Noto Sans JP', sans-serif;
+  line-height: 1.7;
+}
+
+.pop-example p {
+  margin: 0;
+}
+
+.pop-example .pop-translation {
+  margin-top: 4px;
+  color: var(--muted);
+  font: 12px 'DM Sans', sans-serif;
+}
+
+.pop-actions {
+  display: grid;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.pop-actions .button {
+  white-space: normal;
+  text-align: left;
+  border: 1px solid transparent;
+}
+
+.pop-new {
+  background: var(--wrong-bg);
+  color: var(--red);
+}
+
+.pop-kanji {
+  background: var(--hard-bg);
+  color: var(--hard-ink);
+}
+
+.pop-check {
+  background: var(--good-bg);
+  color: var(--ok);
+}
+
+.pop-actions .chosen {
+  border-color: currentColor;
+}
+
+@media (max-width: 760px) {
+  .prompt-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .reader {
+    padding: 18px 16px 20px;
+  }
+
+  /* En móvil el popup es una hoja fija sobre la barra de secciones */
+  .word-pop {
+    position: fixed;
+    top: auto !important;
+    left: 8px !important;
+    right: 8px;
+    bottom: calc(70px + env(safe-area-inset-bottom));
+    width: auto;
+    max-height: 60vh;
+    overflow-y: auto;
+  }
+}
+
+/* Estadísticas de lectura */
+
+.block-title {
+  margin: 30px 0 14px;
+  font-size: 15px;
+  color: var(--ink);
+}
+
+.section-heading + .block-title {
+  margin-top: 0;
+}
+
+.stat-card strong.soon {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.sw-prek { background: var(--gold); }
+
+.state-counts {
+  margin-top: 12px;
+}
+
+div.hard-item {
+  cursor: default;
+}
+
+.word-symbol {
+  width: auto;
+  min-width: 46px;
+  padding: 0 8px;
+  font-size: 18px;
+}
+
+.word-state {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.state-tag {
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  background: var(--paper);
+  color: var(--muted);
+}
+
+.state-mastered { background: var(--good-bg); color: var(--ok); }
+.state-pre_known { background: var(--hard-bg); color: var(--hard-ink); }
+.state-learning { background: var(--mint); color: var(--green); }
+
+.skills i {
+  font: 500 11px 'Noto Sans JP', sans-serif;
+  font-style: normal;
+  margin-left: 3px;
+  padding: 1px 3px;
+  border-radius: 4px;
+  color: var(--line-strong);
+  border: 1px solid var(--line);
+}
+
+.skills i.on {
+  color: var(--ok);
+  border-color: var(--ok);
+  background: var(--good-bg);
+}
+
+/* Administración (admin.html) */
+
+.admin-login {
+  max-width: 420px;
+  margin: 0 auto 16px;
+}
+
+.admin-login form {
+  margin-top: 14px;
+}
+
+.admin-login .search {
+  max-width: none;
+}
+
+.admin-text .item-row {
+  flex-wrap: wrap;
+}
+
+.admin-body {
+  margin: 6px 0 4px;
+  padding: 14px 16px;
+  background: var(--white);
+  border: 1px solid var(--line);
+  border-radius: 11px;
+}
+
+.admin-body p {
+  margin: 0 0 2px;
+  font: 400 16px 'Noto Sans JP', sans-serif;
+  line-height: 1.8;
+}
+
+.admin-body .helper {
+  margin-bottom: 10px;
 }
