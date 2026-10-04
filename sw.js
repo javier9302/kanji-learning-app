@@ -5,21 +5,23 @@
    y, si falla, la copia guardada.
    ========================================= */
 
-const CACHE = "kanji-learning-v3";
+const CACHE = "kanji-learning-v4";
 const SHELL = [
   "./",
   "index.html",
   "style.css",
+  "config.js",
   "i18n.js",
   "jlpt-lists.js",
   "app.js",
   "manifest.webmanifest",
   "icons/icon.svg",
-  "https://unpkg.com/wanakana@5.3.1/wanakana.min.js"
+  "https://unpkg.com/wanakana@5.3.1/wanakana.min.js",
+  "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js"
 ];
 
 // Solo se guardan la propia app, WanaKana, las fuentes y los trazos de KanjiVG;
-// las consultas al diccionario y a GitHub van siempre a la red.
+// las consultas al diccionario y a Supabase van siempre a la red.
 const CACHEABLE = [self.location.origin, "https://unpkg.com", "https://cdn.jsdelivr.net",
   "https://fonts.googleapis.com", "https://fonts.gstatic.com"];
 

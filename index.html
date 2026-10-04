@@ -14,6 +14,8 @@
   <link rel="apple-touch-icon" href="icons/icon-180.png">
   <link rel="stylesheet" href="style.css">
   <script src="https://unpkg.com/wanakana@5.3.1/wanakana.min.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js" defer></script>
+  <script src="config.js" defer></script>
   <script src="i18n.js" defer></script>
   <script src="jlpt-lists.js" defer></script>
   <script src="app.js" defer></script>
@@ -353,48 +355,34 @@
       </div>
 
       <div class="panel">
-        <h3>Sincronización automática</h3>
+        <h3>Cuenta y sincronización</h3>
         <p class="helper">
-          Guarda tus listas y tu progreso en un gist privado de tu cuenta
-          de GitHub y mantenlos al día en todos tus dispositivos, sin
-          exportar ni importar archivos.
+          Con una cuenta, tus listas y tu progreso se guardan en la nube y se
+          mantienen al día en todos tus dispositivos. Sin cuenta, todo se
+          queda solo en este navegador.
         </p>
 
-        <div id="syncSetup">
-          <ol class="steps">
-            <li>
-              <a href="https://github.com/settings/tokens/new?scopes=gist&description=Kanji%20Learning%20App"
-                target="_blank" rel="noopener">Crea un token de GitHub</a>
-              (el único permiso que necesita es <strong>gist</strong>).
-            </li>
-            <li>Pégalo aquí. Repite este paso en cada dispositivo.</li>
-          </ol>
+        <div id="accountGuest" class="hidden">
           <div class="inline-form">
-            <input id="syncToken" class="search" type="password"
-              placeholder="ghp_…" autocomplete="off" spellcheck="false"
-              aria-label="Token de GitHub">
-            <button id="syncConnectBtn" class="button button-primary" type="button">
-              Conectar
+            <button id="accountOpenBtn" class="button button-primary" type="button">
+              Iniciar sesión o crear cuenta
             </button>
           </div>
-          <p class="helper">
-            El token se guarda solo en este navegador y no se incluye
-            en las copias exportadas.
-          </p>
         </div>
 
-        <div id="syncActive" class="hidden">
+        <div id="accountActive" class="hidden">
+          <p id="accountEmail" class="helper"></p>
           <div class="inline-form">
             <button id="syncNowBtn" class="button button-primary" type="button">
               Sincronizar ahora
             </button>
-            <a id="syncGistLink" class="button button-outline" target="_blank"
-              rel="noopener" href="#">Ver gist</a>
-            <button id="syncDisconnectBtn" class="button button-quiet" type="button">
-              Desconectar
+            <button id="signOutBtn" class="button button-quiet" type="button">
+              Cerrar sesión
             </button>
           </div>
         </div>
+
+        <p id="accountDisabled" class="helper hidden"></p>
         <p id="syncMessage" class="message" role="status"></p>
       </div>
 
@@ -491,6 +479,48 @@
         <button id="editSaveBtn" class="button button-primary" type="submit" value="save">
           Guardar
         </button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="authDialog" class="dialog">
+    <form id="authForm">
+      <div class="dialog-head">
+        <div>
+          <h3 id="authTitle"></h3>
+          <p id="authSub" class="helper"></p>
+        </div>
+      </div>
+
+      <label id="authEmailField" class="field">
+        <span>Correo electrónico</span>
+        <input id="authEmail" class="search" type="email" autocomplete="email"
+          autocapitalize="off" spellcheck="false" required>
+      </label>
+
+      <label id="authPasswordField" class="field">
+        <span id="authPasswordLabel"></span>
+        <input id="authPassword" class="search" type="password" minlength="8" required>
+      </label>
+
+      <p id="authMessage" class="message" role="status"></p>
+
+      <div class="dialog-actions">
+        <button id="authCancelBtn" class="button button-secondary" type="button">
+          Cancelar
+        </button>
+        <span class="spacer"></span>
+        <button id="authSubmitBtn" class="button button-primary" type="submit"></button>
+      </div>
+
+      <button id="authGoogleBtn" class="button button-outline auth-google hidden" type="button">
+        Continuar con Google
+      </button>
+
+      <div class="auth-links">
+        <button id="authToSignup" class="link-btn" type="button">Crear una cuenta</button>
+        <button id="authToLogin" class="link-btn" type="button">Ya tengo cuenta</button>
+        <button id="authToReset" class="link-btn" type="button">¿Olvidaste tu contraseña?</button>
       </div>
     </form>
   </dialog>

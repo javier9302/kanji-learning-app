@@ -91,19 +91,7 @@ const EN = {
 
   "TUS DATOS": "YOUR DATA",
   "Sincronización y copias": "Sync and backups",
-  "Sincronización automática": "Automatic sync",
-  "Guarda tus listas y tu progreso en un gist privado de tu cuenta de GitHub y mantenlos al día en todos tus dispositivos, sin exportar ni importar archivos.":
-    "Store your lists and progress in a private gist in your GitHub account and keep them up to date on all your devices, without exporting or importing files.",
-  "Crea un token de GitHub": "Create a GitHub token",
-  "(el único permiso que necesita es": "(the only permission it needs is",
-  "Pégalo aquí. Repite este paso en cada dispositivo.": "Paste it here. Repeat this step on each device.",
-  "Token de GitHub": "GitHub token",
-  "Conectar": "Connect",
-  "El token se guarda solo en este navegador y no se incluye en las copias exportadas.":
-    "The token is stored only in this browser and is not included in exported backups.",
   "Sincronizar ahora": "Sync now",
-  "Ver gist": "View gist",
-  "Desconectar": "Disconnect",
   "Copia de seguridad": "Backup",
   "Descarga un archivo JSON con todo, o carga uno exportado previamente: se combina con los datos actuales.":
     "Download a JSON file with everything, or load a previously exported one: it is merged with the current data.",
@@ -257,20 +245,68 @@ const EN = {
   "Sincronizado": "Synced",
   "Sin conexión": "Offline",
   "Error al sincronizar": "Sync error",
-  "Datos guardados en este navegador y en tu gist privado": "Data stored in this browser and in your private gist",
-  "GitHub rechazó el token. Comprueba que sea válido.": "GitHub rejected the token. Check that it is valid.",
-  "El token no tiene el permiso “gist” o se alcanzó el límite de GitHub.":
-    "The token lacks the “gist” permission, or GitHub's rate limit was reached.",
-  "GitHub respondió {status}.": "GitHub responded {status}.",
-  "No se encontró el gist. Vuelve a sincronizar para crearlo de nuevo.":
-    "The gist was not found. Sync again to create it anew.",
   "Última sincronización: {time}.": "Last sync: {time}.",
-  "Pega primero el token.": "Paste the token first.",
-  "¿Dejar de sincronizar en este dispositivo? Los datos locales y el gist se conservan.":
-    "Stop syncing on this device? The local data and the gist are kept.",
   "{n} sin lectura. Puedes reintentar la consulta o escribirla a mano desde “Mis listas”.":
     "{n} without a reading. You can retry the lookup or type it by hand from “My lists”.",
   "Todos los elementos tienen lectura.": "All items have a reading.",
+  "Cuenta y sincronización": "Account and sync",
+  "Con una cuenta, tus listas y tu progreso se guardan en la nube y se mantienen al día en todos tus dispositivos. Sin cuenta, todo se queda solo en este navegador.":
+    "With an account, your lists and progress are stored in the cloud and kept up to date on all your devices. Without one, everything stays in this browser only.",
+  "Iniciar sesión o crear cuenta": "Sign in or create an account",
+  "Cerrar sesión": "Sign out",
+  "Sesión iniciada como {email}": "Signed in as {email}",
+  "Las cuentas no están configuradas en esta instalación (falta rellenar config.js).":
+    "Accounts are not configured in this installation (config.js has not been filled in).",
+  "No se pudo cargar el servicio de cuentas. Comprueba la conexión y vuelve a abrir la app.":
+    "The account service could not be loaded. Check your connection and reopen the app.",
+  "Datos guardados en este navegador y en tu cuenta": "Data stored in this browser and in your account",
+  "Faltan las tablas en Supabase: ejecuta supabase/schema.sql.":
+    "The Supabase tables are missing: run supabase/schema.sql.",
+  "No se pudo sincronizar ({error}).": "Could not sync ({error}).",
+  "Este dispositivo tiene datos de otra cuenta. Para continuar se quitarán de este dispositivo (lo que no se hubiera sincronizado se perderá). ¿Continuar?":
+    "This device holds data from another account. To continue it will be removed from this device (anything not yet synced will be lost). Continue?",
+  "No se pudieron sincronizar los últimos cambios. Se quedan en este dispositivo y se subirán cuando vuelvas a iniciar sesión. ¿Cerrar sesión?":
+    "The latest changes could not be synced. They stay on this device and will be uploaded when you sign in again. Sign out?",
+
+  /* ---------- app.js: diálogo de cuenta ---------- */
+  "Iniciar sesión": "Sign in",
+  "Entrar": "Sign in",
+  "Crear cuenta": "Create account",
+  "Crear una cuenta": "Create an account",
+  "Ya tengo cuenta": "I already have an account",
+  "¿Olvidaste tu contraseña?": "Forgot your password?",
+  "Continuar con Google": "Continue with Google",
+  "Correo electrónico": "Email",
+  "Contraseña": "Password",
+  "Contraseña (mínimo 8 caracteres)": "Password (at least 8 characters)",
+  "Recuperar contraseña": "Reset password",
+  "Enviar enlace": "Send link",
+  "Nueva contraseña": "New password",
+  "Guardar contraseña": "Save password",
+  "Tu progreso se guarda en tu cuenta y se mantiene al día en todos tus dispositivos.":
+    "Your progress is stored in your account and kept up to date on all your devices.",
+  "El progreso que ya tienes en este dispositivo se guardará en tu cuenta.":
+    "The progress you already have on this device will be saved to your account.",
+  "Te enviaremos un enlace para elegir una contraseña nueva.": "We will send you a link to choose a new password.",
+  "Escribe la contraseña nueva para tu cuenta.": "Type the new password for your account.",
+  "Un momento…": "One moment…",
+  "No hay conexión. Inténtalo de nuevo cuando tengas internet.": "No connection. Try again when you are online.",
+  "Correo o contraseña incorrectos.": "Wrong email or password.",
+  "Confirma tu correo con el enlace que te enviamos antes de entrar.":
+    "Confirm your email with the link we sent you before signing in.",
+  "Ya existe una cuenta con ese correo. Inicia sesión o recupera la contraseña.":
+    "An account with that email already exists. Sign in or reset the password.",
+  "La contraseña es demasiado débil. Usa al menos 8 caracteres.": "The password is too weak. Use at least 8 characters.",
+  "La contraseña nueva debe ser distinta de la anterior.": "The new password must differ from the old one.",
+  "Revisa el correo: no parece válido.": "Check the email address: it does not look valid.",
+  "Demasiados intentos. Espera unos minutos y vuelve a probar.": "Too many attempts. Wait a few minutes and try again.",
+  "El registro de cuentas nuevas está desactivado.": "Sign-up for new accounts is disabled.",
+  "No se pudo completar la operación ({error}).": "The operation could not be completed ({error}).",
+  "Te enviamos un correo. Abre el enlace para confirmar la cuenta y luego inicia sesión.":
+    "We sent you an email. Open the link to confirm the account, then sign in.",
+  "Si hay una cuenta con ese correo, recibirás un enlace para cambiar la contraseña.":
+    "If there is an account with that email, you will receive a link to change the password.",
+  "Contraseña actualizada.": "Password updated.",
   "No se pudo abrir el almacenamiento local": "Local storage could not be opened",
   "Abre la aplicación desde un navegador compatible con IndexedDB.":
     "Open the app in a browser that supports IndexedDB."

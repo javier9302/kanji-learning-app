@@ -1,0 +1,13 @@
+# Cabeceras para Cloudflare Pages (Netlify usa este mismo archivo y formato)
+
+/*
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Referrer-Policy: strict-origin-when-cross-origin
+
+# El service worker y la configuración se comprueban siempre contra el servidor
+/sw.js
+  Cache-Control: no-cache
+
+/config.js
+  Cache-Control: no-cache

@@ -6,7 +6,6 @@ const DB_NAME = "kanji-learning-app";
 const DB_VERSION = 2;
 const DICT_VERSION = 2; // sube este número para forzar nuevas consultas
 const SCHEMA_VERSION = 2;
-const GIST_FILE = "kanji-learning-data.json";
 const LEVELS = ["N5", "N4", "N3", "N2", "N1"];
 const PAGE_SIZE = 150;
 
@@ -17,6 +16,7 @@ let session = null;
 let pendingImport = null;
 let listLimit = PAGE_SIZE;
 let editingItem = null;
+let emptyStudyHTML = ""; // mensaje inicial de la pantalla de estudio
 
 const $ = (id) => document.getElementById(id);
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -1782,24 +1782,49 @@ async function importData() {
 }
 
 /* =========================================
-   14. SINCRONIZACIÓN (gist privado de GitHub)
+   14. CUENTA Y SINCRONIZACIÓN (Supabase)
    -----------------------------------------
-   No hay servidor propio: los datos se guardan como un archivo JSON
-   en un gist privado del usuario. En cada sincronización se descarga
-   la copia remota, se combina con la local (mergeData) y, si la remota
-   quedó desactualizada, se vuelve a subir.
+   La app trabaja siempre con su copia local (IndexedDB), así funciona
+   sin conexión y sin cuenta. Con la sesión iniciada, cada sincronización:
+     1. descarga las filas cambiadas desde la última vez (updated_at del
+        servidor) y las combina: gana la modificada más recientemente;
+     2. sube los elementos locales que el servidor aún no tiene así.
+   `sync.pushed` recuerda la "huella" de lo que ya hay en el servidor
+   para saber qué falta por subir.
    ========================================= */
 
+const SYNC_PAGE = 1000;  // filas por descarga (máximo de Supabase por petición)
+const SYNC_BATCH = 500;  // filas por subida
+const SYNC_DEFAULT = { userId: "", cursor: "", daysCursor: "", lastSync: 0 };
+
+const accountsReady = typeof SUPABASE_CONFIG === "object" &&
+  /^https:\/\/.+/.test(SUPABASE_CONFIG.url) &&
+  !SUPABASE_CONFIG.url.includes("TU-PROYECTO") &&
+  !!SUPABASE_CONFIG.anonKey && !SUPABASE_CONFIG.anonKey.includes("TU-CLAVE");
+
+// Sin conexión en la primera visita la librería puede no haberse cargado
+const sb = accountsReady && window.supabase
+  ? window.supabase.createClient(SUPABASE_CONFIG.url, SUPABASE_CONFIG.anonKey)
+  : null;
+
 const sync = {
-  config: loadLocal("kanji-sync", { token: "", gistId: "", lastSync: 0 }),
+  config: loadLocal("kanji-sync", SYNC_DEFAULT),
+  pushed: loadLocal("kanji-pushed", { items: {}, days: {} }),
+  user: null,
   running: false,
   queued: false,
   timer: null
 };
 
+// Restos de la antigua sincronización con GitHub: el token ya no se usa
+if ("token" in sync.config) {
+  sync.config = { ...SYNC_DEFAULT, lastSync: sync.config.lastSync || 0 };
+  saveLocal("kanji-sync", sync.config);
+}
+
 function setSyncState(state, message = "") {
   const labels = {
-    off: t("Solo en este dispositivo"),
+    off: sb ? t("Iniciar sesión") : t("Solo en este dispositivo"),
     syncing: t("Sincronizando…"),
     ok: t("Sincronizado"),
     offline: t("Sin conexión"),
@@ -1807,111 +1832,258 @@ function setSyncState(state, message = "") {
   };
   $("syncBtn").dataset.state = state;
   $("syncLabel").textContent = labels[state];
-  $("syncBtn").title = message || labels[state];
+  $("syncBtn").title = message || (sync.user ? sync.user.email : labels[state]);
   $("syncMessage").textContent = message;
   $("syncMessage").classList.toggle("incorrect", state === "error");
   $("footerNote").textContent = state === "off"
     ? t("Datos guardados localmente en este navegador")
-    : t("Datos guardados en este navegador y en tu gist privado");
+    : t("Datos guardados en este navegador y en tu cuenta");
 }
 
-async function github(path, options = {}) {
-  const response = await fetch("https://api.github.com" + path, {
-    ...options,
-    cache: "no-store",
-    headers: {
-      Accept: "application/vnd.github+json",
-      Authorization: `Bearer ${sync.config.token}`,
-      ...(options.body ? { "Content-Type": "application/json" } : {})
-    }
-  });
-  if (!response.ok) {
-    const error = new Error(
-      response.status === 401 ? t("GitHub rechazó el token. Comprueba que sea válido.")
-      : response.status === 403 ? t("El token no tiene el permiso “gist” o se alcanzó el límite de GitHub.")
-      : t("GitHub respondió {status}.", { status: response.status }));
-    error.status = response.status;
-    throw error;
-  }
-  return response.json();
+/* ---------- Filas de Supabase <-> elementos de la app ---------- */
+
+const isoOrNull = (value) => {
+  const time = Date.parse(value || "");
+  return Number.isFinite(time) ? new Date(time).toISOString() : null;
+};
+const whole = (value) => Math.max(0, Math.round(Number(value) || 0));
+
+function itemToRow(item, userId) {
+  return {
+    user_id: userId,
+    id: item.id,
+    type: item.type,
+    value: item.value,
+    level: LEVELS.includes(item.level) ? item.level : null,
+    source: item.source || null,
+    studied: !!item.studied,
+    correct_count: whole(item.correctCount),
+    incorrect_count: whole(item.incorrectCount),
+    repetitions: whole(item.repetitions),
+    interval_days: whole(item.interval),
+    ease: Number(item.ease) || 2.5,
+    last_reviewed: isoOrNull(item.lastReviewed),
+    next_review: /^\d{4}-\d{2}-\d{2}$/.test(item.nextReview) ? item.nextReview : null,
+    status: ["new", "learning", "mature"].includes(item.status) ? item.status : "new",
+    dictionary: item.dictionary || null,
+    lookup_status: item.lookupStatus || null,
+    created_at: isoOrNull(item.createdAt) || new Date().toISOString(),
+    client_updated_at: Math.round(stamp(item)),
+    deleted_at: null
+  };
 }
 
-const gistBody = () => JSON.stringify({
-  description: "Kanji Learning App · datos sincronizados",
-  files: { [GIST_FILE]: { content: JSON.stringify(buildPayload()) } }
+/* Fila que avisa a los demás dispositivos de que el elemento se borró */
+function tombstoneRow(id, when, userId) {
+  const split = id.indexOf(":");
+  const blank = newItem(id.slice(0, split), id.slice(split + 1), null);
+  return {
+    ...itemToRow({ ...blank, updatedAt: when }, userId),
+    deleted_at: new Date(when).toISOString()
+  };
+}
+
+const rowToItem = (row) => ({
+  type: row.type,
+  value: row.value,
+  level: row.level,
+  source: row.source,
+  studied: row.studied,
+  correctCount: row.correct_count,
+  incorrectCount: row.incorrect_count,
+  repetitions: row.repetitions,
+  interval: row.interval_days,
+  ease: row.ease,
+  lastReviewed: row.last_reviewed,
+  nextReview: row.next_review,
+  status: row.status,
+  dictionary: row.dictionary,
+  lookupStatus: row.lookup_status,
+  createdAt: row.created_at,
+  updatedAt: Number(row.client_updated_at)
 });
 
-/* Busca el gist de la app en la cuenta (otro dispositivo pudo crearlo) o lo crea */
-async function findOrCreateGist() {
-  for (let page = 1; page <= 5; page++) {
-    const gists = await github(`/gists?per_page=100&page=${page}`);
-    const found = gists.find((g) => g.files && g.files[GIST_FILE]);
-    if (found) return found.id;
-    if (gists.length < 100) break;
+const itemPrint = (item) => `${stamp(item)}:${hasReadings(item) ? 1 : 0}`;
+const dayPrint = (day) => `${day.r || 0},${day.c || 0},${day.n || 0}`;
+
+/* Filas del usuario cambiadas desde `cursor`, de página en página */
+async function fetchChanged(table, key, userId, cursor) {
+  const rows = [];
+  for (let from = 0; ; from += SYNC_PAGE) {
+    let query = sb.from(table).select("*").eq("user_id", userId)
+      .order("updated_at").order(key).range(from, from + SYNC_PAGE - 1);
+    if (cursor) query = query.gt("updated_at", cursor);
+    const { data, error } = await query;
+    if (error) throw error;
+    rows.push(...data);
+    if (data.length < SYNC_PAGE) return rows;
   }
-  const body = JSON.parse(gistBody());
-  const created = await github("/gists", {
-    method: "POST",
-    body: JSON.stringify({ ...body, public: false })
-  });
-  return created.id;
+}
+
+/* Descarga los elementos cambiados y los combina con los locales.
+   Devuelve cuántos elementos nuevos llegaron. */
+async function pullItems(userId) {
+  const rows = await fetchChanged("items", "id", userId, sync.config.cursor);
+  if (!rows.length) return 0;
+
+  const local = new Map(items.map((i) => [i.id, i]));
+  const toSave = [], toDelete = [];
+  let added = 0, metaChanged = false;
+
+  for (const row of rows) {
+    if (!["kanji", "word"].includes(row.type) || typeof row.value !== "string") continue;
+    const mine = local.get(row.id);
+
+    if (row.deleted_at) {
+      const when = Date.parse(row.deleted_at);
+      sync.pushed.items[row.id] = `d${when}`;
+      if (mine && stamp(mine) > when) continue; // se volvió a agregar aquí: se subirá
+      if ((meta.deleted[row.id] || 0) < when) { meta.deleted[row.id] = when; metaChanged = true; }
+      if (mine) { toDelete.push(row.id); local.delete(row.id); }
+      continue;
+    }
+
+    const theirs = sanitizeRecord(rowToItem(row));
+    sync.pushed.items[theirs.id] = itemPrint(theirs);
+    if (!mine && (meta.deleted[theirs.id] || 0) >= stamp(theirs)) continue; // borrado aquí: se subirá
+
+    let record = null;
+    if (!mine || stamp(theirs) > stamp(mine)) {
+      // La lectura ya consultada no se pierde aunque gane la otra versión.
+      record = mine && !hasReadings(theirs) && hasReadings(mine)
+        ? { ...theirs, dictionary: mine.dictionary, lookupStatus: mine.lookupStatus }
+        : theirs;
+      if (!mine) added++;
+    } else if (stamp(theirs) === stamp(mine) && hasReadings(theirs) && !hasReadings(mine)) {
+      record = { ...mine, dictionary: theirs.dictionary, lookupStatus: theirs.lookupStatus };
+      delete record.lookupError;
+    }
+    if (record) { toSave.push(record); local.set(record.id, record); }
+  }
+
+  if (toSave.length || toDelete.length) {
+    await writeItems(toSave, toDelete);
+    adoptItems([...local.values()]);
+  }
+  if (metaChanged) await saveMeta();
+  if (toSave.length || toDelete.length) renderAll();
+
+  sync.config.cursor = rows[rows.length - 1].updated_at;
+  return added;
+}
+
+/* Historial diario: el máximo de cada contador, como al importar */
+async function pullDays(userId) {
+  const rows = await fetchChanged("days", "day", userId, sync.config.daysCursor);
+  if (!rows.length) return;
+
+  let changed = false;
+  for (const row of rows) {
+    const theirs = { r: row.reviews, c: row.correct, n: row.new_items };
+    sync.pushed.days[row.day] = dayPrint(theirs);
+    const mine = meta.days[row.day] || {};
+    const merged = {
+      r: Math.max(mine.r || 0, theirs.r || 0),
+      c: Math.max(mine.c || 0, theirs.c || 0),
+      n: Math.max(mine.n || 0, theirs.n || 0)
+    };
+    if (dayPrint(merged) !== dayPrint(mine)) { meta.days[row.day] = merged; changed = true; }
+  }
+  if (changed) {
+    await saveMeta();
+    renderAll();
+  }
+  sync.config.daysCursor = rows[rows.length - 1].updated_at;
+}
+
+async function pushRows(table, conflict, rows, marks, pushed) {
+  for (let i = 0; i < rows.length; i += SYNC_BATCH) {
+    const { error } = await sb.from(table)
+      .upsert(rows.slice(i, i + SYNC_BATCH), { onConflict: conflict });
+    if (error) throw error;
+    for (const [key, print] of marks.slice(i, i + SYNC_BATCH)) pushed[key] = print;
+  }
+}
+
+/* Sube lo que el servidor aún no tiene: elementos nuevos o cambiados y borrados */
+async function pushItems(userId) {
+  const rows = [], marks = [];
+  const present = new Set();
+
+  for (const item of items) {
+    present.add(item.id);
+    const print = itemPrint(item);
+    if (sync.pushed.items[item.id] === print) continue;
+    rows.push(itemToRow(item, userId));
+    marks.push([item.id, print]);
+  }
+  for (const [id, when] of Object.entries(meta.deleted)) {
+    const print = `d${when}`;
+    if (present.has(id) || sync.pushed.items[id] === print || !/^(kanji|word):./.test(id)) continue;
+    rows.push(tombstoneRow(id, Number(when), userId));
+    marks.push([id, print]);
+  }
+  await pushRows("items", "user_id,id", rows, marks, sync.pushed.items);
+}
+
+async function pushDays(userId) {
+  const rows = [], marks = [];
+  for (const [day, counts] of Object.entries(meta.days)) {
+    const print = dayPrint(counts);
+    if (sync.pushed.days[day] === print || !/^\d{4}-\d{2}-\d{2}$/.test(day)) continue;
+    rows.push({
+      user_id: userId, day,
+      reviews: whole(counts.r), correct: whole(counts.c), new_items: whole(counts.n)
+    });
+    marks.push([day, print]);
+  }
+  await pushRows("days", "user_id,day", rows, marks, sync.pushed.days);
+}
+
+const isNetworkError = (error) =>
+  !navigator.onLine || error instanceof TypeError || /fetch|network/i.test(error?.message || "");
+
+function syncErrorMessage(error) {
+  if (["PGRST205", "42P01"].includes(error.code)) {
+    return t("Faltan las tablas en Supabase: ejecuta supabase/schema.sql.");
+  }
+  return t("No se pudo sincronizar ({error}).", { error: error.message || error.code || "?" });
 }
 
 async function syncNow() {
   clearTimeout(sync.timer);
   sync.timer = null;
-  if (!sync.config.token) return;
+  if (!sb || !sync.user) return;
   if (sync.running) { sync.queued = true; return; }
   if (!navigator.onLine) return setSyncState("offline");
 
   sync.running = true;
   setSyncState("syncing");
+  const userId = sync.user.id;
 
   try {
-    if (!sync.config.gistId) {
-      sync.config.gistId = await findOrCreateGist();
-      saveLocal("kanji-sync", sync.config);
-    }
-
-    let gist;
-    try {
-      gist = await github(`/gists/${sync.config.gistId}`);
-    } catch (error) {
-      if (error.status === 404) { // el gist se borró: se creará otro en el siguiente intento
-        sync.config.gistId = "";
-        saveLocal("kanji-sync", sync.config);
-        throw new Error(t("No se encontró el gist. Vuelve a sincronizar para crearlo de nuevo."));
-      }
-      throw error;
-    }
-
-    const file = gist.files?.[GIST_FILE];
-    let remote = { items: [] };
-    if (file) {
-      // GitHub recorta el contenido de los archivos de más de 1 MB
-      const text = file.truncated ? await (await fetch(file.raw_url)).text() : file.content;
-      remote = parsePayload(text);
-    }
-
-    const result = await mergeData(remote);
-    if (result.remoteChanged || !file) {
-      await github(`/gists/${sync.config.gistId}`, { method: "PATCH", body: gistBody() });
+    const added = await pullItems(userId);
+    await pullDays(userId);
+    // Si mientras tanto se cerró la sesión, no se sube nada
+    if (sync.user?.id === userId) {
+      await pushItems(userId);
+      await pushDays(userId);
     }
 
     sync.config.lastSync = Date.now();
-    saveLocal("kanji-sync", sync.config);
     setSyncState("ok", t("Última sincronización: {time}.", {
       time: new Date().toLocaleTimeString(lang, { hour: "2-digit", minute: "2-digit" }) }));
-    if (result.added) runLookups();
+    if (added) runLookups();
   } catch (error) {
     console.error("Error de sincronización:", error);
-    if (navigator.onLine && !(error instanceof TypeError)) {
-      setSyncState("error", error.message);
-    } else {
-      setSyncState("offline");
-    }
+    if (isNetworkError(error)) setSyncState("offline");
+    else setSyncState("error", syncErrorMessage(error));
   } finally {
+    // Lo ya subido o descargado se recuerda aunque el resto fallara
+    saveLocal("kanji-sync", sync.config);
+    saveLocal("kanji-pushed", sync.pushed);
     sync.running = false;
+    if (!sync.user) setSyncState("off");
     renderDataView();
     if (sync.queued) {
       sync.queued = false;
@@ -1922,50 +2094,222 @@ async function syncNow() {
 
 /* Agrupa los cambios seguidos en una sola subida */
 function scheduleSync(delay = 4000) {
-  if (!sync.config.token) return;
+  if (!sync.user) return;
   clearTimeout(sync.timer);
   sync.timer = setTimeout(syncNow, delay);
 }
 
-async function connectSync() {
-  const token = $("syncToken").value.trim();
-  if (!token) {
-    $("syncMessage").textContent = t("Pega primero el token.");
-    return;
-  }
-  sync.config = { token, gistId: "", lastSync: 0 };
-  saveLocal("kanji-sync", sync.config);
-  $("syncToken").value = "";
-  await syncNow();
+/* ---------- Sesión ---------- */
 
-  // Token rechazado: no se conserva
-  if ($("syncBtn").dataset.state === "error" && !sync.config.gistId) {
-    const message = $("syncMessage").textContent;
-    sync.config = { token: "", gistId: "", lastSync: 0 };
-    saveLocal("kanji-sync", sync.config);
-    setSyncState("off", message);
-    $("syncMessage").classList.add("incorrect");
-    renderDataView();
-  }
+function resetSyncMemory(userId) {
+  sync.config = { ...SYNC_DEFAULT, userId };
+  sync.pushed = { items: {}, days: {} };
+  saveLocal("kanji-sync", sync.config);
+  saveLocal("kanji-pushed", sync.pushed);
 }
 
-function disconnectSync() {
-  if (!confirm(t("¿Dejar de sincronizar en este dispositivo? Los datos locales y el gist se conservan."))) return;
+/* Vacía la copia local (los datos de otra cuenta no se mezclan con esta) */
+async function clearLocalData() {
+  session = null;
+  draw = null;
+  document.body.classList.remove("studying");
+  await writeItems([], items.map((i) => i.id));
+  items = [];
+  meta.days = {};
+  meta.deleted = {};
+  await saveMeta();
+  $("studyArea").innerHTML = emptyStudyHTML;
+  renderAll();
+}
+
+/* Se llama al iniciar sesión (o al abrir la app con la sesión guardada) */
+async function adoptUser(user) {
+  const owner = sync.config.userId;
+
+  if (owner && owner !== user.id) {
+    const hasData = items.length || Object.keys(meta.days).length;
+    if (hasData && !confirm(t("Este dispositivo tiene datos de otra cuenta. Para continuar se quitarán de este dispositivo (lo que no se hubiera sincronizado se perderá). ¿Continuar?"))) {
+      sync.user = null;
+      await sb.auth.signOut({ scope: "local" });
+      return;
+    }
+    if (hasData) await clearLocalData();
+  }
+  // Sin dueño anterior: el progreso local (modo invitado) se sube a la cuenta
+  if (owner !== user.id) resetSyncMemory(user.id);
+
+  if (["login", "signup"].includes(authMode)) $("authDialog").close();
+  setSyncState("ok");
+  renderDataView();
+  await syncNow();
+}
+
+function onAuthChange(event, authSession) {
+  const user = authSession?.user || null;
+  const same = (user?.id || "") === (sync.user?.id || "");
+  sync.user = user;
+
+  if (event === "PASSWORD_RECOVERY") openAuth("newpass");
+  if (same) return; // solo se renovó la sesión
+  if (user) return adoptUser(user);
+
   clearTimeout(sync.timer);
-  sync.config = { token: "", gistId: "", lastSync: 0 };
-  saveLocal("kanji-sync", sync.config);
   setSyncState("off");
   renderDataView();
 }
 
-function renderDataView() {
-  const connected = !!sync.config.token;
-  $("syncSetup").classList.toggle("hidden", connected);
-  $("syncActive").classList.toggle("hidden", !connected);
-  $("syncGistLink").classList.toggle("hidden", !sync.config.gistId);
-  if (sync.config.gistId) {
-    $("syncGistLink").href = `https://gist.github.com/${sync.config.gistId}`;
+async function signOut() {
+  await syncNow(); // sube lo pendiente antes de salir
+  const pending = $("syncBtn").dataset.state !== "ok";
+  if (pending && !confirm(t("No se pudieron sincronizar los últimos cambios. Se quedan en este dispositivo y se subirán cuando vuelvas a iniciar sesión. ¿Cerrar sesión?"))) return;
+  const { error } = await sb.auth.signOut({ scope: "local" });
+  if (error) console.error("Error al cerrar sesión:", error);
+}
+
+/* ---------- Diálogo de cuenta ---------- */
+
+let authMode = "";
+
+const authModes = () => ({
+  login: { title: t("Iniciar sesión"), submit: t("Entrar"), email: true, password: true,
+    sub: t("Tu progreso se guarda en tu cuenta y se mantiene al día en todos tus dispositivos.") },
+  signup: { title: t("Crear cuenta"), submit: t("Crear cuenta"), email: true, password: true,
+    sub: t("El progreso que ya tienes en este dispositivo se guardará en tu cuenta.") },
+  reset: { title: t("Recuperar contraseña"), submit: t("Enviar enlace"), email: true,
+    sub: t("Te enviaremos un enlace para elegir una contraseña nueva.") },
+  newpass: { title: t("Nueva contraseña"), submit: t("Guardar contraseña"), password: true,
+    sub: t("Escribe la contraseña nueva para tu cuenta.") }
+});
+
+function authSay(text, cls = "") {
+  $("authMessage").textContent = text;
+  $("authMessage").className = `message ${cls}`;
+}
+
+function openAuth(mode = "login") {
+  const view = authModes()[mode];
+  authMode = mode;
+  $("authTitle").textContent = view.title;
+  $("authSub").textContent = view.sub;
+  $("authSubmitBtn").textContent = view.submit;
+  $("authSubmitBtn").disabled = false;
+
+  $("authEmailField").classList.toggle("hidden", !view.email);
+  $("authEmail").disabled = !view.email;
+  $("authPasswordField").classList.toggle("hidden", !view.password);
+  $("authPassword").disabled = !view.password;
+  $("authPassword").value = "";
+  $("authPassword").autocomplete = mode === "login" ? "current-password" : "new-password";
+  $("authPasswordLabel").textContent =
+    mode === "login" ? t("Contraseña") : t("Contraseña (mínimo 8 caracteres)");
+
+  $("authGoogleBtn").classList.toggle("hidden",
+    !SUPABASE_CONFIG.google || !["login", "signup"].includes(mode));
+  $("authToSignup").classList.toggle("hidden", mode !== "login");
+  $("authToLogin").classList.toggle("hidden", !["signup", "reset"].includes(mode));
+  $("authToReset").classList.toggle("hidden", mode !== "login");
+
+  authSay("");
+  if (!$("authDialog").open) $("authDialog").showModal();
+  (view.email ? $("authEmail") : $("authPassword")).focus();
+}
+
+/* Mensajes claros para los errores de Supabase Auth */
+function authErrorMessage(error) {
+  const code = error.code || "";
+  const text = error.message || "";
+  if (error.name === "AuthRetryableFetchError" || /fetch|network/i.test(text)) {
+    return t("No hay conexión. Inténtalo de nuevo cuando tengas internet.");
   }
+  if (code === "invalid_credentials" || /invalid login/i.test(text)) {
+    return t("Correo o contraseña incorrectos.");
+  }
+  if (code === "email_not_confirmed") {
+    return t("Confirma tu correo con el enlace que te enviamos antes de entrar.");
+  }
+  if (["user_already_exists", "email_exists"].includes(code)) {
+    return t("Ya existe una cuenta con ese correo. Inicia sesión o recupera la contraseña.");
+  }
+  if (code === "weak_password") {
+    return t("La contraseña es demasiado débil. Usa al menos 8 caracteres.");
+  }
+  if (code === "same_password") {
+    return t("La contraseña nueva debe ser distinta de la anterior.");
+  }
+  if (["email_address_invalid", "validation_failed"].includes(code)) {
+    return t("Revisa el correo: no parece válido.");
+  }
+  if (error.status === 429 || /rate_limit/.test(code)) {
+    return t("Demasiados intentos. Espera unos minutos y vuelve a probar.");
+  }
+  if (code === "signup_disabled") {
+    return t("El registro de cuentas nuevas está desactivado.");
+  }
+  return t("No se pudo completar la operación ({error}).", { error: text || code || "?" });
+}
+
+async function submitAuth(event) {
+  event.preventDefault();
+  const mode = authMode;
+  const email = $("authEmail").value.trim();
+  const password = $("authPassword").value;
+  // Los enlaces de los correos vuelven a esta misma página
+  const redirectTo = location.origin + location.pathname;
+
+  $("authSubmitBtn").disabled = true;
+  authSay(t("Un momento…"));
+
+  try {
+    if (mode === "login") {
+      const { error } = await sb.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+    } else if (mode === "signup") {
+      const { data, error } = await sb.auth.signUp({
+        email, password, options: { emailRedirectTo: redirectTo }
+      });
+      if (error) throw error;
+      // Con un correo ya registrado Supabase responde sin error y sin identidades
+      if (data.user && data.user.identities?.length === 0) throw { code: "user_already_exists" };
+      if (!data.session) {
+        authSay(t("Te enviamos un correo. Abre el enlace para confirmar la cuenta y luego inicia sesión."), "correct");
+        return;
+      }
+    } else if (mode === "reset") {
+      const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo });
+      if (error) throw error;
+      authSay(t("Si hay una cuenta con ese correo, recibirás un enlace para cambiar la contraseña."), "correct");
+      return;
+    } else {
+      const { error } = await sb.auth.updateUser({ password });
+      if (error) throw error;
+      $("authDialog").close();
+      $("syncMessage").textContent = t("Contraseña actualizada.");
+    }
+  } catch (error) {
+    authSay(authErrorMessage(error), "incorrect");
+  } finally {
+    $("authSubmitBtn").disabled = false;
+  }
+}
+
+async function signInWithGoogle() {
+  const { error } = await sb.auth.signInWithOAuth({
+    provider: "google",
+    options: { redirectTo: location.origin + location.pathname }
+  });
+  if (error) authSay(authErrorMessage(error), "incorrect");
+}
+
+function renderDataView() {
+  const signedIn = !!sync.user;
+  $("accountDisabled").classList.toggle("hidden", !!sb);
+  $("accountGuest").classList.toggle("hidden", !sb || signedIn);
+  $("accountActive").classList.toggle("hidden", !signedIn);
+  $("accountEmail").textContent = signedIn
+    ? t("Sesión iniciada como {email}", { email: sync.user.email }) : "";
+  $("accountDisabled").textContent = accountsReady
+    ? t("No se pudo cargar el servicio de cuentas. Comprueba la conexión y vuelve a abrir la app.")
+    : t("Las cuentas no están configuradas en esta instalación (falta rellenar config.js).");
   $("syncNowBtn").disabled = sync.running;
 
   const missing = items.filter((i) => !hasReadings(i)).length;
@@ -1977,19 +2321,31 @@ function renderDataView() {
 }
 
 function bindSync() {
-  $("syncConnectBtn").addEventListener("click", connectSync);
   $("syncNowBtn").addEventListener("click", syncNow);
-  $("syncDisconnectBtn").addEventListener("click", disconnectSync);
   $("syncBtn").addEventListener("click", () =>
-    sync.config.token ? syncNow() : switchView("data"));
+    sync.user ? syncNow() : sb ? openAuth("login") : switchView("data"));
+  if (!sb) return;
+
+  $("accountOpenBtn").addEventListener("click", () => openAuth("login"));
+  $("signOutBtn").addEventListener("click", signOut);
+  $("authForm").addEventListener("submit", submitAuth);
+  $("authCancelBtn").addEventListener("click", () => $("authDialog").close());
+  $("authGoogleBtn").addEventListener("click", signInWithGoogle);
+  $("authToSignup").addEventListener("click", () => openAuth("signup"));
+  $("authToLogin").addEventListener("click", () => openAuth("login"));
+  $("authToReset").addEventListener("click", () => openAuth("reset"));
+
+  // Supabase no permite llamar a su API dentro de este aviso: se aplaza
+  sb.auth.onAuthStateChange((event, authSession) =>
+    setTimeout(() => onAuthChange(event, authSession), 0));
 
   window.addEventListener("online", syncNow);
-  window.addEventListener("offline", () => sync.config.token && setSyncState("offline"));
+  window.addEventListener("offline", () => sync.user && setSyncState("offline"));
 
   // Al volver a la app se recogen los cambios hechos en otros dispositivos;
   // al salir se suben los que estuvieran pendientes.
   document.addEventListener("visibilitychange", () => {
-    if (!sync.config.token) return;
+    if (!sync.user) return;
     if (document.visibilityState === "hidden") {
       if (sync.timer) syncNow();
     } else if (Date.now() - sync.config.lastSync > 60000) {
@@ -2076,6 +2432,7 @@ async function init() {
     return;
   }
 
+  emptyStudyHTML = $("studyArea").innerHTML;
   bindNavigation();
   bindList();
   bindEditor();
@@ -2083,14 +2440,13 @@ async function init() {
   bindSettings();
   bindSync();
 
-  setSyncState(sync.config.token ? "ok" : "off");
+  setSyncState("off");
   renderAll();
 
   if ("serviceWorker" in navigator && location.protocol === "https:") {
     navigator.serviceWorker.register("sw.js").catch(() => {});
   }
 
-  await syncNow();
   runLookups(true);
 }
 
