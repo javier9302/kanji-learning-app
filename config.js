@@ -3,7 +3,7 @@
    Conexión con Supabase (cuentas y sincronización).
    Los dos valores están en el panel de Supabase:
    Project Settings -> API  (o el botón "Connect" del proyecto).
-   - url:     "Project URL"
+   - url:     "Project URL", solo hasta ".supabase.co" (sin /rest/v1/)
    - anonKey: clave pública "anon" / "publishable". Puede ir en el
               navegador: los datos los protege Row Level Security.
    NUNCA pongas aquí la clave "service_role" ni una "secret key".
@@ -11,7 +11,7 @@
    ========================================= */
 
 const SUPABASE_CONFIG = {
-  url: "https://rilizudwepfmxbwrorxl.supabase.co/rest/v1/",
+  url: "https://rilizudwepfmxbwrorxl.supabase.co",
   anonKey: "sb_publishable_4KPUHe5su_qvJphUvYnhhA_lSY0Rseh",
   // Pon true cuando hayas activado el proveedor Google en Supabase (ver SETUP.md)
   google: true

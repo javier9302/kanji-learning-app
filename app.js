@@ -1804,7 +1804,8 @@ const accountsReady = typeof SUPABASE_CONFIG === "object" &&
 
 // Sin conexión en la primera visita la librería puede no haberse cargado
 const sb = accountsReady && window.supabase
-  ? window.supabase.createClient(SUPABASE_CONFIG.url, SUPABASE_CONFIG.anonKey)
+  // Solo el origen: si se pegó la URL de la API (…/rest/v1/) se ignora la ruta
+  ? window.supabase.createClient(new URL(SUPABASE_CONFIG.url).origin, SUPABASE_CONFIG.anonKey)
   : null;
 
 const sync = {
