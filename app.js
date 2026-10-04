@@ -2423,6 +2423,17 @@ async function init() {
     // Diccionarios que venían en un JSON importado con el formato antiguo
     const migrated = items.filter(normalizeDictionary);
     if (migrated.length) await saveItems(migrated);
+
+    // Las listas base de palabras ya no traen kanjis sueltos (van solo como kanji):
+    // se quitan los que se agregaron con versiones anteriores
+    const single = new Set(items.filter((i) => i.type === "word" && i.source === "base-list" &&
+      [...i.value].length === 1 && isKanji(i.value)).map((i) => i.id));
+    if (single.size) {
+      for (const id of single) meta.deleted[id] = Date.now(); // el borrado también se sincroniza
+      items = items.filter((i) => !single.has(i.id));
+      await writeItems([], [...single]);
+      await saveMeta();
+    }
   } catch (error) {
     console.error("Error al iniciar la aplicación:", error);
     $("studyArea").innerHTML = `
