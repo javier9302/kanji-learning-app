@@ -1966,3 +1966,34 @@ div.hard-item {
 .admin-body .helper {
   margin-bottom: 10px;
 }
+
+/* Perfil */
+
+.profile-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 6px 0 16px;
+}
+
+.profile-avatar {
+  flex: none;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--primary);
+  color: #fff;
+  font: 600 22px 'DM Sans', sans-serif;
+}
+
+.profile-email {
+  font-weight: 600;
+  font-size: 15px;
+  word-break: break-all;
+}
+
+.profile-stats {
+  margin-bottom: 16px;
+}

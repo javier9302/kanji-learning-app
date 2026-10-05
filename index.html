@@ -498,14 +498,14 @@
       </div>
 
       <div class="panel">
-        <h3>Cuenta y sincronización</h3>
-        <p class="helper">
-          Con una cuenta, tus listas y tu progreso se guardan en la nube y se
-          mantienen al día en todos tus dispositivos. Sin cuenta, todo se
-          queda solo en este navegador.
-        </p>
+        <h3>Mi perfil</h3>
 
         <div id="accountGuest" class="hidden">
+          <p class="helper">
+            Con una cuenta, tus listas y tu progreso se guardan en la nube y se
+            mantienen al día en todos tus dispositivos. Sin cuenta, todo se
+            queda solo en este navegador.
+          </p>
           <div class="inline-form">
             <button id="accountOpenBtn" class="button button-primary" type="button">
               Iniciar sesión o crear cuenta
@@ -514,12 +514,44 @@
         </div>
 
         <div id="accountActive" class="hidden">
-          <p id="accountEmail" class="helper"></p>
+          <div class="profile-head">
+            <span id="profileAvatar" class="profile-avatar" aria-hidden="true"></span>
+            <div>
+              <div id="profileEmail" class="profile-email"></div>
+              <p id="profileSince" class="helper"></p>
+            </div>
+          </div>
+
+          <div class="stats-grid profile-stats">
+            <article class="stat-card">
+              <span>Nivel de lectura</span>
+              <strong id="profileLevel">—</strong>
+            </article>
+            <article class="stat-card">
+              <span>Palabras dominadas</span>
+              <strong id="profileMastered">0</strong>
+            </article>
+            <article class="stat-card">
+              <span>Textos leídos</span>
+              <strong id="profileTexts">0</strong>
+            </article>
+            <article class="stat-card">
+              <span>Kanjis aprendidos</span>
+              <strong id="profileKanji">0</strong>
+            </article>
+          </div>
+
           <div class="inline-form">
             <button id="syncNowBtn" class="button button-primary" type="button">
               Sincronizar ahora
             </button>
-            <button id="signOutBtn" class="button button-quiet" type="button">
+            <button id="changePasswordBtn" class="button button-outline" type="button">
+              Cambiar contraseña
+            </button>
+            <a id="adminLink" class="button button-outline hidden" href="admin.html">
+              Panel de administración
+            </a>
+            <button id="signOutBtn" class="button button-wrong" type="button">
               Cerrar sesión
             </button>
           </div>

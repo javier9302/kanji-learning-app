@@ -2127,6 +2127,7 @@ async function adoptUser(user) {
   if (["login", "signup"].includes(authMode)) $("authDialog").close();
   setSyncState("ok");
   renderDataView();
+  checkAdmin();
   await syncNow();
 }
 
@@ -2140,16 +2141,26 @@ function onAuthChange(event, authSession) {
   if (user) return adoptUser(user);
 
   clearTimeout(sync.timer);
+  sync.isAdmin = false;
   setSyncState("off");
   renderDataView();
 }
 
+/* Cerrar sesión nunca se bloquea: se intenta subir lo pendiente unos segundos
+   y, si no se puede, se queda en el dispositivo para la próxima vez. */
 async function signOut() {
-  await syncNow(); // sube lo pendiente antes de salir
-  const pending = $("syncBtn").dataset.state !== "ok";
-  if (pending && !confirm(t("No se pudieron sincronizar los últimos cambios. Se quedan en este dispositivo y se subirán cuando vuelvas a iniciar sesión. ¿Cerrar sesión?"))) return;
+  $("signOutBtn").disabled = true;
+  await Promise.race([syncNow(), sleep(4000)]);
   const { error } = await sb.auth.signOut({ scope: "local" });
   if (error) console.error("Error al cerrar sesión:", error);
+  $("signOutBtn").disabled = false;
+}
+
+/* El permiso lo decide la base de datos; aquí solo se muestra el enlace al panel */
+async function checkAdmin() {
+  const { data, error } = await sb.rpc("is_admin");
+  sync.isAdmin = !error && data === true;
+  renderDataView();
 }
 
 /* ---------- Diálogo de cuenta ---------- */
@@ -2291,8 +2302,18 @@ function renderDataView() {
   $("accountDisabled").classList.toggle("hidden", !!sb);
   $("accountGuest").classList.toggle("hidden", !sb || signedIn);
   $("accountActive").classList.toggle("hidden", !signedIn);
-  $("accountEmail").textContent = signedIn
-    ? t("Sesión iniciada como {email}", { email: sync.user.email }) : "";
+  if (signedIn) {
+    const { email, created_at: since } = sync.user;
+    $("profileAvatar").textContent = (email || "?")[0].toUpperCase();
+    $("profileEmail").textContent = email;
+    $("profileSince").textContent = since ? t("Estudiante desde {date}", {
+      date: new Date(since).toLocaleDateString(lang, { month: "long", year: "numeric" }) }) : "";
+    $("profileLevel").textContent = meta.reading.level || "—";
+    $("profileMastered").textContent = [...userWords.values()].filter((w) => w.status === "mastered").length;
+    $("profileTexts").textContent = texts.filter((x) => x.readAt).length;
+    $("profileKanji").textContent = items.filter(isLearned).length;
+  }
+  $("adminLink").classList.toggle("hidden", !signedIn || !sync.isAdmin);
   $("accountDisabled").textContent = accountsReady
     ? t("No se pudo cargar el servicio de cuentas. Comprueba la conexión y vuelve a abrir la app.")
     : t("Las cuentas no están configuradas en esta instalación (falta rellenar config.js).");
@@ -2309,11 +2330,12 @@ function renderDataView() {
 function bindSync() {
   $("syncNowBtn").addEventListener("click", syncNow);
   $("syncBtn").addEventListener("click", () =>
-    sync.user ? syncNow() : sb ? openAuth("login") : switchView("data"));
+    !sync.user && sb ? openAuth("login") : switchView("data"));
   if (!sb) return;
 
   $("accountOpenBtn").addEventListener("click", () => openAuth("login"));
   $("signOutBtn").addEventListener("click", signOut);
+  $("changePasswordBtn").addEventListener("click", () => openAuth("newpass"));
   $("authForm").addEventListener("submit", submitAuth);
   $("authCancelBtn").addEventListener("click", () => $("authDialog").close());
   $("authGoogleBtn").addEventListener("click", signInWithGoogle);

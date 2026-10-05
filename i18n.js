@@ -428,12 +428,16 @@ const EN = {
   "{n} sin lectura. Puedes reintentar la consulta o escribirla a mano desde “Mis listas”.":
     "{n} without a reading. You can retry the lookup or type it by hand from “My lists”.",
   "Todos los elementos tienen lectura.": "All items have a reading.",
-  "Cuenta y sincronización": "Account and sync",
   "Con una cuenta, tus listas y tu progreso se guardan en la nube y se mantienen al día en todos tus dispositivos. Sin cuenta, todo se queda solo en este navegador.":
     "With an account, your lists and progress are stored in the cloud and kept up to date on all your devices. Without one, everything stays in this browser only.",
   "Iniciar sesión o crear cuenta": "Sign in or create an account",
+  "Mi perfil": "My profile",
+  "Estudiante desde {date}": "Student since {date}",
+  "Palabras dominadas": "Words mastered",
+  "Kanjis aprendidos": "Kanji learned",
+  "Cambiar contraseña": "Change password",
+  "Panel de administración": "Admin panel",
   "Cerrar sesión": "Sign out",
-  "Sesión iniciada como {email}": "Signed in as {email}",
   "Las cuentas no están configuradas en esta instalación (falta rellenar config.js).":
     "Accounts are not configured in this installation (config.js has not been filled in).",
   "No se pudo cargar el servicio de cuentas. Comprueba la conexión y vuelve a abrir la app.":
@@ -444,8 +448,6 @@ const EN = {
   "No se pudo sincronizar ({error}).": "Could not sync ({error}).",
   "Este dispositivo tiene datos de otra cuenta. Para continuar se quitarán de este dispositivo (lo que no se hubiera sincronizado se perderá). ¿Continuar?":
     "This device holds data from another account. To continue it will be removed from this device (anything not yet synced will be lost). Continue?",
-  "No se pudieron sincronizar los últimos cambios. Se quedan en este dispositivo y se subirán cuando vuelvas a iniciar sesión. ¿Cerrar sesión?":
-    "The latest changes could not be synced. They stay on this device and will be uploaded when you sign in again. Sign out?",
 
   /* ---------- app.js: diálogo de cuenta ---------- */
   "Iniciar sesión": "Sign in",
