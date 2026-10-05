@@ -79,13 +79,27 @@ async function clearReadingData() {
 }
 
 /* =========================================
-   2. VALIDADOR DEL JSON DE UN TEXTO
+   2. COMPROBAR Y PREPARAR UN TEXTO
    -----------------------------------------
-   validateText(texto pegado) -> { errors: [mensajes], text: JSON normalizado }
+   validateText(texto pegado) -> { errors, text, flagged }
+
+   Un texto solo se RECHAZA si está roto de estructura: no es JSON o los
+   tokens no reconstruyen la oración. Todo lo demás se arregla o se completa
+   y el texto se muestra igualmente.
+
+   Cada palabra se resuelve en este orden:
+     a. en el banco, también con otra escritura (有る/ある, 御飯/ご飯);
+     b. por partes si lleva un sufijo (一つずつ = 一つ + ずつ);
+     c. en el diccionario general (JMdict), si está disponible;
+     d. con la entrada que mandó la IA en "dictionary".
+   Lo resuelto por c o d se devuelve en `flagged` para que un administrador lo
+   revise (tabla words_to_review). Una palabra que casi siempre va en kana y
+   llega con kanji se pasa a kana (有りました -> ありました) y también se anota.
    ========================================= */
 
 const isText = (value) => typeof value === "string" && value.trim() !== "";
 const isList = (value) => Array.isArray(value) && value.length > 0;
+const PUNCTUATION = /^[\s\p{P}\p{S}]+$/u;
 
 function normalizePos(pos) {
   const key = String(pos ?? "").trim().toLowerCase().replace(/[\s-]+/g, "_");
@@ -99,129 +113,257 @@ function extractJSON(raw) {
   return start >= 0 && end > start ? raw.slice(start, end + 1) : raw;
 }
 
-function validateText(raw) {
+/* Lo único que hace ilegible un texto. La función generate-text de Supabase
+   lleva esta misma comprobación (checkStructure). */
+function structureErrors(data) {
   const errors = [];
   const fail = (text, params) => errors.push(t(text, params));
+  if (!data || typeof data !== "object" || !isList(data.sentences)) {
+    fail("“sentences” debe ser una lista con al menos una oración.");
+    return errors;
+  }
+  data.sentences.forEach((sentence, index) => {
+    const n = index + 1;
+    if (!sentence || typeof sentence !== "object") return fail("Oración {n}: debe ser un objeto.", { n });
+    if (!isText(sentence.jp)) return fail("Oración {n}: falta “{field}”.", { n, field: "jp" });
+    if (!isList(sentence.tokens)) return fail("Oración {n}: “tokens” debe ser una lista no vacía.", { n });
+    const bad = sentence.tokens.findIndex((token) => !token || !isText(token.surface));
+    if (bad >= 0) {
+      return fail("Oración {n}, token {i} ({surface}): falta “{field}”.", { n, i: bad + 1, surface: "?", field: "surface" });
+    }
+    const joined = sentence.tokens.map((token) => token.surface).join("");
+    if (joined !== sentence.jp) {
+      let at = 0;
+      while (at < joined.length && joined[at] === sentence.jp[at]) at++;
+      fail("Oración {n}: los tokens no reproducen “jp”. Coinciden hasta “{same}”; después “jp” sigue con “{jp}” y los tokens con “{tokens}”.", {
+        n,
+        same: sentence.jp.slice(Math.max(0, at - 8), at),
+        jp: sentence.jp.slice(at, at + 8) || "∅",
+        tokens: joined.slice(at, at + 8) || "∅"
+      });
+    }
+  });
+  return errors;
+}
 
+/* ---------- Resolver una palabra ---------- */
+
+/* Sufijos que forman compuestos: [escritura, lectura] */
+const WORD_SUFFIXES = [
+  ["ずつ", "ずつ"], ["たち", "たち"], ["達", "たち"], ["さん", "さん"], ["ちゃん", "ちゃん"], ["くん", "くん"],
+  ["さま", "さま"], ["様", "さま"], ["など", "など"], ["ごろ", "ごろ"], ["頃", "ごろ"], ["だけ", "だけ"],
+  ["ばかり", "ばかり"], ["くらい", "くらい"], ["ぐらい", "ぐらい"], ["中", "ちゅう"], ["的", "てき"],
+  ["目", "め"], ["屋", "や"], ["者", "しゃ"], ["用", "よう"], ["性", "せい"], ["化", "か"]
+];
+
+/* Palabras del banco por su lectura, para encontrar ある -> 有る */
+const bankByReading = (() => {
+  let size = -1, index;
+  return () => {
+    if (size !== BANK.words.size) {
+      index = new Map();
+      for (const word of BANK.words.values()) {
+        const key = normalizeReading(word.r);
+        if (!index.has(key)) index.set(key, word);
+      }
+      size = BANK.words.size;
+    }
+    return index;
+  };
+})();
+
+/* a. En el banco: tal cual, con el prefijo de cortesía escrito de otra forma
+   (御飯 / ご飯 / お茶) o, si llega en kana, por su lectura */
+function bankLookup(lemma, reading) {
+  const pick = (writing) => {
+    const senses = BANK.byWriting.get(writing);
+    if (!senses) return null;
+    return reading && BANK.words.get(BANK.id(writing, reading)) || senses[0];
+  };
+  let word = pick(lemma);
+  if (!word && lemma.startsWith("御")) word = pick("ご" + lemma.slice(1)) || pick("お" + lemma.slice(1));
+  if (!word && /^[ごお]/.test(lemma) && lemma.length > 1) word = pick("御" + lemma.slice(1));
+  if (!word && isKana(lemma)) word = bankByReading().get(normalizeReading(lemma)) || null;
+  return word;
+}
+
+const bankEntry = (word, pos) => ({ reading: word.r, meanings: word.en, meanings_es: word.es, pos: pos || "" });
+
+/* Devuelve { entry, source, word } con source: bank | parts | approved | jmdict | ai | none */
+function resolveWord(lemma, given, extra) {
+  const reading = isText(given?.reading) ? normalizeText(given.reading) : "";
+  const word = bankLookup(lemma, reading);
+  if (word) return { entry: bankEntry(word, given?.pos), source: "bank", word };
+
+  // b. Compuesto con sufijo: el significado sale de la primera parte
+  for (const [suffix, suffixReading] of WORD_SUFFIXES) {
+    if (!lemma.endsWith(suffix) || lemma.length <= suffix.length) continue;
+    const stem = bankLookup(lemma.slice(0, -suffix.length), "");
+    if (!stem) continue;
+    return {
+      source: "parts", word: null,
+      entry: {
+        reading: reading || stem.r + suffixReading,
+        meanings: isList(given?.meanings) ? given.meanings : stem.en,
+        meanings_es: isList(given?.meanings_es) ? given.meanings_es : stem.es,
+        pos: given?.pos || ""
+      }
+    };
+  }
+
+  // c. Diccionario general
+  const found = extra.get(lemma);
+  if (found) {
+    return {
+      entry: { reading: found.reading, meanings: found.meanings || [], meanings_es: found.meanings_es || [], pos: given?.pos || "" },
+      // Una palabra ya aprobada es de fiar: no vuelve a la lista de revisión
+      source: found.source === "approved" ? "approved" : "jmdict", word: null, uk: found.uk
+    };
+  }
+
+  // d. Lo que explicó la IA
+  if (given && typeof given === "object") {
+    return {
+      source: "ai", word: null,
+      entry: {
+        reading,
+        meanings: isList(given.meanings) ? given.meanings.filter(isText) : [],
+        meanings_es: isList(given.meanings_es) ? given.meanings_es.filter(isText) : [],
+        pos: isText(given.pos) ? given.pos.trim() : ""
+      }
+    };
+  }
+  return { entry: { reading: "", meanings: [], meanings_es: [], pos: "" }, source: "none", word: null };
+}
+
+/* c. Consulta en el diccionario general las palabras que no están en el banco.
+   Devuelve Map(lemma -> { reading, meanings, meanings_es, uk }). */
+async function lookupDictionary(lemmas) {
+  const found = new Map();
+  if (!lemmas.length || !sb || !sync.user) return found; // sin sesión se usa lo que explique la IA
+  try {
+    for (let i = 0; i < lemmas.length; i += 100) {
+      const { data, error } = await sb.from("dictionary")
+        .select("lemma, reading, meanings, meanings_es, uk, source").in("lemma", lemmas.slice(i, i + 100));
+      if (error) throw error;
+      for (const row of data) {
+        // Lo aprobado por un administrador manda sobre la entrada de JMdict
+        if (!found.has(row.lemma) || row.source === "approved") found.set(row.lemma, row);
+      }
+    }
+  } catch (error) {
+    console.error("No se pudo consultar el diccionario:", error); // la lectura sigue con lo que haya
+  }
+  return found;
+}
+
+async function validateText(raw) {
   let data;
   try {
     data = JSON.parse(extractJSON(String(raw)));
   } catch (error) {
-    return { errors: [t("No es un JSON válido: {error}", { error: error.message })], text: null };
+    return { errors: [t("No es un JSON válido: {error}", { error: error.message })], text: null, flagged: [] };
   }
-  if (!data || typeof data !== "object" || Array.isArray(data)) {
-    return { errors: [t("El JSON debe ser un objeto con “title”, “level” y “sentences”.")], text: null };
+  const errors = structureErrors(data);
+  if (errors.length) return { errors: [...new Set(errors)], text: null, flagged: [] };
+
+  // Lo que explicó la IA, de cualquier oración del texto
+  const given = new Map();
+  for (const sentence of data.sentences) {
+    if (!sentence.dictionary || typeof sentence.dictionary !== "object") continue;
+    for (const [lemma, entry] of Object.entries(sentence.dictionary)) if (!given.has(lemma)) given.set(lemma, entry);
   }
 
-  for (const field of ["title", "title_en", "title_es", "topic"]) {
-    if (!isText(data[field])) fail("Falta el campo “{field}” (texto no vacío).", { field });
-  }
-  if (!LEVELS.includes(data.level)) fail("“level” debe ser uno de: N5, N4, N3, N2, N1.");
-  if (!isList(data.sentences)) {
-    fail("“sentences” debe ser una lista con al menos una oración.");
-    return { errors, text: null };
-  }
-
-  // Las palabras pueden estar explicadas en el diccionario de cualquier oración
-  const dictionary = new Map();
-  data.sentences.forEach((sentence, index) => {
-    const n = index + 1;
-    const entries = sentence?.dictionary;
-    if (!entries || typeof entries !== "object" || Array.isArray(entries)) return;
-    for (const [lemma, entry] of Object.entries(entries)) {
-      const where = { n, lemma };
-      if (!entry || typeof entry !== "object") { fail("Oración {n}, dictionary “{lemma}”: debe ser un objeto.", where); continue; }
-      if (!isText(entry.reading) || !isKana(normalizeText(entry.reading))) {
-        fail("Oración {n}, dictionary “{lemma}”: “reading” debe estar en kana.", where);
-      }
-      for (const field of ["meanings", "meanings_es"]) {
-        if (!isList(entry[field]) || !entry[field].every(isText)) {
-          fail("Oración {n}, dictionary “{lemma}”: “{field}” debe ser una lista de textos.", { ...where, field });
-        }
-      }
-      if (!dictionary.has(lemma)) dictionary.set(lemma, entry);
-    }
-  });
-
-  const ids = new Set();
+  // Tokens con valores seguros, y las palabras que hay que buscar fuera del banco
+  const pending = new Set();
   const sentences = data.sentences.map((sentence, index) => {
-    const n = index + 1;
-    if (!sentence || typeof sentence !== "object") {
-      fail("Oración {n}: debe ser un objeto.", { n });
-      return null;
-    }
-    if (!Number.isInteger(sentence.id) || ids.has(sentence.id)) {
-      fail("Oración {n}: “id” debe ser un número entero que no se repita.", { n });
-    }
-    ids.add(sentence.id);
-    if (sentence.paragraph !== undefined && !(Number.isInteger(sentence.paragraph) && sentence.paragraph > 0)) {
-      fail("Oración {n}: “paragraph” debe ser un número entero mayor que 0.", { n });
-    }
-    for (const field of ["jp", "en", "es"]) {
-      if (!isText(sentence[field])) fail("Oración {n}: falta “{field}”.", { n, field });
-    }
-    if (!sentence.dictionary || typeof sentence.dictionary !== "object" || Array.isArray(sentence.dictionary)) {
-      fail("Oración {n}: falta “dictionary” (objeto con las palabras de la oración).", { n });
-    }
-    if (!isList(sentence.tokens)) {
-      fail("Oración {n}: “tokens” debe ser una lista no vacía.", { n });
-      return null;
-    }
-
-    const tokens = sentence.tokens.map((token, tokenIndex) => {
-      const where = { n, i: tokenIndex + 1, surface: token?.surface ?? "?" };
-      for (const field of ["surface", "lemma", "reading", "pos"]) {
-        if (!isText(token?.[field])) fail("Oración {n}, token {i} ({surface}): falta “{field}”.", { ...where, field });
-      }
-      if (!token || !isText(token.surface)) return null;
-
-      const pos = normalizePos(token.pos);
-      if (isText(token.pos) && !pos) {
-        fail("Oración {n}, token {i} ({surface}): “pos” no admite “{pos}”. Valores: {list}.",
-          { ...where, pos: token.pos, list: TOKEN_POS.join(", ") });
-      }
-      const silent = pos === "punctuation" || pos === "symbol" || pos === "number";
-      if (isText(token.reading) && !silent && !isKana(normalizeText(token.reading))) {
-        fail("Oración {n}, token {i} ({surface}): “reading” debe estar en kana.", where);
-      }
-      if (pos && !UNCOUNTED_POS.has(pos) && isText(token.lemma) && !dictionary.has(token.lemma)) {
-        fail("Oración {n}: falta “{lemma}” en “dictionary”.", { n, lemma: token.lemma });
-      }
-      return { surface: token.surface, lemma: token.lemma, reading: token.reading, pos };
+    const tokens = sentence.tokens.map((token) => {
+      const surface = token.surface;
+      const pos = normalizePos(token.pos) || (PUNCTUATION.test(surface) ? "punctuation" : "expression");
+      const lemma = isText(token.lemma) ? normalizeText(token.lemma) : surface;
+      const reading = isText(token.reading) ? normalizeText(token.reading) : isKana(surface) ? surface : "";
+      if (!UNCOUNTED_POS.has(pos) && !bankLookup(lemma, "")) pending.add(lemma);
+      return { surface, lemma, reading, pos };
     });
-
-    if (isText(sentence.jp) && tokens.every(Boolean)) {
-      const joined = tokens.map((token) => token.surface).join("");
-      if (joined !== sentence.jp) {
-        let at = 0;
-        while (at < joined.length && joined[at] === sentence.jp[at]) at++;
-        fail("Oración {n}: los tokens no reproducen “jp”. Coinciden hasta “{same}”; después “jp” sigue con “{jp}” y los tokens con “{tokens}”.", {
-          n,
-          same: sentence.jp.slice(Math.max(0, at - 8), at),
-          jp: sentence.jp.slice(at, at + 8) || "∅",
-          tokens: joined.slice(at, at + 8) || "∅"
-        });
-      }
-    }
     return {
-      id: sentence.id, jp: sentence.jp, en: sentence.en, es: sentence.es,
-      ...(sentence.paragraph ? { paragraph: sentence.paragraph } : {}),
-      tokens, dictionary: sentence.dictionary
+      id: index + 1,
+      ...(Number.isInteger(sentence.paragraph) && sentence.paragraph > 0 ? { paragraph: sentence.paragraph } : {}),
+      en: isText(sentence.en) ? sentence.en : isText(sentence.es) ? sentence.es : "",
+      es: isText(sentence.es) ? sentence.es : isText(sentence.en) ? sentence.en : "",
+      tokens
     };
   });
+  const extra = await lookupDictionary([...pending]);
 
-  const unique = [...new Set(errors)];
-  if (unique.length) return { errors: unique, text: null };
+  const flagged = new Map(); // "lemma|fuente" -> palabra por revisar
+  for (const sentence of sentences) {
+    const original = sentence.tokens.map((token) => token.surface).join("");
+    sentence.dictionary = {};
+    for (const token of sentence.tokens) {
+      if (UNCOUNTED_POS.has(token.pos) && !given.has(token.lemma)) continue;
+      const { entry, source, word, uk } = resolveWord(token.lemma, given.get(token.lemma), extra);
+      if (source === "none") { token.pos = UNCOUNTED_POS.has(token.pos) ? token.pos : "expression"; }
+      if (!entry.reading) entry.reading = isKana(token.lemma) ? token.lemma : token.reading;
+      if (!isKana(entry.reading || "")) continue; // sin lectura fiable no se puede enlazar: queda como texto
 
+      // Casi siempre va en kana y llegó con kanji: se muestra en kana
+      const kanaForm = (word?.kana || uk) && /\p{Script=Han}/u.test(token.surface) && isKana(token.reading);
+      if (kanaForm) {
+        flagged.set(`${token.lemma}|kana_fix`, {
+          lemma: token.lemma, reading: entry.reading, meanings: entry.meanings, meanings_es: entry.meanings_es,
+          source: "kana_fix", sentence: original
+        });
+        token.surface = token.reading;
+        token.lemma = entry.reading;
+      } else if (source === "jmdict" || source === "ai" || source === "none") {
+        // Sin explicación de nadie también se anota (como "ai"), para completarla a mano
+        const from = source === "jmdict" ? "jmdict" : "ai";
+        flagged.set(`${token.lemma}|${from}`, {
+          lemma: token.lemma, reading: entry.reading, meanings: entry.meanings, meanings_es: entry.meanings_es,
+          source: from, sentence: original
+        });
+      }
+      sentence.dictionary[token.lemma] = entry;
+    }
+    sentence.jp = sentence.tokens.map((token) => token.surface).join("");
+  }
+
+  const title = isText(data.title) ? data.title.trim() : sentences[0].jp.slice(0, 20);
   return {
     errors: [],
+    flagged: [...flagged.values()],
     text: {
-      title: data.title.trim(), title_en: data.title_en.trim(), title_es: data.title_es.trim(),
-      topic: data.topic.trim(), level: data.level,
+      title,
+      title_en: isText(data.title_en) ? data.title_en.trim() : isText(data.title_es) ? data.title_es.trim() : title,
+      title_es: isText(data.title_es) ? data.title_es.trim() : isText(data.title_en) ? data.title_en.trim() : title,
+      topic: isText(data.topic) ? data.topic.trim() : "general",
+      level: LEVELS.includes(data.level) ? data.level : meta.reading.level || "N5",
       ...(isText(data.type) ? { type: data.type.trim() } : {}),
       sentences
     }
   };
+}
+
+/* Comprueba, guarda y anota las palabras por revisar. Lanza la lista de
+   errores si el texto está roto. Lo usan las tres formas de agregar un texto. */
+async function addText(raw, source = "manual") {
+  const { errors, text, flagged } = await validateText(raw);
+  if (errors.length) throw errors;
+  const record = await saveText(text, source);
+  reportWords(flagged, record.id);
+  return record;
+}
+
+/* Las palabras por revisar van a Supabase si hay sesión; nunca bloquean la lectura */
+async function reportWords(flagged, textId) {
+  if (!flagged.length || !sb || !sync.user) return;
+  const rows = flagged.map((word) => ({
+    lemma: word.lemma, reading: word.reading || "", meanings: word.meanings || [], meanings_es: word.meanings_es || [],
+    source: word.source, sentence: word.sentence, text_id: textId, user_id: sync.user.id
+  }));
+  const { error } = await sb.from("words_to_review")
+    .upsert(rows, { onConflict: "lemma,reading,source", ignoreDuplicates: true });
+  if (error) console.error("No se pudieron anotar las palabras por revisar:", error);
 }
 
 /* =========================================
@@ -240,7 +382,7 @@ function countLemmas(data) {
   for (const sentence of data.sentences) Object.assign(dictionary, sentence.dictionary);
   for (const sentence of data.sentences) {
     for (const token of sentence.tokens) {
-      if (UNCOUNTED_POS.has(token.pos)) continue;
+      if (UNCOUNTED_POS.has(token.pos) || !dictionary[token.lemma]) continue; // sin entrada no es una palabra enlazable
       const key = wordKey(token.lemma, dictionary[token.lemma].reading);
       lemmas[key] = (lemmas[key] || 0) + 1;
       total++;
@@ -401,11 +543,8 @@ async function addTextFromInput() {
   if (pendingOwnText()) {
     return showTextErrors([t("Tienes un texto sin terminar ({title}). Léelo o sáltalo antes de agregar otro.", { title: pendingOwnText().title })]);
   }
-  const { errors, text } = validateText(raw);
-  if (errors.length) return showTextErrors(errors);
-
   try {
-    const record = await saveText(text);
+    const record = await addText(raw);
     $("textInput").value = "";
     $("textMessage").className = "message correct";
     $("textMessage").textContent = t("Texto guardado: {title} ({n}).", {
@@ -414,7 +553,7 @@ async function addTextFromInput() {
     });
     renderLibrary();
   } catch (error) {
-    showTextErrors([error.message]);
+    showTextErrors([].concat(error.message || error));
   }
 }
 
@@ -673,7 +812,6 @@ const TEXT_TOPICS = [
 const TEXT_LENGTHS = [[50, "Corto (unas 50 palabras)"], [100, "Medio (unas 100 palabras)"], [150, "Largo (unas 150 palabras)"]];
 const PROMPT_WORD_LIMIT = 1500;
 
-const MIN_LENGTH_RATIO = 0.7; // por debajo de este % de la longitud pedida se pide a la IA que lo alargue
 const MAX_SKIPS = 3; // textos que se pueden saltar seguidos antes de tener que terminar uno
 
 /* Texto que el usuario tiene a medias: uno suyo sin leer. Mientras exista no
@@ -942,10 +1080,8 @@ async function renderReadHome() {
       message.textContent = t("Pega primero el JSON del texto.");
       return;
     }
-    const { errors, text } = validateText(raw);
     try {
-      if (errors.length) throw errors;
-      openText((await saveText(text)).id);
+      openText((await addText(raw)).id);
     } catch (error) {
       showTextErrors([].concat(error.message || error), message);
     }
@@ -958,7 +1094,9 @@ async function renderReadHome() {
 function generationMessage(code, limit) {
   const messages = {
     unauthorized: t("Inicia sesión para generar textos con IA."),
-    limit: t("Has llegado al límite de hoy ({n} generaciones). Mañana podrás crear más, o usa el modo manual.", { n: limit }),
+    limit: t("Has llegado al límite de hoy ({n} textos). Mañana podrás crear más, o usa el modo manual.", { n: limit }),
+    busy: t("Hoy ha habido demasiados intentos fallidos. Inténtalo mañana o usa el modo manual."),
+    invalid: t("La IA no consiguió escribir un texto válido. No se ha descontado de tu límite; inténtalo de nuevo."),
     quota: t("La IA ha agotado su cuota por ahora. Inténtalo más tarde o usa el modo manual."),
     truncated: t("El texto salió demasiado largo y se cortó. Prueba con una longitud menor."),
     not_configured: t("La generación con IA aún no está configurada. Usa el modo manual.")
@@ -966,15 +1104,19 @@ function generationMessage(code, limit) {
   return messages[code] || t("La IA no pudo escribir el texto. Inténtalo de nuevo o usa el modo manual.");
 }
 
-async function requestText(params, fix) {
-  const { data, error } = await sb.functions.invoke("generate-text", { body: fix ? { ...params, fix } : params });
+async function requestText(params) {
+  const { data, error } = await sb.functions.invoke("generate-text", { body: params });
   if (!error) return data;
   // Sin red, o la función no está desplegada todavía
   if (!error.context?.json) throw new Error(navigator.onLine ? generationMessage("not_configured") : t("No hay conexión. Inténtalo de nuevo cuando tengas internet."));
   const info = await error.context.json().catch(() => ({}));
-  throw new Error(generationMessage(error.context.status === 404 ? "not_configured" : info.error, info.limit));
+  const code = error.context.status === 404 ? "not_configured" : info.error;
+  throw Object.assign(new Error(generationMessage(code, info.limit)), { canRetry: !!info.canRetry });
 }
 
+/* Pide el texto a la IA. Si la respuesta falla (formato roto, error del
+   servicio) la función lo indica y se repite la misma petición, hasta dos
+   veces más. Solo cuenta para el límite del estudiante el texto que recibe. */
 async function generateAndOpen(options) {
   const message = $("promptMessage");
   if (!sb || !sync.user) {
@@ -990,37 +1132,20 @@ async function generateAndOpen(options) {
   say(t("La IA está escribiendo tu texto… puede tardar un minuto."));
 
   try {
-    const params = promptParams(options);
-    // Un texto bien formado pero mucho más corto de lo pedido también se devuelve a la IA
-    const check = (raw) => {
-      const checked = validateText(raw);
-      if (!checked.errors.length) {
-        const count = wordCount(checked.text), minimum = Math.round(options.length * MIN_LENGTH_RATIO);
-        if (count < minimum) {
-          checked.short = true;
-          checked.errors = [`The text is too short: it has ${count} non-punctuation tokens and needs at least ${Math.round(options.length * 0.9)}. Keep the story and add sentences that continue it.`];
-        }
+    const params = { ...promptParams(options), requestId: newId() };
+    let answer = null;
+    while (!answer) {
+      try {
+        answer = await requestText(params);
+      } catch (error) {
+        if (!error.canRetry) throw error;
+        say(t("El primer intento no salió bien. Probando de nuevo…"));
       }
-      return checked;
-    };
-
-    let answer = await requestText(params);
-    let result = check(answer.text);
-    if (result.errors.length) {
-      // Un segundo intento: se le devuelven a la IA los errores del validador
-      say(t("Revisando el formato del texto…"));
-      answer = await requestText(params, { previous: answer.text, errors: result.errors.slice(0, 12) });
-      result = check(answer.text);
-      // Si tras el segundo intento solo falla la longitud, se acepta: es legible
-      if (result.short) result.errors = [];
     }
-    if (result.errors.length) {
-      throw [t("La IA no devolvió un texto válido. Inténtalo de nuevo."), ...result.errors];
-    }
-    openText((await saveText(result.text, "api")).id);
+    openText((await addText(answer.text, "api")).id);
   } catch (error) {
     if (!message.isConnected) return;
-    if (Array.isArray(error)) showTextErrors(error, message); // errores del validador
+    if (Array.isArray(error)) showTextErrors(error, message); // texto roto
     else {
       message.className = "message incorrect";
       message.textContent = error.message;

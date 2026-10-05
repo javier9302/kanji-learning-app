@@ -47,6 +47,38 @@
 
     <p id="adminMessage" class="message" role="status"></p>
 
+    <nav id="adminTabs" class="tabs admin-tabs hidden" aria-label="Secciones">
+      <button class="tab active" data-admin="texts" type="button">Textos</button>
+      <button class="tab" data-admin="words" type="button">Palabras por revisar</button>
+    </nav>
+
+    <!-- Palabras por revisar -->
+    <section id="wordsPanel" class="hidden">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">PALABRAS FUERA DEL BANCO</p>
+          <h2>Palabras por revisar</h2>
+        </div>
+        <span id="wordsCount" class="pill"></span>
+      </div>
+      <p class="helper admin-help">
+        Palabras de los textos que la app no tenía. <strong>Aprobar</strong> la guarda en el
+        diccionario con lo que ves; <strong>Editar</strong> permite corregirla antes;
+        <strong>Descartar</strong> la quita de la lista sin guardarla.
+      </p>
+      <div id="wordsList" class="items-list"></div>
+
+      <div class="panel import-panel admin-import">
+        <div>
+          <h3>Diccionario general (JMdict)</h3>
+          <p id="dictInfo" class="helper">Palabras comunes que no están en el banco de la app. Se importa una vez; repetirlo no duplica nada ni pisa lo que hayas aprobado.</p>
+        </div>
+        <div class="import-actions">
+          <button id="dictImportBtn" class="button button-outline" type="button">Importar diccionario</button>
+        </div>
+      </div>
+    </section>
+
     <!-- Panel -->
     <section id="adminPanel" class="hidden">
       <div class="section-heading">

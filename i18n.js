@@ -62,8 +62,13 @@ const EN = {
   "1. Copia el prompt. 2. Pégalo en tu IA (ChatGPT, Claude, Gemini…). 3. Pega aquí su respuesta.":
     "1. Copy the prompt. 2. Paste it into your AI (ChatGPT, Claude, Gemini…). 3. Paste its answer here.",
   "Inicia sesión para generar textos con IA.": "Sign in to generate texts with AI.",
-  "Has llegado al límite de hoy ({n} generaciones). Mañana podrás crear más, o usa el modo manual.":
-    "You have reached today's limit ({n} generations). You can create more tomorrow, or use manual mode.",
+  "Has llegado al límite de hoy ({n} textos). Mañana podrás crear más, o usa el modo manual.":
+    "You have reached today's limit ({n} texts). You can create more tomorrow, or use manual mode.",
+  "Hoy ha habido demasiados intentos fallidos. Inténtalo mañana o usa el modo manual.":
+    "There have been too many failed attempts today. Try again tomorrow or use manual mode.",
+  "La IA no consiguió escribir un texto válido. No se ha descontado de tu límite; inténtalo de nuevo.":
+    "The AI could not write a valid text. It has not been counted against your limit; try again.",
+  "El primer intento no salió bien. Probando de nuevo…": "The first attempt did not work. Trying again…",
   "La IA ha agotado su cuota por ahora. Inténtalo más tarde o usa el modo manual.":
     "The AI has run out of quota for now. Try again later or use manual mode.",
   "El texto salió demasiado largo y se cortó. Prueba con una longitud menor.":

@@ -368,7 +368,103 @@ create table if not exists public.generations (
 alter table public.generations add column if not exists key_label text;
 alter table public.generations add column if not exists attempts text;
 
+-- Cada petición de texto lleva un identificador; sus reintentos lo comparten.
+-- Al estudiante solo le cuenta la petición que acaba en un texto entregado (ok).
+-- raw guarda lo que respondió la IA cuando falló, para poder revisarlo.
+alter table public.generations add column if not exists request_id text;
+alter table public.generations add column if not exists attempt integer not null default 1;
+alter table public.generations add column if not exists raw text;
+
 create index if not exists generations_user_created_idx on public.generations (user_id, created_at);
+create index if not exists generations_request_idx on public.generations (user_id, request_id);
 
 alter table public.generations enable row level security;
 revoke all on public.generations from anon, authenticated;
+
+-- =========================================
+-- DICCIONARIO GENERAL
+-- =========================================
+
+-- Palabras que no están en el banco de la app: las de JMdict (se importan
+-- una vez, ver SETUP.md) y las que un administrador aprueba al revisarlas.
+-- La app consulta aquí solo las palabras de cada texto.
+create table if not exists public.dictionary (
+  id bigint generated always as identity primary key,
+  lemma text not null,
+  reading text not null default '',
+  meanings jsonb not null default '[]'::jsonb,
+  meanings_es jsonb not null default '[]'::jsonb,
+  uk boolean not null default false,          -- casi siempre se escribe en kana
+  source text not null default 'jmdict' check (source in ('jmdict', 'approved')),
+  updated_at timestamptz not null default now(),
+  unique (lemma, reading)
+);
+
+create index if not exists dictionary_lemma_idx on public.dictionary (lemma);
+
+alter table public.dictionary enable row level security;
+revoke all on public.dictionary from anon;
+grant select, insert, update, delete on public.dictionary to authenticated;
+
+drop policy if exists "dictionary_select" on public.dictionary;
+create policy "dictionary_select" on public.dictionary
+  for select to authenticated using (true);
+
+drop policy if exists "dictionary_admin_insert" on public.dictionary;
+create policy "dictionary_admin_insert" on public.dictionary
+  for insert to authenticated with check ((select public.is_admin()));
+
+drop policy if exists "dictionary_admin_update" on public.dictionary;
+create policy "dictionary_admin_update" on public.dictionary
+  for update to authenticated using ((select public.is_admin())) with check ((select public.is_admin()));
+
+drop policy if exists "dictionary_admin_delete" on public.dictionary;
+create policy "dictionary_admin_delete" on public.dictionary
+  for delete to authenticated using ((select public.is_admin()));
+
+-- =========================================
+-- PALABRAS POR REVISAR
+-- =========================================
+
+-- Palabras de los textos que no estaban en el banco de la app: se muestran
+-- al estudiante igualmente y quedan aquí para que un administrador las revise.
+--   source: jmdict (salió del diccionario), ai (solo la explicó la IA),
+--           kana_fix (la IA la escribió con kanji y se pasó a kana)
+create table if not exists public.words_to_review (
+  id bigint generated always as identity primary key,
+  lemma text not null,
+  reading text not null default '',
+  meanings jsonb not null default '[]'::jsonb,
+  meanings_es jsonb not null default '[]'::jsonb,
+  source text not null check (source in ('jmdict', 'ai', 'kana_fix')),
+  sentence text,
+  text_id text,
+  user_id uuid default auth.uid() references auth.users (id) on delete set null,
+  status text not null default 'pending' check (status in ('pending', 'approved', 'discarded')),
+  created_at timestamptz not null default now(),
+  reviewed_at timestamptz,
+  unique (lemma, reading, source)
+);
+
+create index if not exists words_to_review_status_idx on public.words_to_review (status, created_at);
+
+alter table public.words_to_review enable row level security;
+revoke all on public.words_to_review from anon;
+grant select, insert, update, delete on public.words_to_review to authenticated;
+
+-- Cualquier usuario con sesión puede anotar una palabra; solo los administradores las ven y deciden
+drop policy if exists "words_to_review_insert" on public.words_to_review;
+create policy "words_to_review_insert" on public.words_to_review
+  for insert to authenticated with check ((select auth.uid()) = user_id and status = 'pending');
+
+drop policy if exists "words_to_review_admin_select" on public.words_to_review;
+create policy "words_to_review_admin_select" on public.words_to_review
+  for select to authenticated using ((select public.is_admin()));
+
+drop policy if exists "words_to_review_admin_update" on public.words_to_review;
+create policy "words_to_review_admin_update" on public.words_to_review
+  for update to authenticated using ((select public.is_admin())) with check ((select public.is_admin()));
+
+drop policy if exists "words_to_review_admin_delete" on public.words_to_review;
+create policy "words_to_review_admin_delete" on public.words_to_review
+  for delete to authenticated using ((select public.is_admin()));

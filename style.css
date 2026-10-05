@@ -2178,3 +2178,54 @@ div.hard-item {
     bottom: calc(70px + env(safe-area-inset-bottom));
   }
 }
+
+/* Administración: palabras por revisar */
+
+.admin-tabs {
+  position: static !important;
+  margin-bottom: 22px !important;
+  border-top: 0 !important;
+  box-shadow: none !important;
+  background: none !important;
+}
+
+.admin-tabs .tab {
+  flex: none;
+  flex-direction: row;
+  font-size: 13px;
+  border-top: 0;
+  border-bottom: 2px solid transparent;
+}
+
+.admin-tabs .tab.active {
+  border-bottom-color: var(--green);
+}
+
+.admin-help {
+  margin: -6px 0 16px;
+}
+
+.admin-word {
+  flex-wrap: wrap;
+}
+
+.admin-edit {
+  display: grid;
+  gap: 8px;
+  flex: 1 1 260px;
+}
+
+.admin-edit label {
+  display: grid;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--label);
+}
+
+.admin-edit .search {
+  max-width: none;
+}
+
+.admin-import {
+  margin-top: 26px;
+}

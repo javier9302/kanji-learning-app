@@ -19,7 +19,8 @@ Los nombres de los menús de Supabase y Cloudflare cambian de vez en cuando; si 
 3. Comprueba en **Table Editor** que existen estas tablas, todas con RLS activado:
    - `items` y `days` (repaso de kanjis y palabras);
    - `texts`, `text_states`, `user_words`, `reading_sessions` y `profiles` (lectura);
-   - `admins` (quién aprueba textos) y `generations` (registro de textos generados con IA).
+   - `admins` (quién aprueba textos) y `generations` (registro de textos generados con IA);
+   - `dictionary` (diccionario general) y `words_to_review` (palabras por revisar).
 
 El archivo se puede volver a ejecutar sin perder datos. **Si ya lo ejecutaste antes de que existiera la lectura, ejecútalo otra vez**: crea las tablas nuevas y deja las anteriores como están. Hasta entonces la app mostrará «Faltan las tablas en Supabase».
 
@@ -92,7 +93,8 @@ El botón «Generar con IA» llama a una función del servidor, `generate-text`,
 | `GEMINI_API_KEY` | alternativa si solo tienes una clave (sin etiqueta) |
 | `GEMINI_MODEL` | opcional; por defecto `gemini-3.8-flash` |
 | `GEMINI_FALLBACK_MODEL` | opcional; por defecto `gemini-3.5-flash-lite` |
-| `DAILY_CALLS` | opcional; llamadas por usuario y día, por defecto `10` |
+| `DAILY_TEXTS` | opcional; textos entregados por usuario y día, por defecto `10` |
+| `DAILY_HARD_CAP` | opcional; tope de llamadas a la IA por usuario y día, cuenten o no; por defecto el triple de `DAILY_TEXTS` |
 
 4. **Desplegar la función.** En **Edge Functions → Deploy a new function → Via Editor**, ponle el nombre exacto `generate-text`, pega el contenido de [`supabase/functions/generate-text/index.ts`](supabase/functions/generate-text/index.ts) y despliega. Deja activada la verificación de JWT.
 
@@ -101,7 +103,9 @@ El botón «Generar con IA» llama a una función del servidor, `generate-text`,
 Cómo funciona:
 
 - Solo responde a usuarios con sesión iniciada.
-- Cada usuario tiene un máximo de llamadas al día (`DAILY_CALLS`). Un texto gasta una llamada, o dos si la primera respuesta no pasa el validador y hay que pedir la corrección.
+- Al estudiante solo le cuenta un texto que recibe y puede leer (`DAILY_TEXTS` al día). Si la IA falla o devuelve un texto roto, la app repite la petición hasta dos veces más y esos intentos no cuentan.
+- Para que los fallos no gasten tu cuota sin límite, hay un tope de llamadas por usuario y día (`DAILY_HARD_CAP`).
+- Un texto solo se rechaza si está roto: no es JSON o los tokens no reconstruyen la oración. Lo demás se arregla y se muestra.
 - Las claves se prueban en orden. Si una se queda sin cuota o falla, se pasa a la siguiente; si fallan todas con el modelo principal, se repite con el de reserva.
 - La etiqueta de cada clave (lo que va antes del `=`) es lo que queda en el registro, nunca la clave. Escribe las claves solo en los secretos de Supabase: no las pongas en el código ni en el repositorio.
 - Cada llamada queda en la tabla `generations` con el modelo y los tokens usados. Para ver el consumo:
@@ -116,7 +120,29 @@ select created_at, attempts from generations
 where attempts is not null order by created_at desc limit 20;
 ```
 
+Para revisar los fallos, con lo que respondió la IA en cada uno:
+
+```sql
+select created_at, model, key_label, attempt, error, left(raw, 500) as respuesta
+from generations where not ok order by created_at desc limit 20;
+```
+
 Si cambias el texto del prompt en `reading.js` (función `renderPrompt`), copia el mismo cambio a la función y vuelve a desplegarla.
+
+## Diccionario general y palabras por revisar
+
+Cuando un texto trae una palabra que no está en el banco de la app, el texto se muestra igualmente y la palabra se resuelve así: primero en el diccionario general (tabla `dictionary`) y, si no está, con lo que explicó la IA. Esas palabras quedan anotadas para que las revises.
+
+1. Ejecuta `supabase/schema.sql` (crea las tablas `dictionary` y `words_to_review`).
+2. Abre `admin.html`, pestaña **Palabras por revisar**, y pulsa **Importar diccionario** una vez. Sube unas 29.000 palabras comunes de JMdict que no están en el banco; tarda alrededor de un minuto.
+3. En esa misma pestaña aparecen las palabras por revisar:
+   - **Aprobar** la guarda en el diccionario tal como se ve. Desde entonces la app la usa y no vuelve a aparecer en la lista.
+   - **Editar** permite corregir lectura y significados antes de aprobar.
+   - **Descartar** la quita de la lista sin guardarla.
+
+Cada palabra indica de dónde salió: del diccionario JMdict, solo de la IA, o si la IA la escribió con kanji y la app la pasó a kana (por ejemplo 有りました → ありました).
+
+Sin sesión iniciada no se consulta el diccionario general ni se anotan palabras: se usa lo que explique la IA.
 
 ## Avisos al administrador por correo (opcional)
 

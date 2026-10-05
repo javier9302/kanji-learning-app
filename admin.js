@@ -22,15 +22,24 @@ const sb = configured && window.supabase
 let status = "pending";
 let rows = [];
 let openId = "";
+let section = "texts"; // texts | words
+let wordRows = [];
+let editingWord = 0;   // id de la palabra que se está editando
+
+const SOURCE_LABEL = {
+  jmdict: "Del diccionario JMdict", ai: "Solo la explicó la IA", kana_fix: "Se pasó de kanji a kana"
+};
 
 function say(text, isError = false) {
   $("adminMessage").textContent = text;
   $("adminMessage").className = `message ${isError ? "incorrect" : ""}`;
 }
 
-function show(section) {
-  $("adminLogin").classList.toggle("hidden", section !== "login");
-  $("adminPanel").classList.toggle("hidden", section !== "panel");
+function show(view) {
+  $("adminLogin").classList.toggle("hidden", view !== "login");
+  $("adminTabs").classList.toggle("hidden", view !== "panel");
+  $("adminPanel").classList.toggle("hidden", view !== "panel" || section !== "texts");
+  $("wordsPanel").classList.toggle("hidden", view !== "panel" || section !== "words");
 }
 
 /* Con sesión: comprueba el permiso y muestra el panel o el motivo */
@@ -109,7 +118,138 @@ async function setStatus(id, value) {
   render();
 }
 
+/* ---------- Palabras por revisar ---------- */
+
+async function loadWords() {
+  $("wordsList").innerHTML = `<p class="message">Cargando…</p>`;
+  const { data, error } = await sb.from("words_to_review").select("*")
+    .eq("status", "pending").order("created_at").limit(PAGE);
+  if (error) {
+    $("wordsList").innerHTML = "";
+    return say(`No se pudieron cargar las palabras (${error.message}). ¿Ejecutaste supabase/schema.sql?`, true);
+  }
+  wordRows = data;
+  renderWords();
+}
+
+const list = (value) => (Array.isArray(value) ? value : []).join(", ");
+const split = (value) => value.split(/[,;]+/).map((x) => x.trim()).filter(Boolean);
+
+function renderWords() {
+  $("wordsCount").textContent = `${wordRows.length}${wordRows.length === PAGE ? "+" : ""} pendiente${wordRows.length === 1 ? "" : "s"}`;
+  if (!wordRows.length) {
+    $("wordsList").innerHTML = `<div class="no-items">No hay palabras por revisar.</div>`;
+    return;
+  }
+  $("wordsList").innerHTML = wordRows.map((row) => row.id === editingWord ? `
+    <article class="item-row admin-word editing">
+      <div class="item-symbol word-symbol" lang="ja">${escapeHTML(row.lemma)}</div>
+      <div class="item-info admin-edit">
+        <label>Lectura <input class="search" data-field="reading" value="${escapeHTML(row.reading)}" lang="ja"></label>
+        <label>Significado (inglés) <input class="search" data-field="meanings" value="${escapeHTML(list(row.meanings))}"></label>
+        <label>Significado (español) <input class="search" data-field="meanings_es" value="${escapeHTML(list(row.meanings_es))}"></label>
+      </div>
+      <button class="button button-primary" type="button" data-word="save" data-id="${row.id}">Guardar</button>
+      <button class="button button-quiet" type="button" data-word="cancel" data-id="${row.id}">Cancelar</button>
+    </article>` : `
+    <article class="item-row admin-word">
+      <div class="item-symbol word-symbol" lang="ja">${escapeHTML(row.lemma)}</div>
+      <div class="item-info">
+        <div class="item-title"><span lang="ja">${escapeHTML(row.reading || "—")}</span> ·
+          ${escapeHTML(list(row.meanings_es) || "sin español")} · ${escapeHTML(list(row.meanings) || "sin inglés")}</div>
+        <div class="item-sub">${SOURCE_LABEL[row.source] || escapeHTML(row.source)} ·
+          <span lang="ja">${escapeHTML(row.sentence || "")}</span></div>
+      </div>
+      <button class="button button-good" type="button" data-word="approve" data-id="${row.id}">Aprobar</button>
+      <button class="button button-outline" type="button" data-word="edit" data-id="${row.id}">Editar</button>
+      <button class="button button-wrong" type="button" data-word="discard" data-id="${row.id}">Descartar</button>
+    </article>`).join("");
+}
+
+async function wordAction(action, id, card) {
+  const row = wordRows.find((w) => w.id === id);
+  if (!row) return;
+  if (action === "edit") { editingWord = id; return renderWords(); }
+  if (action === "cancel") { editingWord = 0; return renderWords(); }
+
+  if (action === "save") {
+    const value = (field) => card.querySelector(`[data-field="${field}"]`).value;
+    const changes = { reading: value("reading").trim(), meanings: split(value("meanings")), meanings_es: split(value("meanings_es")) };
+    const { error } = await sb.from("words_to_review").update(changes).eq("id", id);
+    if (error) return say(`No se pudo guardar (${error.message}).`, true);
+    Object.assign(row, changes);
+    editingWord = 0;
+    say("Cambios guardados. Falta aprobarla para que entre en el diccionario.");
+    return renderWords();
+  }
+
+  if (action === "approve") {
+    if (!row.reading) return say("Antes de aprobarla, edítala y escribe su lectura.", true);
+    // Entra en el diccionario; si llegó con kanji y se pasó a kana, queda marcada como "en kana"
+    const { error } = await sb.from("dictionary").upsert({
+      lemma: row.lemma, reading: row.reading, meanings: row.meanings, meanings_es: row.meanings_es,
+      uk: row.source === "kana_fix", source: "approved", updated_at: new Date().toISOString()
+    }, { onConflict: "lemma,reading" });
+    if (error) return say(`No se pudo guardar en el diccionario (${error.message}).`, true);
+  }
+
+  const next = action === "approve" ? "approved" : "discarded";
+  const { error } = await sb.from("words_to_review")
+    .update({ status: next, reviewed_at: new Date().toISOString() }).eq("id", id);
+  if (error) return say(`No se pudo actualizar la palabra (${error.message}).`, true);
+  say(action === "approve" ? `「${row.lemma}」 aprobada y guardada en el diccionario.` : `「${row.lemma}」 descartada.`);
+  wordRows = wordRows.filter((w) => w.id !== id);
+  renderWords();
+}
+
+/* ---------- Diccionario general ---------- */
+
+async function dictionaryCount() {
+  const { count, error } = await sb.from("dictionary").select("id", { count: "exact", head: true });
+  if (!error) $("dictInfo").textContent = `El diccionario tiene ${count} palabras. Importar de nuevo no duplica nada ni pisa lo que hayas aprobado.`;
+}
+
+/* Sube supabase/dictionary.json a la tabla "dictionary", por tandas */
+async function importDictionary() {
+  const button = $("dictImportBtn");
+  button.disabled = true;
+  try {
+    say("Descargando el diccionario…");
+    const entries = await (await fetch("supabase/dictionary.json")).json();
+    const BATCH = 500;
+    for (let i = 0; i < entries.length; i += BATCH) {
+      const rows = entries.slice(i, i + BATCH).map(([lemma, reading, meanings, meanings_es, uk]) =>
+        ({ lemma, reading, meanings, meanings_es, uk: !!uk, source: "jmdict" }));
+      const { error } = await sb.from("dictionary").upsert(rows, { onConflict: "lemma,reading", ignoreDuplicates: true });
+      if (error) throw error;
+      say(`Importando el diccionario… ${Math.min(i + BATCH, entries.length)} / ${entries.length}`);
+    }
+    say(`Diccionario importado: ${entries.length} palabras.`);
+    dictionaryCount();
+  } catch (error) {
+    say(`No se pudo importar el diccionario (${error.message}). Puedes volver a pulsar el botón: continúa donde se quedó.`, true);
+  } finally {
+    button.disabled = false;
+  }
+}
+
 function bind() {
+  $("dictImportBtn").addEventListener("click", importDictionary);
+  $("adminTabs").addEventListener("click", (event) => {
+    const tab = event.target.closest("[data-admin]");
+    if (!tab) return;
+    section = tab.dataset.admin;
+    document.querySelectorAll("[data-admin]").forEach((t) => t.classList.toggle("active", t === tab));
+    say("");
+    show("panel");
+    if (section === "words") { loadWords(); dictionaryCount(); } else loadTexts();
+  });
+
+  $("wordsList").addEventListener("click", (event) => {
+    const button = event.target.closest("[data-word]");
+    if (button) wordAction(button.dataset.word, Number(button.dataset.id), button.closest(".admin-word"));
+  });
+
   $("adminForm").addEventListener("submit", async (event) => {
     event.preventDefault();
     $("adminSubmitBtn").disabled = true;

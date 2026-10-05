@@ -10,14 +10,23 @@
 //   GEMINI_API_KEY          alternativa con una sola clave (etiqueta "default")
 //   GEMINI_MODEL            opcional, por defecto gemini-3.8-flash
 //   GEMINI_FALLBACK_MODEL   opcional, por defecto gemini-3.5-flash-lite
-//   DAILY_CALLS             opcional, llamadas por usuario y día (por defecto 10)
+//   DAILY_TEXTS             opcional, textos ENTREGADOS por usuario y día (por defecto 10)
+//   DAILY_HARD_CAP          opcional, tope de llamadas a la IA por usuario y día, cuenten
+//                           o no (por defecto el triple de DAILY_TEXTS)
+//
+// Cuota justa: al estudiante solo le cuenta un texto que recibe y puede leer.
+// Los fallos de la IA o del sistema no cuentan. La app repite la petición con
+// el mismo "requestId" (como mucho 3 intentos) y aquí se guarda cada fallo con
+// la respuesta de la IA para poder revisarlo (tabla generations).
 // =========================================
 
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 const MODEL = Deno.env.get("GEMINI_MODEL") || "gemini-3.8-flash";
 const FALLBACK_MODEL = Deno.env.get("GEMINI_FALLBACK_MODEL") || "gemini-3.5-flash-lite";
-const DAILY_CALLS = Number(Deno.env.get("DAILY_CALLS")) || 10;
+const DAILY_TEXTS = Number(Deno.env.get("DAILY_TEXTS")) || Number(Deno.env.get("DAILY_CALLS")) || 10;
+const DAILY_HARD_CAP = Number(Deno.env.get("DAILY_HARD_CAP")) || DAILY_TEXTS * 3;
+const MAX_ATTEMPTS = 3; // el primero y dos reintentos
 const MAX_OUTPUT_TOKENS = 30000;
 
 const LEVELS = ["N5", "N4", "N3", "N2", "N1"];
@@ -149,19 +158,57 @@ function readParams(body: any) {
   };
 }
 
-// deno-lint-ignore no-explicit-any
-function fixPrompt(prompt: string, fix: any) {
-  const errors = (Array.isArray(fix.errors) ? fix.errors : [])
-    .filter((e: unknown) => typeof e === "string").slice(0, 12).map((e: string) => `- ${e.slice(0, 300)}`);
+function fixPrompt(prompt: string, previous: string, problems: string) {
   return `${prompt}
 
-YOUR PREVIOUS ANSWER WAS REJECTED by the validator with these errors:
-${errors.join("\n")}
+YOUR PREVIOUS ANSWER WAS REJECTED by the validator:
+${problems.slice(0, 2000)}
 
 Previous answer:
-${String(fix.previous).slice(0, 60000)}
+${previous.slice(0, 60000)}
 
 Return the complete corrected JSON object, following every rule above.`;
+}
+
+/* Lo único que hace ilegible un texto: que no sea JSON o que los tokens no
+   reconstruyan la oración. (La app lleva la misma comprobación en reading.js,
+   función structureErrors.) Si aún quedan intentos, también se devuelve a la
+   IA un texto mucho más corto de lo pedido. */
+function checkStructure(text: string, length: number, lastAttempt: boolean): string[] {
+  const start = text.indexOf("{"), end = text.lastIndexOf("}");
+  // deno-lint-ignore no-explicit-any
+  let data: any;
+  try {
+    data = JSON.parse(start >= 0 && end > start ? text.slice(start, end + 1) : text);
+  } catch (error) {
+    return [`The answer is not valid JSON: ${(error as Error).message}`];
+  }
+  if (!data || typeof data !== "object" || !Array.isArray(data.sentences) || !data.sentences.length) {
+    return ['"sentences" must be a non-empty list.'];
+  }
+  const problems: string[] = [];
+  let count = 0;
+  // deno-lint-ignore no-explicit-any
+  data.sentences.forEach((sentence: any, index: number) => {
+    const n = index + 1;
+    if (!sentence || typeof sentence.jp !== "string" || !sentence.jp.trim()) return problems.push(`Sentence ${n}: "jp" is missing.`);
+    if (!Array.isArray(sentence.tokens) || !sentence.tokens.length) return problems.push(`Sentence ${n}: "tokens" must be a non-empty list.`);
+    // deno-lint-ignore no-explicit-any
+    if (sentence.tokens.some((token: any) => !token || typeof token.surface !== "string" || !token.surface)) {
+      return problems.push(`Sentence ${n}: every token needs a non-empty "surface".`);
+    }
+    // deno-lint-ignore no-explicit-any
+    const joined = sentence.tokens.map((token: any) => token.surface).join("");
+    if (joined !== sentence.jp) {
+      problems.push(`Sentence ${n}: the token surfaces joined ("${joined.slice(0, 60)}") do not reproduce "jp" ("${sentence.jp.slice(0, 60)}").`);
+    }
+    // deno-lint-ignore no-explicit-any
+    count += sentence.tokens.filter((token: any) => token.pos !== "punctuation" && token.pos !== "symbol").length;
+  });
+  if (!problems.length && !lastAttempt && count < length * 0.7) {
+    problems.push(`The text is too short: it has ${count} non-punctuation tokens and needs at least ${Math.round(length * 0.9)}. Keep the story and add sentences that continue it.`);
+  }
+  return problems;
 }
 
 async function callGemini(model: string, prompt: string, key: string, full = true) {
@@ -204,19 +251,34 @@ Deno.serve(async (req) => {
   const body = await req.json().catch(() => null);
   const params = readParams(body);
   if (!params) return reply(400, { error: "bad_request" });
-  const isFix = !!(body.fix && typeof body.fix.previous === "string");
+  const requestId = typeof body.requestId === "string" && /^[\w-]{8,64}$/.test(body.requestId)
+    ? body.requestId : crypto.randomUUID();
 
-  // Límite diario por usuario (tabla generations, solo accesible desde aquí)
+  // Uso de hoy (tabla generations, solo accesible desde aquí)
   const admin = createClient(url, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
   const today = new Date();
   today.setUTCHours(0, 0, 0, 0);
-  const { count, error: countError } = await admin.from("generations")
-    .select("id", { count: "exact", head: true })
-    .eq("user_id", user.id).gte("created_at", today.toISOString());
+  const { data: rows, error: countError } = await admin.from("generations")
+    .select("id, request_id, ok").eq("user_id", user.id).gte("created_at", today.toISOString());
   if (countError) return reply(500, { error: "not_configured", detail: countError.message });
-  if ((count ?? 0) >= DAILY_CALLS) return reply(429, { error: "limit", limit: DAILY_CALLS });
 
-  const prompt = isFix ? fixPrompt(renderPrompt(params), body.fix) : renderPrompt(params);
+  const mine = rows.filter((row) => row.request_id === requestId);
+  const attempt = mine.length + 1;
+  // Textos entregados hoy: es lo único que cuenta para el límite del estudiante
+  const delivered = new Set(rows.filter((row) => row.ok).map((row) => row.request_id || row.id)).size;
+  if (mine.some((row) => row.ok)) return reply(400, { error: "bad_request" });
+  if (attempt > MAX_ATTEMPTS) return reply(429, { error: "invalid", canRetry: false });
+  if (attempt === 1 && delivered >= DAILY_TEXTS) return reply(429, { error: "limit", limit: DAILY_TEXTS });
+  if (rows.length >= DAILY_HARD_CAP) return reply(429, { error: "busy" });
+
+  // En un reintento se le devuelve a la IA su respuesta anterior con el motivo del rechazo
+  let prompt = renderPrompt(params);
+  if (attempt > 1) {
+    const { data: previous } = await admin.from("generations").select("raw, error")
+      .eq("user_id", user.id).eq("request_id", requestId).not("raw", "is", null)
+      .order("created_at", { ascending: false }).limit(1);
+    if (previous?.[0]) prompt = fixPrompt(prompt, previous[0].raw, previous[0].error || "");
+  }
 
   // Se prueba cada clave con el modelo principal y, si todas fallan, con el de
   // reserva. Solo se pasa a la siguiente cuando el fallo es de cuota, de clave o
@@ -240,21 +302,32 @@ Deno.serve(async (req) => {
   // deno-lint-ignore no-explicit-any
   const text = (candidate?.content?.parts || []).map((p: any) => p.text || "").join("");
   const usage = result.data?.usageMetadata || {};
-  const failure = [401, 403, 429].includes(result.status) ? "quota"
+  let failure = [401, 403, 429].includes(result.status) ? "quota"
     : result.status !== 200 ? "provider"
     : candidate?.finishReason === "MAX_TOKENS" ? "truncated"
     : !text ? "empty" : "";
+  let detail = failure ? `${result.status} ${JSON.stringify(result.data?.error?.message || "").slice(0, 300)}` : "";
+  if (!failure) {
+    const problems = checkStructure(text, params.length, attempt >= MAX_ATTEMPTS);
+    if (problems.length) { failure = "invalid"; detail = problems.slice(0, 12).join("\n"); }
+  }
 
   await admin.from("generations").insert({
-    user_id: user.id, model, key_label: label, attempts: attempts.join(" ") || null,
-    level: params.level, length: params.length, is_fix: isFix,
+    user_id: user.id, request_id: requestId, attempt,
+    model, key_label: label, attempts: attempts.join(" ") || null,
+    level: params.level, length: params.length, is_fix: attempt > 1,
     prompt_tokens: usage.promptTokenCount ?? null,
     output_tokens: usage.candidatesTokenCount ?? null,
     thought_tokens: usage.thoughtsTokenCount ?? null,
     ok: !failure,
-    error: failure ? `${failure} ${result.status} ${JSON.stringify(result.data?.error?.message || "").slice(0, 300)}` : null,
+    error: failure ? `${failure}: ${detail}` : null,
+    raw: failure && text ? text.slice(0, 60000) : null, // lo que respondió la IA, para revisarlo
   });
 
-  if (failure) return reply(failure === "quota" ? 503 : 502, { error: failure });
-  return reply(200, { text, model, remaining: DAILY_CALLS - (count ?? 0) - 1 });
+  if (failure) {
+    // Sin cuota en ninguna clave no sirve reintentar; el resto de fallos sí
+    const canRetry = failure !== "quota" && attempt < MAX_ATTEMPTS;
+    return reply(failure === "quota" ? 503 : 502, { error: failure, canRetry });
+  }
+  return reply(200, { text, model, remaining: DAILY_TEXTS - delivered - 1 });
 });
