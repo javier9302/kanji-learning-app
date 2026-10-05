@@ -171,13 +171,14 @@ function studyCards() {
       const entry = wordEntry(rec.id);
       if (!entry || !hasKanjiChar(entry.w)) continue; // en kana no hay lectura que preguntar
       seen.add(rec.id);
+      if (entry.kana && !rec.studied) continue;       // casi siempre va en kana (有る): no se estudia
       if (!levelFits(entry.level, level)) continue;
       if (rec.studied) (isDue(rec) ? due : extra).push(card("word", entry, rec, isDue(rec) ? "due" : "extra"));
       else if (rec.status === "learning") learning.push(card("word", entry, rec, "new"));
       else if (rec.status !== "mastered") fresh.push(card("word", entry, rec, "new"));
     }
     for (const entry of BANK.words.values()) {
-      if (!seen.has(entry.id) && levelFits(entry.level, level)) fresh.push(card("word", entry, null, "new"));
+      if (!seen.has(entry.id) && !entry.kana && levelFits(entry.level, level)) fresh.push(card("word", entry, null, "new"));
     }
   }
 

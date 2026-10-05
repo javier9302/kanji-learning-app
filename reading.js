@@ -540,7 +540,7 @@ async function startPlacement(level) {
   const index = LEVELS.indexOf(level);
   await BANK.loadUpTo(level);
   const pool = (lv) => shuffle(levelVocabulary(lv)
-    .filter((word) => /\p{Script=Han}/u.test(word.w))
+    .filter((word) => !word.kana && /\p{Script=Han}/u.test(word.w))
     .map((word) => ({ lemma: word.w, reading: word.r, en: word.en, es: word.es })));
   const own = pool(level);
   const easier = index > 0 ? pool(LEVELS[index - 1]) : [];
@@ -713,12 +713,17 @@ function nextText() {
 /* Datos del usuario que necesita el prompt. Con niveles altos la lista entera
    no cabe: se manda el nivel dado por conocido y solo lo confirmado por el usuario. */
 function promptParams({ type, topic, length }) {
-  // Una escritura con varias lecturas se manda con la que el estudiante conoce: 角(かど)
-  const label = (lemma, reading) => (BANK.byWriting.get(lemma)?.length || 0) > 1 && reading
-    ? `${lemma}(${reading})` : lemma;
+  // Cómo se le escribe cada palabra a la IA:
+  // - si casi siempre va en kana, en kana (有る -> ある), para que no use su kanji;
+  // - si la escritura tiene varias lecturas, con la que el estudiante conoce: 角(かど).
+  const label = (lemma, reading) => {
+    const senses = BANK.byWriting.get(lemma) || [];
+    if (senses.length && senses.every((word) => word.kana)) return senses[0].r;
+    return senses.length > 1 && reading ? `${lemma}(${reading})` : lemma;
+  };
   const readingOf = new Map([...userWords.values()].map((w) => [w.lemma, w.reading]));
-  const all = [...knownLemmas()].map((lemma) =>
-    label(lemma, readingOf.get(lemma) || BANK.byWriting.get(lemma)?.[0].r));
+  const all = [...new Set([...knownLemmas()].map((lemma) =>
+    label(lemma, readingOf.get(lemma) || BANK.byWriting.get(lemma)?.[0].r)))];
   const params = {
     level: meta.reading.level, type, topic, length,
     known: all, assumedLevels: [],
@@ -762,7 +767,7 @@ TEXT
 - Make it enjoyable to read: one concrete situation with a small story arc, a surprise or a touch of humour. Sentences must connect with each other; never a list of unrelated textbook sentences.
 - Split it into short paragraphs (in a dialogue, one paragraph per speaker turn).
 - About 90% of the content words must be known words. Introduce at most ${fresh} new words (about 10%), useful ones at level ${level}.
-- Write with the kanji a normal text of this level would use.
+- Write with the kanji a normal text of this level would use. Words that Japanese normally writes in kana must stay in kana (ある, いる, する, できる, ください, たくさん, かわいい, おいしい): never use rare kanji spellings such as 有る, 居る, 為る, 出来る, 下さい or 沢山.
 
 OUTPUT
 Return ONLY one JSON object (no explanations, no markdown), with exactly this structure:
@@ -1029,7 +1034,8 @@ async function generateAndOpen(options) {
    9. LECTOR
    ========================================= */
 
-let reader = null; // { text, dictionary, canSkip, clicks: Map(clave -> clasificación), startedAt }
+let reader = null; // { text, dictionary, canSkip, clicks: Map(clave -> clasificación), panel, startedAt }
+// panel: lo que muestra el panel lateral: { kind: "word", s, t } | { kind: "sentence", s } | null
 
 const CLASSES = {
   new: "Nueva", kanji: "Conocía la palabra, no el kanji", check: "La conocía, solo comprobaba"
@@ -1041,7 +1047,7 @@ async function openText(id) {
   const canSkip = !text.readAt && await skipsUsed() < MAX_SKIPS; // un texto ya leído no se salta
   const dictionary = {};
   for (const sentence of text.data.sentences) Object.assign(dictionary, sentence.dictionary);
-  reader = { text, dictionary, canSkip, clicks: new Map(), startedAt: Date.now() };
+  reader = { text, dictionary, canSkip, clicks: new Map(), panel: null, startedAt: Date.now() };
   switchView("read");
 }
 
@@ -1065,7 +1071,8 @@ function rubyHTML(surface, reading) {
 
 function sentenceHTML(sentence, index, known) {
   const mode = prefs.furigana;
-  return sentence.tokens.map((token, tokenIndex) => {
+  const open = reader.panel;
+  const words = sentence.tokens.map((token, tokenIndex) => {
     const key = tokenKey(token);
     if (!key) return escapeHTML(token.surface);
 
@@ -1073,10 +1080,53 @@ function sentenceHTML(sentence, index, known) {
     const unknown = !UNCOUNTED_POS.has(token.pos) && !isKnownKey(key, known);
     const furigana = hasKanji && (mode === "all" || mode === "unknown" && unknown);
     const mark = reader.clicks.get(key);
-    return `<span class="tok${mark ? ` tok-${mark}` : ""}" role="button" tabindex="0"
+    const active = open?.kind === "word" && open.s === index && open.t === tokenIndex;
+    return `<span class="tok${mark ? ` tok-${mark}` : ""}${active ? " active" : ""}" role="button" tabindex="0"
       data-s="${index}" data-t="${tokenIndex}">${
         furigana ? rubyHTML(token.surface, token.reading) : escapeHTML(token.surface)}</span>`;
   }).join("");
+  // El botón 訳 enseña la traducción de la frase entera sin tener que tocar una palabra
+  return `<span class="sent${open?.s === index ? " active" : ""}" data-sent="${index}">${words}</span><button
+    class="sent-btn${open?.kind === "sentence" && open.s === index ? " on" : ""}" type="button" data-translate="${index}"
+    title="${t("Traducción de la frase")}" aria-label="${t("Traducción de la frase")}" lang="ja">訳</button>`;
+}
+
+const FURIGANA_MODES = [["unknown", "Nuevas"], ["all", "Todas"], ["none", "Ninguna"]];
+
+/* Panel junto al texto (debajo en móvil): la palabra tocada o la traducción de una frase */
+function panelHTML() {
+  const open = reader.panel;
+  if (!open) return `<p class="helper">${t("Toca una palabra para ver su lectura y significado, o 訳 para traducir la frase entera.")}</p>`;
+
+  const sentence = reader.text.data.sentences[open.s];
+  const close = `<button class="icon-btn pop-close" type="button" data-panel-close
+    title="${t("Cerrar")}" aria-label="${t("Cerrar")}">×</button>`;
+  const translation = escapeHTML(lang === "es" ? sentence.es : sentence.en);
+
+  if (open.kind === "sentence") {
+    return `${close}
+      <p class="panel-label">${t("Traducción de la frase")}</p>
+      <p class="panel-jp" lang="ja">${escapeHTML(sentence.jp)}</p>
+      <p class="panel-translation">${translation}</p>`;
+  }
+
+  const token = sentence.tokens[open.t];
+  const entry = reader.dictionary[token.lemma];
+  const meanings = lang === "es" && entry.meanings_es?.length ? entry.meanings_es : entry.meanings;
+  const current = reader.clicks.get(tokenKey(token));
+  return `${close}
+    <div class="pop-word" lang="ja">${escapeHTML(token.surface)}</div>
+    <div class="pop-reading" lang="ja">${escapeHTML(token.reading)}</div>
+    ${token.lemma !== token.surface ? `<p class="pop-lemma">${t("Forma de diccionario")}:
+      <span lang="ja">${escapeHTML(token.lemma)}（${escapeHTML(entry.reading)}）</span></p>` : ""}
+    <p class="meaning">${escapeHTML(meanings.join(", "))}</p>
+    <p class="helper">${escapeHTML(entry.pos || token.pos || "")}</p>
+    <div class="pop-actions">
+      ${Object.entries(CLASSES).map(([cls, label]) => `
+        <button class="button pop-${cls}${current === cls ? " chosen" : ""}" type="button"
+          data-class="${cls}">${t(label)}</button>`).join("")}
+    </div>
+    <button class="link-btn panel-more" type="button" data-translate="${open.s}">${t("Ver la traducción de la frase")}</button>`;
 }
 
 function renderReader() {
@@ -1090,7 +1140,7 @@ function renderReader() {
     else paragraphs.push([[sentence, index]]);
   });
   $("readArea").innerHTML = `
-    <div class="reader">
+    <div class="reader${reader.panel ? " has-panel" : ""}">
       <div class="reader-head">
         <div>
           <h3 lang="ja">${escapeHTML(text.title)}</h3>
@@ -1099,11 +1149,20 @@ function renderReader() {
         </div>
         <button id="readerCloseBtn" class="button button-quiet" type="button">${t("Salir")}</button>
       </div>
-      <p class="helper">${t("Toca cualquier palabra para ver su lectura, su significado y la traducción de la frase.")}</p>
-      <div class="reading-text" lang="ja">
-        ${paragraphs.map((group) => `
-        <p>${group.map(([sentence, index]) =>
-          `<span class="sent" data-sent="${index}">${sentenceHTML(sentence, index, known)}</span>`).join("")}</p>`).join("")}
+      <div class="reader-tools">
+        <span class="helper">Furigana</span>
+        <div class="toggle-group" role="group" aria-label="Furigana">
+          ${FURIGANA_MODES.map(([mode, label]) => `
+            <button class="toggle${prefs.furigana === mode ? " on" : ""}" type="button"
+              data-furigana="${mode}">${t(label)}</button>`).join("")}
+        </div>
+      </div>
+      <div class="reader-body">
+        <div class="reading-text" lang="ja">
+          ${paragraphs.map((group) => `
+          <p>${group.map(([sentence, index]) => sentenceHTML(sentence, index, known)).join("")}</p>`).join("")}
+        </div>
+        <aside id="readerPanel" class="reader-panel${reader.panel ? "" : " empty"}" aria-live="polite">${panelHTML()}</aside>
       </div>
       <div class="row-actions">
         ${canSkip ? `<button id="readerDiscardBtn" class="button button-outline" type="button">${t("Saltar: es muy difícil")}</button>` : ""}
@@ -1111,68 +1170,44 @@ function renderReader() {
       </div>
     </div>`;
 
-  $("readerCloseBtn").onclick = () => { closeWordPop(); reader = null; renderRead(); };
+  $("readerCloseBtn").onclick = () => { reader = null; renderRead(); };
   $("readerFinishBtn").onclick = () => finishReading(false);
   if (canSkip) $("readerDiscardBtn").onclick = () => finishReading(true);
 }
 
-/* ---------- Popup de palabra ---------- */
-
-function closeWordPop() {
-  $("wordPop").classList.add("hidden");
-  document.querySelectorAll(".tok.active, .sent.active").forEach((el) => el.classList.remove("active"));
+/* Vuelve a dibujar el lector sin mover el texto y deja a la vista lo que se tocó
+   (en móvil el panel ocupa la parte baja de la pantalla) */
+function refreshReader() {
+  const scroll = window.scrollY;
+  renderReader();
+  window.scrollTo(0, scroll);
+  const active = document.querySelector(".tok.active, .sent.active");
+  const panel = $("readerPanel");
+  if (!active || getComputedStyle(panel).position !== "fixed") return;
+  const hidden = active.getBoundingClientRect().bottom - (panel.getBoundingClientRect().top - 12);
+  if (hidden > 0) window.scrollBy({ top: hidden, behavior: "smooth" });
 }
 
-function openWordPop(element) {
-  const sentence = reader.text.data.sentences[Number(element.dataset.s)];
-  const token = sentence.tokens[Number(element.dataset.t)];
-  const entry = reader.dictionary[token.lemma];
-  const key = tokenKey(token);
-  if (!reader.clicks.has(key)) reader.clicks.set(key, "looked");
+function closeWordPop() {
+  if (reader) reader.panel = null;
+}
 
-  const meanings = lang === "es" && entry.meanings_es?.length ? entry.meanings_es : entry.meanings;
-  const current = reader.clicks.get(key);
-  const pop = $("wordPop");
-  pop.innerHTML = `
-    <button id="wordPopClose" class="icon-btn pop-close" type="button"
-      title="${t("Cerrar")}" aria-label="${t("Cerrar")}">×</button>
-    <div class="pop-word" lang="ja">${escapeHTML(token.surface)}</div>
-    <div class="pop-reading" lang="ja">${escapeHTML(token.reading)}</div>
-    ${token.lemma !== token.surface ? `<p class="pop-lemma">${t("Forma de diccionario")}:
-      <span lang="ja">${escapeHTML(token.lemma)}（${escapeHTML(entry.reading)}）</span></p>` : ""}
-    <p class="meaning">${escapeHTML(meanings.join(", "))}</p>
-    <p class="helper">${escapeHTML(entry.pos || token.pos || "")}</p>
-    <div class="pop-example">
-      <p lang="ja">${escapeHTML(sentence.jp)}</p>
-      <p class="pop-translation">${escapeHTML(lang === "es" ? sentence.es : sentence.en)}</p>
-    </div>
-    <div class="pop-actions">
-      ${Object.entries(CLASSES).map(([cls, label]) => `
-        <button class="button pop-${cls}${current === cls ? " chosen" : ""}" type="button"
-          data-class="${cls}">${t(label)}</button>`).join("")}
-    </div>`;
-
-  document.querySelectorAll(".tok.active, .sent.active").forEach((el) => el.classList.remove("active"));
-  element.classList.add("active");
-  element.closest(".sent").classList.add("active"); // en pantallas táctiles no hay hover
-  pop.classList.remove("hidden");
-
-  // En escritorio aparece bajo la palabra; en móvil el CSS lo fija abajo
-  const rect = element.getBoundingClientRect();
-  const width = Math.min(340, window.innerWidth - 24);
-  pop.style.top = `${rect.bottom + window.scrollY + 8}px`;
-  pop.style.left = `${Math.max(12, Math.min(rect.left, window.innerWidth - width - 12)) + window.scrollX}px`;
-
-  $("wordPopClose").onclick = closeWordPop;
-  pop.querySelectorAll("[data-class]").forEach((button) => {
-    button.onclick = () => classifyWord(key, token.lemma, entry.reading, button.dataset.class);
-  });
+function showPanel(panel) {
+  reader.panel = panel;
+  if (panel?.kind === "word") {
+    const key = tokenKey(reader.text.data.sentences[panel.s].tokens[panel.t]);
+    if (!reader.clicks.has(key)) reader.clicks.set(key, "looked");
+  }
+  refreshReader();
 }
 
 /* New: no la conocía. Kanji: conocía la palabra pero no su escritura.
    Check: la conocía; queda como posiblemente conocida hasta la evaluación. */
-async function classifyWord(key, lemma, reading, cls) {
-  const mine = userWords.get(key) || blankUserWord(lemma, reading);
+async function classifyWord(cls) {
+  const { s, t: index } = reader.panel;
+  const token = reader.text.data.sentences[s].tokens[index];
+  const key = tokenKey(token);
+  const mine = userWords.get(key) || blankUserWord(token.lemma, reader.dictionary[token.lemma].reading);
   if (reader.clicks.get(key) === "looked" || !reader.clicks.has(key)) mine.lookups++;
   mine.lastSeen = Date.now();
 
@@ -1182,16 +1217,12 @@ async function classifyWord(key, lemma, reading, cls) {
 
   reader.clicks.set(key, cls);
   await saveUserWord(mine);
-  closeWordPop();
-  const scroll = window.scrollY;
-  renderReader();
-  window.scrollTo(0, scroll);
+  if (reader) refreshReader(); // el panel sigue abierto, con la opción elegida marcada
 }
 
 /* ---------- Fin de la lectura ---------- */
 
 async function finishReading(discarded) {
-  closeWordPop();
   const { text, clicks, startedAt } = reader;
   const now = Date.now();
 
@@ -1430,21 +1461,35 @@ function renderRead() {
 function bindReader() {
   const area = $("readArea");
   area.addEventListener("click", (event) => {
-    const token = event.target.closest(".tok");
-    if (token) openWordPop(token);
+    if (!reader) return;
+    const pick = (selector) => event.target.closest(selector);
+    const token = pick(".tok"), translate = pick("[data-translate]");
+    if (token) {
+      const panel = { kind: "word", s: Number(token.dataset.s), t: Number(token.dataset.t) };
+      const same = reader.panel?.kind === "word" && reader.panel.s === panel.s && reader.panel.t === panel.t;
+      return showPanel(same ? null : panel); // tocar otra vez la misma palabra cierra el panel
+    }
+    if (translate) {
+      const s = Number(translate.dataset.translate);
+      const same = reader.panel?.kind === "sentence" && reader.panel.s === s;
+      return showPanel(same ? null : { kind: "sentence", s });
+    }
+    if (pick("[data-panel-close]")) return showPanel(null);
+    if (pick("[data-class]")) return classifyWord(pick("[data-class]").dataset.class);
+    if (pick("[data-furigana]")) {
+      prefs.furigana = $("furiganaSelect").value = pick("[data-furigana]").dataset.furigana;
+      saveLocal("kanji-prefs", prefs);
+      refreshReader();
+    }
   });
   area.addEventListener("keydown", (event) => {
     if ((event.key === "Enter" || event.key === " ") && event.target.matches(".tok")) {
       event.preventDefault();
-      openWordPop(event.target);
+      event.target.click();
     }
   });
-  // Se cierra al tocar fuera o con Escape
-  document.addEventListener("click", (event) => {
-    if (!event.target.closest("#wordPop, .tok")) closeWordPop();
-  });
   document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape") closeWordPop();
+    if (event.key === "Escape" && reader?.panel) showPanel(null);
   });
 
   // Ajustes de lectura

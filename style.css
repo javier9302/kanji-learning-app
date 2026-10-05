@@ -2028,3 +2028,153 @@ div.hard-item {
   font: 500 20px 'Noto Sans JP', sans-serif;
   letter-spacing: 2px;
 }
+
+/* Lector: herramientas, traducción por frase y panel que no tapa el texto */
+
+.reader-tools {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 10px 0 0;
+}
+
+.toggle-group {
+  display: inline-flex;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.toggle {
+  padding: 6px 13px;
+  border: 0;
+  background: var(--white);
+  color: var(--muted);
+  font: 600 11px 'DM Sans', sans-serif;
+  cursor: pointer;
+  transition: background .15s, color .15s;
+}
+
+.toggle + .toggle {
+  border-left: 1px solid var(--line-strong);
+}
+
+.toggle.on {
+  background: var(--mint);
+  color: var(--green);
+}
+
+.toggle:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+
+.reader-body {
+  display: grid;
+  gap: 8px 22px;
+}
+
+.sent-btn {
+  margin: 0 6px 0 2px;
+  padding: 1px 5px;
+  vertical-align: middle;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: var(--white);
+  color: var(--muted);
+  font: 500 11px 'Noto Sans JP', sans-serif;
+  line-height: 1.5;
+  cursor: pointer;
+  transition: background .15s, color .15s, border-color .15s;
+}
+
+.sent-btn:hover,
+.sent-btn.on {
+  background: var(--mint);
+  border-color: var(--focus);
+  color: var(--green);
+}
+
+.sent-btn:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.reader-panel {
+  position: relative;
+  padding: 16px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+}
+
+.reader-panel .meaning {
+  margin: 8px 0 2px;
+}
+
+.panel-label {
+  margin: 0 0 8px;
+  padding-right: 34px;
+  color: var(--label);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.panel-jp {
+  margin: 0 0 8px;
+  font: 400 15px 'Noto Sans JP', sans-serif;
+  line-height: 1.8;
+}
+
+.panel-translation {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.panel-more {
+  margin-top: 12px;
+}
+
+@media (min-width: 900px) {
+  .reader-body {
+    grid-template-columns: minmax(0, 1fr) 300px;
+    align-items: start;
+  }
+
+  .reader-panel {
+    position: sticky;
+    top: 16px;
+  }
+}
+
+/* Pantallas estrechas: el panel es una hoja fija abajo y el texto deja hueco para ella */
+@media (max-width: 899px) {
+  .reader-panel {
+    position: fixed;
+    left: 8px;
+    right: 8px;
+    bottom: 12px;
+    z-index: 30;
+    max-height: 44vh;
+    overflow-y: auto;
+    background: var(--white);
+    border-color: var(--line-strong);
+    box-shadow: 0 -8px 30px rgba(20, 30, 60, .16);
+    animation: view-in .15s ease;
+  }
+
+  .reader-panel.empty {
+    display: none;
+  }
+
+  .reader.has-panel {
+    padding-bottom: 46vh;
+  }
+}
+
+@media (max-width: 760px) {
+  .reader-panel {
+    bottom: calc(70px + env(safe-area-inset-bottom));
+  }
+}

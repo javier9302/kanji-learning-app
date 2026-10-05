@@ -82,7 +82,7 @@ TEXT
 - Make it enjoyable to read: one concrete situation with a small story arc, a surprise or a touch of humour. Sentences must connect with each other; never a list of unrelated textbook sentences.
 - Split it into short paragraphs (in a dialogue, one paragraph per speaker turn).
 - About 90% of the content words must be known words. Introduce at most ${fresh} new words (about 10%), useful ones at level ${level}.
-- Write with the kanji a normal text of this level would use.
+- Write with the kanji a normal text of this level would use. Words that Japanese normally writes in kana must stay in kana (ある, いる, する, できる, ください, たくさん, かわいい, おいしい): never use rare kanji spellings such as 有る, 居る, 為る, 出来る, 下さい or 沢山.
 
 OUTPUT
 Return ONLY one JSON object (no explanations, no markdown), with exactly this structure:

@@ -99,8 +99,12 @@ const EN = {
   "Medio (unas 100 palabras)": "Medium (about 100 words)",
   "Largo (unas 150 palabras)": "Long (about 150 words)",
   "Salir": "Exit",
-  "Toca cualquier palabra para ver su lectura, su significado y la traducción de la frase.":
-    "Tap any word to see its reading, its meaning and the translation of the sentence.",
+  "Traducción de la frase": "Sentence translation",
+  "Toca una palabra para ver su lectura y significado, o 訳 para traducir la frase entera.":
+    "Tap a word to see its reading and meaning, or 訳 to translate the whole sentence.",
+  "Ver la traducción de la frase": "See the sentence translation",
+  "Nuevas": "New ones",
+  "Ninguna": "None",
   "Saltar: es muy difícil": "Skip: too difficult",
   "TU TEXTO PENDIENTE": "YOUR PENDING TEXT",
   "Termina este texto para crear otro. Si es demasiado difícil puedes saltarlo (te quedan {n}).":

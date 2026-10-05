@@ -3,13 +3,16 @@
    Banco común de palabras y kanjis, igual para todos los estudiantes.
    Son dos entidades distintas:
 
-   PALABRA  { id, w, r, en, es, alt, amb, level, kanji }
+   PALABRA  { id, w, r, en, es, alt, amb, kana, level, kanji }
      id     "escritura|lectura"  (la lectura en hiragana)       角|かど
      w, r   escritura y su ÚNICA lectura correcta
      en/es  significado en inglés / español
      alt    otras lecturas de la MISMA palabra (にほん / にっぽん): no son un fallo
      amb    true si la misma escritura tiene otra lectura con otro significado
             (角 かど "esquina" y 角 つの "cuerno"): se muestra con su significado
+     kana   true si casi siempre se escribe en kana (有る -> ある). No se
+            estudia su lectura ni se usa de ejemplo de sus kanjis, y a la IA
+            se le pide en kana para que no escriba 有ります
      kanji  kanjis que la componen
 
    KANJI    { c, en, es, on, kun, level, words }
@@ -44,9 +47,9 @@ const BANK = {
       this.kanji.set(c, { c, en, es, on, kun, level, words: [] });
     }
     const fresh = [];
-    for (const [w, r, en, es, alt = [], amb = 0] of data.words) {
+    for (const [w, r, en, es, alt = [], amb = 0, kana = 0] of data.words) {
       const word = {
-        id: this.id(w, r), w, r, en, es, alt, amb: !!amb, level,
+        id: this.id(w, r), w, r, en, es, alt, amb: !!amb, kana: !!kana, level,
         kanji: [...new Set([...w].filter((ch) => ch !== "々" && /\p{Script=Han}/u.test(ch)))]
       };
       this.words.set(word.id, word);
@@ -60,12 +63,13 @@ const BANK = {
   /* Relaciona cada kanji con las palabras donde aparece (también de otros niveles) */
   link(fresh) {
     for (const word of fresh) {
+      if (word.kana) continue; // no sirve de ejemplo de un kanji que casi nunca lleva
       for (const c of word.kanji) this.kanji.get(c)?.words.push(word);
     }
     // Un kanji de un nivel recién cargado puede aparecer en palabras cargadas antes
     const known = new Set(fresh);
     for (const word of this.words.values()) {
-      if (known.has(word)) continue;
+      if (known.has(word) || word.kana) continue;
       for (const c of word.kanji) {
         const kanji = this.kanji.get(c);
         if (kanji && !kanji.words.includes(word)) kanji.words.push(word);
