@@ -17,9 +17,9 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js" defer></script>
   <script src="config.js" defer></script>
   <script src="i18n.js" defer></script>
-  <script src="jlpt-lists.js" defer></script>
-  <script src="kanji-data.js" defer></script>
+  <script src="bank/bank.js" defer></script>
   <script src="reading.js" defer></script>
+  <script src="study.js" defer></script>
   <script src="app.js" defer></script>
 </head>
 <body>
@@ -83,7 +83,6 @@
 
     <nav class="subtabs hidden" data-group="words" aria-label="Mis palabras">
       <button class="subtab" data-view="progress" type="button">Estadísticas</button>
-      <button class="subtab" data-view="manage" type="button">Mis listas</button>
     </nav>
 
     <!-- LECTURA -->
@@ -164,11 +163,19 @@
 
       <div class="panel study-settings">
         <label class="field">
+          <span>Modo</span>
+          <select id="studyMode">
+            <option value="type">Escribir la lectura</option>
+            <option value="flash">Tarjetas (autoevaluación)</option>
+          </select>
+        </label>
+
+        <label class="field">
           <span>Contenido</span>
           <select id="studyType">
-            <option value="kanji">Kanjis</option>
             <option value="word">Palabras</option>
-            <option value="mixed">Mixto</option>
+            <option value="kanji">Kanjis</option>
+            <option value="mixed">Palabras y kanjis</option>
           </select>
         </label>
 
@@ -181,14 +188,6 @@
             <option>N2</option>
             <option>N1</option>
             <option value="ALL">Todos</option>
-          </select>
-        </label>
-
-        <label class="field">
-          <span>Modo</span>
-          <select id="studyMode">
-            <option value="type">Escribir la lectura</option>
-            <option value="flash">Tarjetas (autoevaluación)</option>
           </select>
         </label>
 
@@ -207,16 +206,7 @@
         </button>
       </div>
 
-      <div id="studyArea" class="study-area">
-        <div class="empty-state">
-          <div class="empty-icon">学</div>
-          <h3>Tu próxima sesión empieza aquí</h3>
-          <p>Agrega una lista base JLPT o tu propia lista en “Mis listas” y luego inicia un repaso.</p>
-          <button class="button button-outline" data-go="manage" type="button">
-            Agregar contenido
-          </button>
-        </div>
-      </div>
+      <div id="studyArea" class="study-area"></div>
     </section>
 
     <!-- ESCRITURA -->
@@ -226,7 +216,7 @@
           <p class="eyebrow">ESCRITURA</p>
           <h2>Dibuja el kanji</h2>
         </div>
-        <span id="drawCount" class="pill">0 aprendidos</span>
+        <span id="drawCount" class="pill"></span>
       </div>
 
       <div class="panel draw-settings">
@@ -242,109 +232,12 @@
           </select>
         </label>
         <p class="helper">
-          Aparecen los kanjis que ya has acertado al menos una vez.
-          Dibuja cada trazo en su orden y dirección.
+          Se pide un kanji cada vez, por su significado y con una palabra de
+          ejemplo. Dibuja cada trazo en su orden y dirección.
         </p>
       </div>
 
       <div id="drawArea" class="study-area"></div>
-    </section>
-
-    <!-- ADMINISTRAR LISTAS -->
-    <section id="view-manage" class="view hidden">
-      <div class="section-heading">
-        <div>
-          <p class="eyebrow">TU CONTENIDO</p>
-          <h2>Mis listas</h2>
-        </div>
-        <span id="itemCount" class="pill">0 elementos</span>
-      </div>
-
-      <div class="panel">
-        <h3>Listas base JLPT</h3>
-        <p class="helper">
-          Kanjis y palabras de cada nivel, listos para agregar con un clic. Las
-          lecturas y los significados se buscan automáticamente.
-        </p>
-        <div id="baseLists"></div>
-        <p id="baseMessage" class="message" role="status"></p>
-      </div>
-
-      <div class="panel">
-        <div class="form-grid">
-          <label class="field">
-            <span>Tipo de contenido</span>
-            <select id="importType">
-              <option value="kanji">Kanjis</option>
-              <option value="word">Palabras</option>
-            </select>
-          </label>
-
-          <label class="field">
-            <span>Nivel JLPT</span>
-            <select id="importLevel">
-              <option>N5</option>
-              <option>N4</option>
-              <option selected>N3</option>
-              <option>N2</option>
-              <option>N1</option>
-            </select>
-          </label>
-        </div>
-
-        <label class="field">
-          <span id="listLabel">Lista de kanjis</span>
-          <textarea id="listInput" rows="4"
-            placeholder="政, 議, 民, 経, 済"></textarea>
-        </label>
-
-        <div class="form-footer">
-          <p class="helper">
-            Separa los elementos con comas, punto y coma
-            o saltos de línea. Los duplicados se omiten y las
-            lecturas y significados se buscan automáticamente.
-          </p>
-          <button id="addBtn" class="button button-primary" type="button">
-            Agregar a mis listas
-          </button>
-        </div>
-        <p id="addMessage" class="message" role="status"></p>
-      </div>
-
-      <div class="list-toolbar">
-        <h3>Elementos guardados</h3>
-        <div class="list-filters">
-          <select id="filterType" aria-label="Filtrar por tipo">
-            <option value="">Tipo: todos</option>
-            <option value="kanji">Kanjis</option>
-            <option value="word">Palabras</option>
-          </select>
-          <select id="filterLevel" aria-label="Filtrar por nivel">
-            <option value="">Nivel: todos</option>
-            <option>N5</option>
-            <option>N4</option>
-            <option>N3</option>
-            <option>N2</option>
-            <option>N1</option>
-          </select>
-          <select id="filterStatus" aria-label="Filtrar por estado">
-            <option value="">Estado: todos</option>
-            <option value="due">Para repasar hoy</option>
-            <option value="new">Sin estudiar</option>
-            <option value="learning">Aprendiendo</option>
-            <option value="mature">Consolidados</option>
-            <option value="nodict">Sin lectura</option>
-          </select>
-          <input id="filterInput" class="search" type="search"
-            placeholder="Buscar kanji, lectura o significado…">
-        </div>
-      </div>
-      <p id="lookupMessage" class="message" role="status"></p>
-
-      <div id="itemsList" class="items-list"></div>
-      <button id="moreBtn" class="button button-outline more-btn hidden" type="button">
-        Mostrar más
-      </button>
     </section>
 
     <!-- PROGRESO -->
@@ -563,21 +456,6 @@
 
       <div class="panel import-panel">
         <div>
-          <h3>Descargar mis datos</h3>
-          <p class="helper">
-            Descarga un archivo JSON con tus kanjis, palabras y progreso de repaso.
-            Para tenerlos en otro dispositivo, inicia sesión con tu cuenta.
-          </p>
-        </div>
-        <div class="import-actions">
-          <button id="exportBtn" class="button button-outline" type="button">
-            ↓ Exportar JSON
-          </button>
-        </div>
-      </div>
-
-      <div class="panel import-panel">
-        <div>
           <h3>Lectura</h3>
           <p class="helper">Furigana sobre las palabras y nivel de los textos que se te proponen.</p>
         </div>
@@ -611,66 +489,10 @@
         </div>
       </div>
 
-      <div class="panel import-panel">
-        <div>
-          <h3>Diccionario</h3>
-          <p id="dictSummary" class="helper"></p>
-        </div>
-        <div class="import-actions">
-          <button id="retryLookupsBtn" class="button button-outline" type="button">
-            Volver a consultar
-          </button>
-        </div>
-      </div>
     </section>
   </main>
 
-  <dialog id="editDialog" class="dialog">
-    <form id="editForm" method="dialog">
-      <div class="dialog-head">
-        <span id="editSymbol" class="dialog-symbol"></span>
-        <div>
-          <h3 id="editTitle"></h3>
-          <p id="editSub" class="helper"></p>
-        </div>
-      </div>
 
-      <label class="field">
-        <span>Nivel JLPT</span>
-        <select id="editLevel">
-          <option>N5</option>
-          <option>N4</option>
-          <option>N3</option>
-          <option>N2</option>
-          <option>N1</option>
-        </select>
-      </label>
-
-      <label class="field">
-        <span>Lecturas aceptadas (separadas por comas)</span>
-        <input id="editReadings" class="search" type="text" lang="ja"
-          autocomplete="off" spellcheck="false">
-      </label>
-
-      <label class="field">
-        <span>Significados (separados por comas)</span>
-        <input id="editMeanings" class="search" type="text" autocomplete="off">
-      </label>
-
-      <div class="dialog-actions">
-        <button id="editResetBtn" class="button button-quiet" type="button">
-          Reiniciar progreso
-        </button>
-        <span class="spacer"></span>
-        <button class="button button-secondary" type="submit" value="cancel">
-          Cancelar
-        </button>
-        <button id="editSaveBtn" class="button button-primary" type="submit" value="save">
-          Guardar
-        </button>
-      </div>
-    </form>
-  </dialog>
 
   <dialog id="authDialog" class="dialog">
     <form id="authForm">

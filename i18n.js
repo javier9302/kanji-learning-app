@@ -128,6 +128,29 @@ const EN = {
   "Ahora no": "Not now",
   "Evaluación": "Evaluation",
 
+  /* ---------- study.js: estudio y escritura sobre el banco ---------- */
+  "Palabras y kanjis": "Words and kanji",
+  "Se pide un kanji cada vez, por su significado y con una palabra de ejemplo. Dibuja cada trazo en su orden y dirección.":
+    "One kanji is asked at a time, by its meaning and with an example word. Draw each stroke in its order and direction.",
+  "No se pudo cargar el contenido de este nivel": "The content for this level could not be loaded",
+  "Comprueba la conexión y vuelve a intentarlo.": "Check your connection and try again.",
+  "Pulsa “Iniciar repaso” para empezar. Primero salen los repasos pendientes y después elementos nuevos.":
+    "Press “Start review” to begin. Reviews that are due come first, then new items.",
+  "No queda nada por estudiar con estos filtros. Cambia el contenido o el nivel.":
+    "Nothing left to study with these filters. Change the content or the level.",
+  "¿Qué significa este kanji?": "What does this kanji mean?",
+  "Escribe la lectura (hiragana)": "Type the reading (hiragana)",
+  "Esa lectura también existe, pero aquí se pide la más habitual.":
+    "That reading also exists, but here we want the most usual one.",
+  "Esa es la lectura de otro significado ({meaning}).": "That is the reading of another meaning ({meaning}).",
+  "kanji disponible": "kanji available",
+  "kanjis disponibles": "kanji available",
+  "Aún no hay kanjis para escribir": "No kanji to write yet",
+  "Aquí aparecen los kanjis de las palabras que ya has acertado al estudiar o que dominas al leer.":
+    "The kanji of the words you have answered correctly when studying, or that you master when reading, appear here.",
+  "Escribe el kanji que significa:": "Write the kanji that means:",
+  "Usado en:": "Used in:",
+
   /* ---------- estadísticas de lectura ---------- */
   "Palabras vistas": "Words seen",
   "Sabes leer": "You can read",

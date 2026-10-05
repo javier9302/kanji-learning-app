@@ -12,7 +12,7 @@
      sessions   sesiones de lectura (se rellenan al leer)
    ========================================= */
 
-const READING_STORES = ["texts", "words", "userWords", "sessions"];
+const READING_STORES = ["texts", "words", "userWords", "userKanji", "sessions"];
 const MAX_SHOWN_ERRORS = 12;
 
 /* Tipos de palabra admitidos en los tokens */
@@ -75,6 +75,7 @@ async function clearReadingData() {
   deletedTexts = [];
   words = new Map();
   userWords = new Map();
+  userKanji = new Map();
 }
 
 /* =========================================
@@ -227,6 +228,10 @@ function validateText(raw) {
    3. GUARDAR UN TEXTO
    ========================================= */
 
+/* Palabras de un texto tal como las ve quien lee: todos los tokens salvo la puntuación */
+const wordCount = (data) => data.sentences.reduce((sum, sentence) =>
+  sum + sentence.tokens.filter((token) => token.pos !== "punctuation" && token.pos !== "symbol").length, 0);
+
 /* Palabras que cuentan para la cobertura: { "lemma|lectura": veces } */
 function countLemmas(data) {
   const lemmas = {};
@@ -357,7 +362,8 @@ function renderLibrary() {
       <div class="item-info">
         <div class="item-title" lang="ja">${escapeHTML(text.title)}</div>
         <div class="item-sub">
-          ${escapeHTML(title)} · ${escapeHTML(text.level)} · ${escapeHTML(text.topic)} · ${date}${
+          ${escapeHTML(title)} · ${escapeHTML(text.level)} · ${escapeHTML(text.topic)} ·
+          ${plural(wordCount(text.data), "palabra", "palabras")} · ${date}${
             shareTag(text) ? ` · ${shareTag(text)}` : ""}
         </div>
       </div>
@@ -452,39 +458,19 @@ const HARD_RATIO = 0.15;      // palabras marcadas como no conocidas a partir de
 const PLACEMENT_SIZE = 20;
 const PLACEMENT_PASS = 0.7;
 
-/* Vocabulario de un nivel: sus listas de palabras y las anclas de sus kanjis */
-const levelVocabulary = (() => {
-  const cache = {};
-  return (level) => cache[level] ??= (() => {
-    const list = new Map(); // palabra -> { lemma, reading, en, es } (si se conoce)
-    for (const word of JLPT_WORDS[level].split(",")) list.set(word, null);
-    // Palabras de un solo kanji: su nivel es el de la palabra, no el del kanji
-    for (const word of JLPT_SINGLE_WORDS[level]) {
-      const data = KANJI_DATA[word];
-      list.set(word, data?.w === word ? { lemma: word, reading: data.r, en: data.en, es: data.es } : null);
-    }
-    for (const kanji of JLPT_KANJI[level]) {
-      const data = KANJI_DATA[kanji];
-      if (data) list.set(data.w, { lemma: data.w, reading: data.r, en: data.en, es: data.es });
-    }
-    return list;
-  })();
-})();
+/* Vocabulario de un nivel: las palabras del banco (bank/bank.js) */
+const levelVocabulary = (level) => [...BANK.words.values()].filter((word) => word.level === level);
 
 const assumedLevels = () => LEVELS.slice(0, LEVELS.indexOf(meta.reading.assumed) + 1);
 
 function knownLemmas() {
   const known = new Set();
   for (const level of assumedLevels()) {
-    for (const word of levelVocabulary(level).keys()) known.add(word);
+    for (const word of levelVocabulary(level)) known.add(word.w);
   }
-  for (const item of items) {
-    if (!item.correctCount) continue;
-    known.add(item.type === "kanji" ? kanjiData(item)?.w || item.value : item.value);
-  }
-  // Lo que el usuario ha dicho al leer manda sobre lo supuesto
+  // Lo que el usuario ha demostrado (leyendo o estudiando) manda sobre lo supuesto
   for (const word of userWords.values()) {
-    if (KNOWN_STATUS.has(word.status)) known.add(word.lemma);
+    if (KNOWN_STATUS.has(word.status) || word.studied && word.canReadKanji) known.add(word.lemma);
     else known.delete(word.lemma);
   }
   return known;
@@ -494,7 +480,7 @@ function knownLemmas() {
    por nivel: se da por conocida mientras el usuario no la marque al leer. */
 function isKnownKey(key, known) {
   const mine = userWords.get(key);
-  if (mine) return KNOWN_STATUS.has(mine.status);
+  if (mine) return KNOWN_STATUS.has(mine.status) || !!(mine.studied && mine.canReadKanji);
   const lemma = key.split("|")[0];
   return known.has(lemma) || !/\p{Script=Han}/u.test(lemma);
 }
@@ -550,10 +536,12 @@ function renderOnboarding() {
   $("placementStartBtn").onclick = () => startPlacement($("placementLevel").value);
 }
 
-function startPlacement(level) {
+async function startPlacement(level) {
   const index = LEVELS.indexOf(level);
-  const pool = (lv) => shuffle([...levelVocabulary(lv).values()]
-    .filter((word) => word && /\p{Script=Han}/u.test(word.lemma)));
+  await BANK.loadUpTo(level);
+  const pool = (lv) => shuffle(levelVocabulary(lv)
+    .filter((word) => /\p{Script=Han}/u.test(word.w))
+    .map((word) => ({ lemma: word.w, reading: word.r, en: word.en, es: word.es })));
   const own = pool(level);
   const easier = index > 0 ? pool(LEVELS[index - 1]) : [];
   const fromEasier = easier.length ? Math.round(PLACEMENT_SIZE * 0.4) : 0;
@@ -652,7 +640,6 @@ async function finishPlacement() {
   }
   await putRecords("userWords", results.map(({ word }) => userWords.get(wordKey(word.lemma, word.reading))));
   await putRecords("words", fresh);
-  await addLearningToReview();
 
   const right = results.filter((r) => r.correct).length;
   placement = null;
@@ -686,6 +673,7 @@ const TEXT_TOPICS = [
 const TEXT_LENGTHS = [[50, "Corto (unas 50 palabras)"], [100, "Medio (unas 100 palabras)"], [150, "Largo (unas 150 palabras)"]];
 const PROMPT_WORD_LIMIT = 1500;
 
+const MIN_LENGTH_RATIO = 0.7; // por debajo de este % de la longitud pedida se pide a la IA que lo alargue
 const MAX_SKIPS = 3; // textos que se pueden saltar seguidos antes de tener que terminar uno
 
 /* Texto que el usuario tiene a medias: uno suyo sin leer. Mientras exista no
@@ -725,17 +713,21 @@ function nextText() {
 /* Datos del usuario que necesita el prompt. Con niveles altos la lista entera
    no cabe: se manda el nivel dado por conocido y solo lo confirmado por el usuario. */
 function promptParams({ type, topic, length }) {
-  const all = [...knownLemmas()];
+  // Una escritura con varias lecturas se manda con la que el estudiante conoce: 角(かど)
+  const label = (lemma, reading) => (BANK.byWriting.get(lemma)?.length || 0) > 1 && reading
+    ? `${lemma}(${reading})` : lemma;
+  const readingOf = new Map([...userWords.values()].map((w) => [w.lemma, w.reading]));
+  const all = [...knownLemmas()].map((lemma) =>
+    label(lemma, readingOf.get(lemma) || BANK.byWriting.get(lemma)?.[0].r));
   const params = {
     level: meta.reading.level, type, topic, length,
     known: all, assumedLevels: [],
-    learning: [...userWords.values()].filter((w) => w.status === "learning").map((w) => w.lemma).slice(0, 60)
+    learning: [...userWords.values()].filter((w) => w.status === "learning")
+      .map((w) => label(w.lemma, w.reading)).slice(0, 60)
   };
   if (all.length > PROMPT_WORD_LIMIT) {
-    const confirmed = new Set();
-    for (const item of items) if (item.correctCount) confirmed.add(kanjiData(item)?.w || item.value);
-    for (const w of userWords.values()) if (KNOWN_STATUS.has(w.status)) confirmed.add(w.lemma);
-    params.known = [...confirmed].slice(0, PROMPT_WORD_LIMIT);
+    params.known = [...userWords.values()].filter((w) => KNOWN_STATUS.has(w.status))
+      .map((w) => label(w.lemma, w.reading)).slice(0, PROMPT_WORD_LIMIT);
     params.assumedLevels = assumedLevels();
   }
   return params;
@@ -746,6 +738,9 @@ function promptParams({ type, topic, length }) {
    una, cambia la otra. No usa nada de fuera salvo TOKEN_POS. */
 function renderPrompt({ level, type, topic, length, known, assumedLevels, learning }) {
   const fresh = Math.round(length * 0.1);
+  // Las IA cuentan mal "palabras": se da un mínimo de tokens y su equivalente en oraciones
+  const minTokens = Math.round(length * 0.9), maxTokens = Math.round(length * 1.25);
+  const minSentences = Math.ceil(length / 9), maxSentences = Math.ceil(length / 6.5);
   const knownLine = assumedLevels.length
     ? `Known words: all standard JLPT ${assumedLevels.join(", ")} vocabulary` +
       (known.length ? `, plus: ${known.join("、")}` : ".")
@@ -758,10 +753,12 @@ function renderPrompt({ level, type, topic, length, known, assumedLevels, learni
 LEARNER
 - Target level: JLPT ${level}.
 - ${knownLine}
-${learning.length ? `- Words the learner is still learning (reuse a few of them): ${learning.join("、")}\n` : ""}
+${learning.length ? `- Words the learner is still learning (reuse a few of them): ${learning.join("、")}\n` : ""}- A word written with its reading in brackets, like 角(かど), has several readings: use it ONLY with that reading and its meaning (角(かど) is "corner", never つの "horn").
+
 TEXT
 - Type: ${type}. Topic: ${topic}.
-- Length: about ${length} words (count the tokens that are not punctuation), in natural Japanese with grammar no harder than JLPT ${level}.
+- LENGTH (strict): across all sentences, the "tokens" arrays must contain between ${minTokens} and ${maxTokens} tokens that are not punctuation. That is about ${minSentences}-${maxSentences} sentences. Count the tokens before answering: a text with fewer than ${minTokens} is rejected. If you are short, continue the story with more sentences; do not pad with filler.
+- Natural Japanese with grammar no harder than JLPT ${level}.
 - Make it enjoyable to read: one concrete situation with a small story arc, a surprise or a touch of humour. Sentences must connect with each other; never a list of unrelated textbook sentences.
 - Split it into short paragraphs (in a dialogue, one paragraph per speaker turn).
 - About 90% of the content words must be known words. Introduce at most ${fresh} new words (about 10%), useful ones at level ${level}.
@@ -989,13 +986,28 @@ async function generateAndOpen(options) {
 
   try {
     const params = promptParams(options);
+    // Un texto bien formado pero mucho más corto de lo pedido también se devuelve a la IA
+    const check = (raw) => {
+      const checked = validateText(raw);
+      if (!checked.errors.length) {
+        const count = wordCount(checked.text), minimum = Math.round(options.length * MIN_LENGTH_RATIO);
+        if (count < minimum) {
+          checked.short = true;
+          checked.errors = [`The text is too short: it has ${count} non-punctuation tokens and needs at least ${Math.round(options.length * 0.9)}. Keep the story and add sentences that continue it.`];
+        }
+      }
+      return checked;
+    };
+
     let answer = await requestText(params);
-    let result = validateText(answer.text);
+    let result = check(answer.text);
     if (result.errors.length) {
       // Un segundo intento: se le devuelven a la IA los errores del validador
       say(t("Revisando el formato del texto…"));
       answer = await requestText(params, { previous: answer.text, errors: result.errors.slice(0, 12) });
-      result = validateText(answer.text);
+      result = check(answer.text);
+      // Si tras el segundo intento solo falla la longitud, se acepta: es legible
+      if (result.short) result.errors = [];
     }
     if (result.errors.length) {
       throw [t("La IA no devolvió un texto válido. Inténtalo de nuevo."), ...result.errors];
@@ -1083,7 +1095,7 @@ function renderReader() {
         <div>
           <h3 lang="ja">${escapeHTML(text.title)}</h3>
           <p class="helper">${escapeHTML(lang === "es" ? text.titleEs : text.titleEn)} ·
-            ${escapeHTML(text.level)} · ${escapeHTML(text.topic)}</p>
+            ${escapeHTML(text.level)} · ${escapeHTML(text.topic)} · ${plural(wordCount(text.data), "palabra", "palabras")}</p>
         </div>
         <button id="readerCloseBtn" class="button button-quiet" type="button">${t("Salir")}</button>
       </div>
@@ -1170,7 +1182,6 @@ async function classifyWord(key, lemma, reading, cls) {
 
   reader.clicks.set(key, cls);
   await saveUserWord(mine);
-  await addLearningToReview();
   closeWordPop();
   const scroll = window.scrollY;
   renderReader();
@@ -1388,7 +1399,6 @@ async function finishEvaluation() {
 
   summary.record.evaluation = Object.fromEntries(results);
   await putRecords("sessions", [summary.record]);
-  await addLearningToReview();
   scheduleSync();
 
   evaluation = null;
@@ -1624,21 +1634,32 @@ const isOwnText = (text) => !text.owner || text.owner === sync.config.userId;
 const statePrint = (text) => `${text.readAt || 0}:${text.discardedAt || 0}:${text.hiddenAt || 0}`;
 const profilePrint = (profile) => `${profile.level}|${profile.assumed}|${profile.placedAt}`;
 
-/* Palabras de la evaluación inicial: su significado sale de las anclas */
-const anchorWords = (() => {
-  let index;
-  return () => index ??= new Map(Object.values(KANJI_DATA).map((data) => [data.w, data]));
-})();
-
+/* Una palabra del banco que llega solo como progreso: su significado sale del banco */
 function ensureWordEntry(mine) {
   if (words.has(mine.id)) return null;
-  const data = anchorWords().get(mine.lemma);
-  if (!data || normalizeReading(data.r) !== normalizeReading(mine.reading)) return null;
-  const entry = { id: mine.id, lemma: mine.lemma, reading: mine.reading, meanings: data.en,
-    meaningsEs: data.es, pos: "", source: "jmdict", updatedAt: Date.now() };
+  const word = BANK.words.get(mine.id);
+  if (!word) return null;
+  const entry = { id: mine.id, lemma: mine.lemma, reading: mine.reading, meanings: word.en,
+    meaningsEs: word.es, pos: "", source: "jmdict", updatedAt: Date.now() };
   words.set(entry.id, entry);
   return entry;
 }
+
+/* Campos de repaso espaciado, iguales en palabras y kanjis */
+const srsToRow = (record) => ({
+  studied: !!record.studied, repetitions: whole(record.repetitions), interval_days: whole(record.interval),
+  ease: Number(record.ease) || 2.5,
+  next_review: /^\d{4}-\d{2}-\d{2}$/.test(record.nextReview || "") ? record.nextReview : null,
+  last_reviewed: record.lastReviewed ? isoOf(Date.parse(record.lastReviewed)) : null,
+  correct_count: whole(record.correctCount), incorrect_count: whole(record.incorrectCount),
+  streak_days: whole(record.streakDays), last_correct_day: record.lastCorrectDay || null
+});
+const srsFromRow = (row) => ({
+  studied: !!row.studied, repetitions: row.repetitions || 0, interval: row.interval_days || 0,
+  ease: row.ease || 2.5, nextReview: row.next_review || today(), lastReviewed: row.last_reviewed || null,
+  correctCount: row.correct_count || 0, incorrectCount: row.incorrect_count || 0,
+  streakDays: row.streak_days || 0, lastCorrectDay: row.last_correct_day || ""
+});
 
 async function pullReading(userId) {
   const cursors = sync.config.cursors;
@@ -1720,7 +1741,8 @@ async function pullReading(userId) {
       id: row.id, lemma: row.lemma, reading: row.reading, status: row.status,
       canReadKanji: row.can_read_kanji, knowsMeaning: row.knows_meaning, canWrite: row.can_write,
       seen: row.seen, lookups: row.lookups, evalCorrect: row.eval_correct, evalWrong: row.eval_wrong,
-      firstSeen: msOf(row.first_seen), lastSeen: msOf(row.last_seen), updatedAt: stamp
+      firstSeen: msOf(row.first_seen), lastSeen: msOf(row.last_seen), updatedAt: stamp,
+      ...srsFromRow(row)
     };
     userWords.set(record.id, record);
     newer.push(record);
@@ -1733,6 +1755,25 @@ async function pullReading(userId) {
     changed = true;
   }
   last(rows, "user_words");
+
+  // Progreso por kanji
+  rows = await fetchChanged("user_kanji", "id", userId, cursors.user_kanji);
+  const newerKanji = [];
+  for (const row of rows) {
+    const stamp = Number(row.client_updated_at);
+    sync.pushed.kanji[row.id] = String(stamp);
+    const mine = userKanji.get(row.id);
+    if (mine && mine.updatedAt >= stamp) continue;
+    const record = {
+      id: row.id, status: row.status, knowsMeaning: row.knows_meaning, canWrite: row.can_write,
+      writes: row.writes || 0, firstSeen: msOf(row.first_seen), lastSeen: msOf(row.last_seen),
+      updatedAt: stamp, ...srsFromRow(row)
+    };
+    userKanji.set(record.id, record);
+    newerKanji.push(record);
+  }
+  if (newerKanji.length) { await putRecords("userKanji", newerKanji); changed = true; }
+  last(rows, "user_kanji");
 
   // Sesiones
   rows = await fetchChanged("reading_sessions", "id", userId, cursors.reading_sessions);
@@ -1753,10 +1794,7 @@ async function pullReading(userId) {
   }
   last(rows, "reading_sessions");
 
-  if (changed) {
-    await addLearningToReview();
-    refreshReadingViews();
-  }
+  if (changed) refreshReadingViews();
 }
 
 async function pushReading(userId) {
@@ -1814,8 +1852,17 @@ async function pushReading(userId) {
     seen: whole(word.seen), lookups: whole(word.lookups),
     eval_correct: whole(word.evalCorrect), eval_wrong: whole(word.evalWrong),
     first_seen: isoOf(word.firstSeen), last_seen: isoOf(word.lastSeen),
-    client_updated_at: Math.round(word.updatedAt)
+    client_updated_at: Math.round(word.updatedAt), ...srsToRow(word)
   })), changed.map((word) => [word.id, String(word.updatedAt)]), pushed.words);
+
+  // Progreso por kanji
+  const kanjiChanged = [...userKanji.values()].filter((k) => pushed.kanji[k.id] !== String(k.updatedAt));
+  await pushRows("user_kanji", "user_id,id", kanjiChanged.map((k) => ({
+    user_id: userId, id: k.id, status: k.status || "unknown",
+    knows_meaning: !!k.knowsMeaning, can_write: !!k.canWrite, writes: whole(k.writes),
+    first_seen: isoOf(k.firstSeen), last_seen: isoOf(k.lastSeen),
+    client_updated_at: Math.round(k.updatedAt), ...srsToRow(k)
+  })), kanjiChanged.map((k) => [k.id, String(k.updatedAt)]), pushed.kanji);
 
   // Sesiones
   const sessions = (await getAll("sessions")).filter((s) => pushed.sessions[s.id] !== (s.evaluation ? "e" : "s"));
@@ -1829,65 +1876,7 @@ async function pushReading(userId) {
 /* Tras descargar cambios se actualiza lo que esté a la vista, sin cortar una lectura en curso */
 function refreshReadingViews() {
   renderLibrary();
-  renderReadingStats();
+  renderAll();
   if (document.body.dataset.view === "read" && !reader && !placement && !evaluation) renderRead();
 }
 
-/* =========================================
-   13. LECTURA <-> REPASO
-   -----------------------------------------
-   Las palabras en estado "learning" entran solas en el repaso con
-   repetición espaciada, y lo que pasa en el repaso vuelve a la lectura:
-   - acertarla marca que sabe leerla; con dos aciertos seguidos pasa a
-     "pre_known" para que la siguiente evaluación confirme también el significado;
-   - fallarla la devuelve a "learning".
-   ========================================= */
-
-/* Nivel JLPT de una palabra según las listas; si no está, el nivel de lectura */
-function wordLevel(lemma) {
-  return LEVELS.find((level) => levelVocabulary(level).has(lemma)) || meta.reading.level || "N5";
-}
-
-/* Crea en el repaso las palabras "learning" con kanji que aún no estén */
-async function addLearningToReview() {
-  const known = new Set(items.map((i) => i.id));
-  const fresh = [];
-  for (const word of userWords.values()) {
-    if (word.status !== "learning" || !/\p{Script=Han}/u.test(word.lemma)) continue;
-    if (known.has(uid("word", word.lemma))) continue;
-    const entry = words.get(word.id);
-    const item = newItem("word", word.lemma, wordLevel(word.lemma));
-    item.source = "reading";
-    item.dictionary = {
-      v: DICT_VERSION,
-      source: "reading",
-      readings: [normalizeReading(word.reading)],
-      display: { words: [word.reading] },
-      meanings: entry?.meanings || []
-    };
-    item.lookupStatus = "found";
-    known.add(item.id);
-    fresh.push(item);
-  }
-  if (!fresh.length) return;
-  await saveItems(fresh);
-  items.push(...fresh);
-  renderAll();
-  scheduleSync();
-}
-
-/* El progreso de lectura de la palabra que hay detrás de un elemento de repaso */
-function userWordOf(item) {
-  const reading = item.dictionary?.readings?.[0];
-  return item.type === "word" && reading ? userWords.get(wordKey(item.value, reading)) : undefined;
-}
-
-/* Lo llama el repaso tras cada respuesta */
-async function onReviewGraded(item, correct) {
-  const word = userWordOf(item);
-  if (!word) return;
-  word.canReadKanji = correct;
-  if (!correct) word.status = "learning";
-  else if (word.status === "learning" && item.repetitions >= 2) word.status = "pre_known";
-  await saveUserWord(word);
-}

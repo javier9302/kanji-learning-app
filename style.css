@@ -414,7 +414,7 @@ body.studying .intro {
 
 .study-settings {
   display: grid;
-  grid-template-columns: 1fr 1fr 1.3fr .7fr auto;
+  grid-template-columns: 1.3fr 1fr 1fr .7fr auto;
   gap: 13px;
   align-items: end;
 }
@@ -2000,4 +2000,31 @@ div.hard-item {
 
 .read-rule {
   margin: 10px 2px 0;
+}
+
+/* Estudio y escritura sobre el banco */
+
+.card-sense {
+  margin: -18px 0 20px;
+  color: var(--muted);
+  font-size: 15px;
+}
+
+.draw-meaning {
+  margin: 4px 0 6px;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.draw-context {
+  margin: 0 0 6px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.draw-context strong {
+  color: var(--ink);
+  font: 500 20px 'Noto Sans JP', sans-serif;
+  letter-spacing: 2px;
 }

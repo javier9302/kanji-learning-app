@@ -5,8 +5,9 @@
 -- Se puede ejecutar más de una vez sin perder datos.
 -- =========================================
 
--- Elementos (kanjis y palabras) con su progreso de repaso.
--- La app trabaja con su copia local y sube aquí los cambios.
+-- Elementos (kanjis y palabras) del modelo antiguo, donde eran un mismo tipo
+-- de registro. La app ya no la usa (el progreso está en user_words y
+-- user_kanji); se conserva por si hiciera falta recuperar datos.
 create table if not exists public.items (
   user_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
   id text not null,                         -- "kanji:日" o "word:日曜日"
@@ -171,7 +172,47 @@ create table if not exists public.user_words (
   primary key (user_id, id)
 );
 
+-- Repaso espaciado de la palabra (sección Estudio)
+alter table public.user_words add column if not exists studied boolean not null default false;
+alter table public.user_words add column if not exists repetitions integer not null default 0;
+alter table public.user_words add column if not exists interval_days integer not null default 0;
+alter table public.user_words add column if not exists ease double precision not null default 2.5;
+alter table public.user_words add column if not exists next_review date;
+alter table public.user_words add column if not exists last_reviewed timestamptz;
+alter table public.user_words add column if not exists correct_count integer not null default 0;
+alter table public.user_words add column if not exists incorrect_count integer not null default 0;
+alter table public.user_words add column if not exists streak_days integer not null default 0;
+alter table public.user_words add column if not exists last_correct_day date;
+
 create index if not exists user_words_user_updated_idx on public.user_words (user_id, updated_at);
+
+-- Progreso del usuario por kanji: significado (Estudio) y escritura (Escribir).
+-- A un kanji suelto nunca se le pide la lectura; eso va en user_words.
+create table if not exists public.user_kanji (
+  user_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  id text not null,                           -- el carácter
+  status text not null default 'unknown' check (status in ('unknown', 'pre_known', 'learning', 'mastered')),
+  knows_meaning boolean not null default false,
+  can_write boolean not null default false,
+  writes integer not null default 0,
+  studied boolean not null default false,
+  repetitions integer not null default 0,
+  interval_days integer not null default 0,
+  ease double precision not null default 2.5,
+  next_review date,
+  last_reviewed timestamptz,
+  correct_count integer not null default 0,
+  incorrect_count integer not null default 0,
+  streak_days integer not null default 0,
+  last_correct_day date,
+  first_seen timestamptz,
+  last_seen timestamptz,
+  client_updated_at bigint not null default 0,
+  updated_at timestamptz not null default now(),
+  primary key (user_id, id)
+);
+
+create index if not exists user_kanji_user_updated_idx on public.user_kanji (user_id, updated_at);
 
 -- Sesiones de lectura: qué texto, cuándo, qué palabras se consultaron y la evaluación
 create table if not exists public.reading_sessions (
@@ -202,7 +243,7 @@ create table if not exists public.profiles (
 do $$
 declare tbl text;
 begin
-  foreach tbl in array array['texts', 'text_states', 'user_words', 'reading_sessions', 'profiles'] loop
+  foreach tbl in array array['texts', 'text_states', 'user_words', 'user_kanji', 'reading_sessions', 'profiles'] loop
     execute format('drop trigger if exists %I on public.%I', tbl || '_set_updated_at', tbl);
     execute format('create trigger %I before insert or update on public.%I
       for each row execute function public.set_updated_at()', tbl || '_set_updated_at', tbl);
@@ -285,7 +326,7 @@ create policy "texts_delete_own" on public.texts
 do $$
 declare tbl text;
 begin
-  foreach tbl in array array['text_states', 'user_words', 'reading_sessions', 'profiles'] loop
+  foreach tbl in array array['text_states', 'user_words', 'user_kanji', 'reading_sessions', 'profiles'] loop
     execute format('drop policy if exists %I on public.%I', tbl || '_select_own', tbl);
     execute format('create policy %I on public.%I for select to authenticated
       using ((select auth.uid()) = user_id)', tbl || '_select_own', tbl);

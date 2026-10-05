@@ -23,7 +23,8 @@ const MAX_OUTPUT_TOKENS = 30000;
 const LEVELS = ["N5", "N4", "N3", "N2", "N1"];
 const TYPES = ["short story", "dialogue", "diary entry", "message or email", "description", "simple news article"];
 const LENGTHS = [50, 100, 150];
-const JAPANESE = /^[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}ー々〆ヶ]{1,20}$/u;
+// Una palabra, opcionalmente con su lectura entre paréntesis: 角(かど)
+const JAPANESE = /^[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}ー々〆ヶ]{1,20}(\([\p{Script=Hiragana}\p{Script=Katakana}ー]{1,20}\))?$/u;
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -57,6 +58,9 @@ const TOKEN_POS = [
 // deno-lint-ignore no-explicit-any
 function renderPrompt({ level, type, topic, length, known, assumedLevels, learning }: any) {
   const fresh = Math.round(length * 0.1);
+  // Las IA cuentan mal "palabras": se da un mínimo de tokens y su equivalente en oraciones
+  const minTokens = Math.round(length * 0.9), maxTokens = Math.round(length * 1.25);
+  const minSentences = Math.ceil(length / 9), maxSentences = Math.ceil(length / 6.5);
   const knownLine = assumedLevels.length
     ? `Known words: all standard JLPT ${assumedLevels.join(", ")} vocabulary` +
       (known.length ? `, plus: ${known.join("、")}` : ".")
@@ -69,10 +73,12 @@ function renderPrompt({ level, type, topic, length, known, assumedLevels, learni
 LEARNER
 - Target level: JLPT ${level}.
 - ${knownLine}
-${learning.length ? `- Words the learner is still learning (reuse a few of them): ${learning.join("、")}\n` : ""}
+${learning.length ? `- Words the learner is still learning (reuse a few of them): ${learning.join("、")}\n` : ""}- A word written with its reading in brackets, like 角(かど), has several readings: use it ONLY with that reading and its meaning (角(かど) is "corner", never つの "horn").
+
 TEXT
 - Type: ${type}. Topic: ${topic}.
-- Length: about ${length} words (count the tokens that are not punctuation), in natural Japanese with grammar no harder than JLPT ${level}.
+- LENGTH (strict): across all sentences, the "tokens" arrays must contain between ${minTokens} and ${maxTokens} tokens that are not punctuation. That is about ${minSentences}-${maxSentences} sentences. Count the tokens before answering: a text with fewer than ${minTokens} is rejected. If you are short, continue the story with more sentences; do not pad with filler.
+- Natural Japanese with grammar no harder than JLPT ${level}.
 - Make it enjoyable to read: one concrete situation with a small story arc, a surprise or a touch of humour. Sentences must connect with each other; never a list of unrelated textbook sentences.
 - Split it into short paragraphs (in a dialogue, one paragraph per speaker turn).
 - About 90% of the content words must be known words. Introduce at most ${fresh} new words (about 10%), useful ones at level ${level}.
