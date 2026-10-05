@@ -47,17 +47,34 @@ const EN = {
   "TEXTO RECOMENDADO": "RECOMMENDED TEXT",
   "Leer ahora": "Read now",
   "No hay textos sin leer a tu nivel": "There are no unread texts at your level",
-  "Crea uno nuevo aquí abajo: la app prepara las instrucciones y tu IA favorita escribe el texto.":
-    "Create a new one below: the app prepares the instructions and your favourite AI writes the text.",
   "Crear un texto nuevo": "Create a new text",
   "Tipo de texto": "Text type",
   "Tema": "Topic",
   "Otro (escríbelo)": "Other (type it)",
   "Longitud": "Length",
   "Tu tema": "Your topic",
-  "1. Crea el prompt y cópialo. 2. Pégalo en tu IA (ChatGPT, Claude, Gemini…). 3. Pega aquí su respuesta.":
-    "1. Create the prompt and copy it. 2. Paste it into your AI (ChatGPT, Claude, Gemini…). 3. Paste its answer here.",
-  "Crear prompt": "Create prompt",
+  "Crea uno nuevo aquí abajo: elige tipo, tema y longitud, y la IA lo escribe para ti.":
+    "Create a new one below: choose type, topic and length, and the AI writes it for you.",
+  "La IA escribe un texto a tu medida con las palabras que ya conoces. Tarda alrededor de un minuto.":
+    "The AI writes a text tailored to you with the words you already know. It takes about a minute.",
+  "Modo manual": "Manual mode",
+  "Generar con IA": "Generate with AI",
+  "1. Copia el prompt. 2. Pégalo en tu IA (ChatGPT, Claude, Gemini…). 3. Pega aquí su respuesta.":
+    "1. Copy the prompt. 2. Paste it into your AI (ChatGPT, Claude, Gemini…). 3. Paste its answer here.",
+  "Inicia sesión para generar textos con IA.": "Sign in to generate texts with AI.",
+  "Has llegado al límite de hoy ({n} generaciones). Mañana podrás crear más, o usa el modo manual.":
+    "You have reached today's limit ({n} generations). You can create more tomorrow, or use manual mode.",
+  "La IA ha agotado su cuota por ahora. Inténtalo más tarde o usa el modo manual.":
+    "The AI has run out of quota for now. Try again later or use manual mode.",
+  "El texto salió demasiado largo y se cortó. Prueba con una longitud menor.":
+    "The text came out too long and was cut off. Try a shorter length.",
+  "La generación con IA aún no está configurada. Usa el modo manual.":
+    "AI generation is not set up yet. Use manual mode.",
+  "La IA no pudo escribir el texto. Inténtalo de nuevo o usa el modo manual.":
+    "The AI could not write the text. Try again or use manual mode.",
+  "La IA está escribiendo tu texto… puede tardar un minuto.": "The AI is writing your text… it may take a minute.",
+  "Revisando el formato del texto…": "Checking the text format…",
+  "La IA no devolvió un texto válido. Inténtalo de nuevo.": "The AI did not return a valid text. Try again.",
   "Prompt para la IA": "Prompt for the AI",
   "Copiar prompt": "Copy prompt",
   "Copiado.": "Copied.",
@@ -84,14 +101,23 @@ const EN = {
   "Salir": "Exit",
   "Toca cualquier palabra para ver su lectura, su significado y la traducción de la frase.":
     "Tap any word to see its reading, its meaning and the translation of the sentence.",
-  "Descartar: es muy difícil": "Discard: too difficult",
+  "Saltar: es muy difícil": "Skip: too difficult",
+  "TU TEXTO PENDIENTE": "YOUR PENDING TEXT",
+  "Termina este texto para crear otro. Si es demasiado difícil puedes saltarlo (te quedan {n}).":
+    "Finish this text to create another. If it is too difficult you can skip it ({n} left).",
+  "salto": "skip",
+  "saltos": "skips",
+  "Ya saltaste {n} textos seguidos: termina este para poder crear otro.":
+    "You have skipped {n} texts in a row: finish this one to be able to create another.",
+  "Tienes un texto sin terminar ({title}). Léelo o sáltalo antes de agregar otro.":
+    "You have an unfinished text ({title}). Read it or skip it before adding another.",
   "Terminar lectura": "Finish reading",
   "Cerrar": "Close",
   "Forma de diccionario": "Dictionary form",
   "Nueva": "New",
   "Conocía la palabra, no el kanji": "Knew the word, not the kanji",
   "La conocía, solo comprobaba": "Knew it, just checking",
-  "Texto descartado": "Text discarded",
+  "Texto saltado": "Text skipped",
   "En la evaluación: {mastered} y {learning}.": "In the evaluation: {mastered} and {learning}.",
   "palabra dominada": "word mastered",
   "palabras dominadas": "words mastered",

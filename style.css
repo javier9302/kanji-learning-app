@@ -1997,3 +1997,7 @@ div.hard-item {
 .profile-stats {
   margin-bottom: 16px;
 }
+
+.read-rule {
+  margin: 10px 2px 0;
+}

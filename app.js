@@ -2160,6 +2160,13 @@ async function signOut() {
 async function checkAdmin() {
   const { data, error } = await sb.rpc("is_admin");
   sync.isAdmin = !error && data === true;
+  sync.pendingTexts = 0;
+  if (sync.isAdmin) {
+    // Cuántos textos esperan aprobación, para avisar en el botón del panel
+    const { count } = await sb.from("texts").select("id", { count: "exact", head: true })
+      .eq("status", "pending").is("deleted_at", null);
+    sync.pendingTexts = count || 0;
+  }
   renderDataView();
 }
 
@@ -2314,6 +2321,8 @@ function renderDataView() {
     $("profileKanji").textContent = items.filter(isLearned).length;
   }
   $("adminLink").classList.toggle("hidden", !signedIn || !sync.isAdmin);
+  $("adminLink").textContent = t("Panel de administración") +
+    (sync.pendingTexts ? ` (${plural(sync.pendingTexts, "pendiente", "pendientes")})` : "");
   $("accountDisabled").textContent = accountsReady
     ? t("No se pudo cargar el servicio de cuentas. Comprueba la conexión y vuelve a abrir la app.")
     : t("Las cuentas no están configuradas en esta instalación (falta rellenar config.js).");

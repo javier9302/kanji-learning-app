@@ -18,7 +18,8 @@ Los nombres de los menús de Supabase y Cloudflare cambian de vez en cuando; si 
 2. Copia el contenido completo de [`supabase/schema.sql`](supabase/schema.sql), pégalo y pulsa **Run**.
 3. Comprueba en **Table Editor** que existen estas tablas, todas con RLS activado:
    - `items` y `days` (repaso de kanjis y palabras);
-   - `texts`, `text_states`, `user_words`, `reading_sessions` y `profiles` (lectura).
+   - `texts`, `text_states`, `user_words`, `reading_sessions` y `profiles` (lectura);
+   - `admins` (quién aprueba textos) y `generations` (registro de textos generados con IA).
 
 El archivo se puede volver a ejecutar sin perder datos. **Si ya lo ejecutaste antes de que existiera la lectura, ejecútalo otra vez**: crea las tablas nuevas y deja las anteriores como están. Hasta entonces la app mostrará «Faltan las tablas en Supabase».
 
@@ -76,6 +77,60 @@ update texts set status = 'approved' where id = 'PEGA-AQUI-EL-ID';
 ```
 
 Los usuarios no pueden aprobar sus propios textos: un trigger de la base de datos ignora cualquier cambio de `status` que no venga de un administrador o del panel. Un texto aprobado llega a los demás usuarios en su siguiente sincronización, con la etiqueta «De la comunidad».
+
+## Generar textos con IA (Gemini)
+
+El botón «Generar con IA» llama a una función del servidor, `generate-text`, que guarda la clave de la IA. Sin esta función el botón avisa de que no está configurado y sigue funcionando el «Modo manual».
+
+1. **Clave de Gemini.** Entra en <https://aistudio.google.com/apikey>, crea una API key y cópiala.
+2. **Tabla de registro.** Ejecuta de nuevo `supabase/schema.sql` (crea la tabla `generations`).
+3. **Secretos.** En Supabase, **Edge Functions → Secrets**, añade:
+
+| Secreto | Valor |
+|---|---|
+| `GEMINI_API_KEYS` | una o varias claves con etiqueta, separadas por comas: `personal=CLAVE1,reserva=CLAVE2` |
+| `GEMINI_API_KEY` | alternativa si solo tienes una clave (sin etiqueta) |
+| `GEMINI_MODEL` | opcional; por defecto `gemini-3.8-flash` |
+| `GEMINI_FALLBACK_MODEL` | opcional; por defecto `gemini-3.5-flash-lite` |
+| `DAILY_CALLS` | opcional; llamadas por usuario y día, por defecto `10` |
+
+4. **Desplegar la función.** En **Edge Functions → Deploy a new function → Via Editor**, ponle el nombre exacto `generate-text`, pega el contenido de [`supabase/functions/generate-text/index.ts`](supabase/functions/generate-text/index.ts) y despliega. Deja activada la verificación de JWT.
+
+   Con la CLI de Supabase, la alternativa es `supabase functions deploy generate-text`.
+
+Cómo funciona:
+
+- Solo responde a usuarios con sesión iniciada.
+- Cada usuario tiene un máximo de llamadas al día (`DAILY_CALLS`). Un texto gasta una llamada, o dos si la primera respuesta no pasa el validador y hay que pedir la corrección.
+- Las claves se prueban en orden. Si una se queda sin cuota o falla, se pasa a la siguiente; si fallan todas con el modelo principal, se repite con el de reserva.
+- La etiqueta de cada clave (lo que va antes del `=`) es lo que queda en el registro, nunca la clave. Escribe las claves solo en los secretos de Supabase: no las pongas en el código ni en el repositorio.
+- Cada llamada queda en la tabla `generations` con el modelo y los tokens usados. Para ver el consumo:
+
+```sql
+select key_label, model, count(*) as llamadas, sum(prompt_tokens) as entrada,
+       sum(output_tokens) as salida, sum((not ok)::int) as fallos
+from generations group by key_label, model;
+
+-- Claves que han fallado o se han quedado sin cuota (p. ej. "personal/gemini-3.8-flash:429")
+select created_at, attempts from generations
+where attempts is not null order by created_at desc limit 20;
+```
+
+Si cambias el texto del prompt en `reading.js` (función `renderPrompt`), copia el mismo cambio a la función y vuelve a desplegarla.
+
+## Avisos al administrador por correo (opcional)
+
+Para recibir un correo cada vez que alguien sube un texto que espera aprobación:
+
+1. Crea una cuenta en <https://resend.com> y una API key. Con el remitente de pruebas de Resend solo puedes enviarte correos a ti mismo (al correo de tu cuenta de Resend), que es justo este caso.
+2. En **Edge Functions → Secrets** añade `RESEND_API_KEY`, `ADMIN_EMAIL` (tu correo) y `ADMIN_URL` (la dirección de `admin.html`).
+3. Despliega la función `notify-admin` igual que la anterior, con el contenido de [`supabase/functions/notify-admin/index.ts`](supabase/functions/notify-admin/index.ts).
+4. En **Database → Webhooks → Create a new hook**:
+   - tabla `texts`, evento **Insert**;
+   - tipo **Supabase Edge Functions**, función `notify-admin`;
+   - añade la cabecera de autorización con la clave de servicio que ofrece el propio formulario.
+
+Aunque no configures el correo, en la app verás cuántos textos hay pendientes: el botón de tu perfil dice «Panel de administración (3 pendientes)».
 
 ## 4. Rellenar `config.js`
 

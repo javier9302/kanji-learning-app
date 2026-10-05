@@ -295,6 +295,7 @@ async function saveText(data, source = "manual") {
 /* Un texto propio se borra para todos; uno de otro usuario solo se oculta aquí */
 async function deleteText(id) {
   const text = texts.find((x) => x.id === id);
+  if (reader?.text === text) reader = null; // por si se quita desde la biblioteca mientras está abierto
   if (isOwnText(text)) {
     const gone = { id, owner: text.owner, deletedAt: Date.now() };
     await putRecords("texts", [gone]);
@@ -391,6 +392,9 @@ async function addTextFromInput() {
     return;
   }
 
+  if (pendingOwnText()) {
+    return showTextErrors([t("Tienes un texto sin terminar ({title}). Léelo o sáltalo antes de agregar otro.", { title: pendingOwnText().title })]);
+  }
   const { errors, text } = validateText(raw);
   if (errors.length) return showTextErrors(errors);
 
@@ -420,8 +424,14 @@ function bindLibrary() {
     const button = event.target.closest("[data-delete-text]");
     if (!button) return;
     const text = texts.find((x) => x.id === button.dataset.deleteText);
-    if (text && confirm(t("¿Eliminar el texto “{title}”?", { title: text.title }))) {
-      await deleteText(text.id);
+    if (!text) return;
+    // Quitar un texto propio sin leer es saltarlo: cuenta para el máximo
+    const skipping = isOwnText(text) && !text.readAt;
+    if (skipping && await skipsUsed() >= MAX_SKIPS) {
+      return alert(t("Ya saltaste {n} textos seguidos: termina este para poder crear otro.", { n: MAX_SKIPS }));
+    }
+    if (confirm(t("¿Eliminar el texto “{title}”?", { title: text.title }))) {
+      if (skipping) await skipText(text); else await deleteText(text.id);
       renderLibrary();
     }
   });
@@ -676,6 +686,32 @@ const TEXT_TOPICS = [
 const TEXT_LENGTHS = [[50, "Corto (unas 50 palabras)"], [100, "Medio (unas 100 palabras)"], [150, "Largo (unas 150 palabras)"]];
 const PROMPT_WORD_LIMIT = 1500;
 
+const MAX_SKIPS = 3; // textos que se pueden saltar seguidos antes de tener que terminar uno
+
+/* Texto que el usuario tiene a medias: uno suyo sin leer. Mientras exista no
+   puede crear otro; así nunca hay más de un texto incompleto. */
+const pendingOwnText = () => texts.find((text) =>
+  isOwnText(text) && !text.readAt && !text.discardedAt && !text.hiddenAt);
+
+/* Saltos seguidos: textos descartados desde la última lectura terminada */
+async function skipsUsed() {
+  const sessions = (await getAll("sessions")).sort((a, b) => b.finishedAt - a.finishedAt);
+  let used = 0;
+  while (used < sessions.length && sessions[used].discarded) used++;
+  return used;
+}
+
+/* Saltar un texto: se quita de la biblioteca del usuario y cuenta como salto */
+async function skipText(text, clicks = new Map(), startedAt = Date.now()) {
+  const record = {
+    id: newId(), textId: text.id, startedAt, finishedAt: Date.now(), discarded: true,
+    clicks: Object.fromEntries(clicks)
+  };
+  await putRecords("sessions", [record]);
+  await deleteText(text.id);
+  return record;
+}
+
 /* Texto sin leer con suficientes palabras conocidas; primero el más fácil */
 function nextText() {
   const known = knownLemmas();
@@ -686,32 +722,43 @@ function nextText() {
     .sort((a, b) => b.coverage - a.coverage || a.text.createdAt - b.text.createdAt)[0];
 }
 
-function buildPrompt({ type, topic, length }) {
-  const { level, assumed } = meta.reading;
-  const known = [...knownLemmas()];
-  const learning = [...userWords.values()].filter((w) => w.status === "learning").map((w) => w.lemma);
-  const fresh = Math.round(length * 0.1);
-
-  // Con niveles altos la lista entera no cabe: se da el nivel y lo confirmado por el usuario
-  let knownLine;
-  if (known.length <= PROMPT_WORD_LIMIT) {
-    knownLine = known.length
-      ? `Known words (the learner can read these): ${known.join("、")}`
-      : "Known words: none yet. Use only the most basic beginner vocabulary.";
-  } else {
+/* Datos del usuario que necesita el prompt. Con niveles altos la lista entera
+   no cabe: se manda el nivel dado por conocido y solo lo confirmado por el usuario. */
+function promptParams({ type, topic, length }) {
+  const all = [...knownLemmas()];
+  const params = {
+    level: meta.reading.level, type, topic, length,
+    known: all, assumedLevels: [],
+    learning: [...userWords.values()].filter((w) => w.status === "learning").map((w) => w.lemma).slice(0, 60)
+  };
+  if (all.length > PROMPT_WORD_LIMIT) {
     const confirmed = new Set();
     for (const item of items) if (item.correctCount) confirmed.add(kanjiData(item)?.w || item.value);
     for (const w of userWords.values()) if (KNOWN_STATUS.has(w.status)) confirmed.add(w.lemma);
-    knownLine = `Known words: all standard JLPT ${assumedLevels().join(", ")} vocabulary` +
-      (confirmed.size ? `, plus: ${[...confirmed].slice(0, PROMPT_WORD_LIMIT).join("、")}` : ".");
+    params.known = [...confirmed].slice(0, PROMPT_WORD_LIMIT);
+    params.assumedLevels = assumedLevels();
   }
+  return params;
+}
+
+/* El prompt en sí. IMPORTANTE: supabase/functions/generate-text/index.ts lleva
+   una copia de esta función (allí se genera el texto con la IA); si cambias
+   una, cambia la otra. No usa nada de fuera salvo TOKEN_POS. */
+function renderPrompt({ level, type, topic, length, known, assumedLevels, learning }) {
+  const fresh = Math.round(length * 0.1);
+  const knownLine = assumedLevels.length
+    ? `Known words: all standard JLPT ${assumedLevels.join(", ")} vocabulary` +
+      (known.length ? `, plus: ${known.join("、")}` : ".")
+    : known.length
+      ? `Known words (the learner can read these): ${known.join("、")}`
+      : "Known words: none yet. Use only the most basic beginner vocabulary.";
 
   return `You are writing a graded Japanese reading text for a learner.
 
 LEARNER
 - Target level: JLPT ${level}.
 - ${knownLine}
-${learning.length ? `- Words the learner is still learning (reuse a few of them): ${learning.slice(0, 60).join("、")}\n` : ""}
+${learning.length ? `- Words the learner is still learning (reuse a few of them): ${learning.join("、")}\n` : ""}
 TEXT
 - Type: ${type}. Topic: ${topic}.
 - Length: about ${length} words (count the tokens that are not punctuation), in natural Japanese with grammar no harder than JLPT ${level}.
@@ -765,8 +812,16 @@ RULES
 7. Sentence ids start at 1 and increase by 1. "paragraph" is the number of the paragraph the sentence belongs to, starting at 1.`;
 }
 
-function renderReadHome() {
-  const candidate = nextText();
+const buildPrompt = (options) => renderPrompt(promptParams(options));
+
+async function renderReadHome() {
+  const skips = await skipsUsed();
+  if (reader || placement || evaluation || document.body.dataset.view !== "read") return;
+
+  // Primero el texto que tiene a medias; si no hay, uno de la comunidad a su nivel
+  const own = pendingOwnText();
+  const candidate = own ? { text: own, coverage: textCoverage(own) } : nextText();
+  const canSkip = skips < MAX_SKIPS;
   const optionsOf = (list) => list.map(([value, label]) =>
     `<option value="${escapeHTML(String(value))}">${t(label)}</option>`).join("");
 
@@ -774,19 +829,26 @@ function renderReadHome() {
     ${candidate ? `
     <div class="panel read-next">
       <div>
-        <p class="eyebrow">${t("TEXTO RECOMENDADO")}</p>
+        <p class="eyebrow">${own ? t("TU TEXTO PENDIENTE") : t("TEXTO RECOMENDADO")}</p>
         <h3 lang="ja">${escapeHTML(candidate.text.title)}</h3>
         <p class="helper">${escapeHTML(lang === "es" ? candidate.text.titleEs : candidate.text.titleEn)} ·
           ${escapeHTML(candidate.text.level)} · ${t("{percent} % conocido", { percent: candidate.coverage })}</p>
       </div>
-      <button id="readNextBtn" class="button button-primary" type="button">${t("Leer ahora")} →</button>
-    </div>` : `
+      <div class="import-actions">
+        ${canSkip ? `<button id="readSkipBtn" class="button button-quiet" type="button">${t("Saltar: es muy difícil")}</button>` : ""}
+        <button id="readNextBtn" class="button button-primary" type="button">${t("Leer ahora")} →</button>
+      </div>
+    </div>
+    <p class="helper read-rule">${canSkip
+      ? t("Termina este texto para crear otro. Si es demasiado difícil puedes saltarlo (te quedan {n}).", { n: plural(MAX_SKIPS - skips, "salto", "saltos") })
+      : t("Ya saltaste {n} textos seguidos: termina este para poder crear otro.", { n: MAX_SKIPS })}</p>` : `
     <div class="empty-state">
       <div class="empty-icon" lang="ja">読</div>
       <h3>${t("No hay textos sin leer a tu nivel")}</h3>
-      <p>${t("Crea uno nuevo aquí abajo: la app prepara las instrucciones y tu IA favorita escribe el texto.")}</p>
+      <p>${t("Crea uno nuevo aquí abajo: elige tipo, tema y longitud, y la IA lo escribe para ti.")}</p>
     </div>`}
 
+    ${candidate ? "" : `
     <div class="panel">
       <h3>${t("Crear un texto nuevo")}</h3>
       <div class="form-grid prompt-grid">
@@ -801,11 +863,15 @@ function renderReadHome() {
       <label id="promptCustomField" class="field hidden"><span>${t("Tu tema")}</span>
         <input id="promptCustom" class="search" type="text" maxlength="80" autocomplete="off"></label>
       <div class="form-footer">
-        <p class="helper">${t("1. Crea el prompt y cópialo. 2. Pégalo en tu IA (ChatGPT, Claude, Gemini…). 3. Pega aquí su respuesta.")}</p>
-        <button id="promptBuildBtn" class="button button-primary" type="button">${t("Crear prompt")}</button>
+        <p class="helper">${t("La IA escribe un texto a tu medida con las palabras que ya conoces. Tarda alrededor de un minuto.")}</p>
+        <div class="import-actions">
+          <button id="promptBuildBtn" class="button button-quiet" type="button">${t("Modo manual")}</button>
+          <button id="generateBtn" class="button button-primary" type="button">✦ ${t("Generar con IA")}</button>
+        </div>
       </div>
 
       <div id="promptStep" class="hidden">
+        <p class="helper">${t("1. Copia el prompt. 2. Pégalo en tu IA (ChatGPT, Claude, Gemini…). 3. Pega aquí su respuesta.")}</p>
         <label class="field"><span>${t("Prompt para la IA")}</span>
           <textarea id="promptOutput" rows="6" readonly spellcheck="false"></textarea></label>
         <div class="inline-form">
@@ -820,27 +886,40 @@ function renderReadHome() {
         </div>
       </div>
       <div id="promptMessage" class="message" role="status"></div>
-    </div>`;
+    </div>`}`;
 
-  if (candidate) $("readNextBtn").onclick = () => openText(candidate.text.id);
+  if (candidate) {
+    $("readNextBtn").onclick = () => openText(candidate.text.id);
+    if (canSkip) $("readSkipBtn").onclick = async () => {
+      await skipText(candidate.text);
+      renderRead();
+    };
+    return; // con un texto pendiente no se muestra el formulario para crear otro
+  }
 
   $("promptLength").value = meta.reading.level === "N5" ? "50" : "100";
   $("promptTopic").onchange = () =>
     $("promptCustomField").classList.toggle("hidden", $("promptTopic").value !== "");
 
-  $("promptBuildBtn").onclick = () => {
+  /* Lo elegido en el formulario, o null (con aviso) si falta el tema */
+  const chosen = () => {
     const topic = $("promptTopic").value || $("promptCustom").value.trim();
-    if (!topic) {
-      $("promptMessage").className = "message";
-      $("promptMessage").textContent = t("Escribe un tema primero.");
-      return;
-    }
-    $("promptMessage").textContent = "";
-    $("promptOutput").value = buildPrompt({
-      type: $("promptType").value, topic, length: Number($("promptLength").value)
-    });
+    $("promptMessage").className = "message";
+    $("promptMessage").textContent = topic ? "" : t("Escribe un tema primero.");
+    return topic ? { type: $("promptType").value, topic, length: Number($("promptLength").value) } : null;
+  };
+
+  $("promptBuildBtn").onclick = () => {
+    const options = chosen();
+    if (!options) return;
+    $("promptOutput").value = buildPrompt(options);
     $("promptStep").classList.remove("hidden");
     $("promptCopied").textContent = "";
+  };
+
+  $("generateBtn").onclick = () => {
+    const options = chosen();
+    if (options) generateAndOpen(options);
   };
 
   $("promptCopyBtn").onclick = async () => {
@@ -871,22 +950,86 @@ function renderReadHome() {
   };
 }
 
+/* ---------- Generar el texto con la IA (función generate-text de Supabase) ---------- */
+
+/* Mensaje claro para cada fallo de la función */
+function generationMessage(code, limit) {
+  const messages = {
+    unauthorized: t("Inicia sesión para generar textos con IA."),
+    limit: t("Has llegado al límite de hoy ({n} generaciones). Mañana podrás crear más, o usa el modo manual.", { n: limit }),
+    quota: t("La IA ha agotado su cuota por ahora. Inténtalo más tarde o usa el modo manual."),
+    truncated: t("El texto salió demasiado largo y se cortó. Prueba con una longitud menor."),
+    not_configured: t("La generación con IA aún no está configurada. Usa el modo manual.")
+  };
+  return messages[code] || t("La IA no pudo escribir el texto. Inténtalo de nuevo o usa el modo manual.");
+}
+
+async function requestText(params, fix) {
+  const { data, error } = await sb.functions.invoke("generate-text", { body: fix ? { ...params, fix } : params });
+  if (!error) return data;
+  // Sin red, o la función no está desplegada todavía
+  if (!error.context?.json) throw new Error(navigator.onLine ? generationMessage("not_configured") : t("No hay conexión. Inténtalo de nuevo cuando tengas internet."));
+  const info = await error.context.json().catch(() => ({}));
+  throw new Error(generationMessage(error.context.status === 404 ? "not_configured" : info.error, info.limit));
+}
+
+async function generateAndOpen(options) {
+  const message = $("promptMessage");
+  if (!sb || !sync.user) {
+    message.className = "message";
+    message.textContent = generationMessage("unauthorized");
+    if (sb) openAuth("login");
+    return;
+  }
+
+  const button = $("generateBtn");
+  const say = (text) => { if (message.isConnected) { message.className = "message"; message.textContent = text; } };
+  button.disabled = true;
+  say(t("La IA está escribiendo tu texto… puede tardar un minuto."));
+
+  try {
+    const params = promptParams(options);
+    let answer = await requestText(params);
+    let result = validateText(answer.text);
+    if (result.errors.length) {
+      // Un segundo intento: se le devuelven a la IA los errores del validador
+      say(t("Revisando el formato del texto…"));
+      answer = await requestText(params, { previous: answer.text, errors: result.errors.slice(0, 12) });
+      result = validateText(answer.text);
+    }
+    if (result.errors.length) {
+      throw [t("La IA no devolvió un texto válido. Inténtalo de nuevo."), ...result.errors];
+    }
+    openText((await saveText(result.text, "api")).id);
+  } catch (error) {
+    if (!message.isConnected) return;
+    if (Array.isArray(error)) showTextErrors(error, message); // errores del validador
+    else {
+      message.className = "message incorrect";
+      message.textContent = error.message;
+    }
+  } finally {
+    button.disabled = false;
+  }
+}
+
 /* =========================================
    9. LECTOR
    ========================================= */
 
-let reader = null; // { text, dictionary, clicks: Map(clave -> clasificación), startedAt }
+let reader = null; // { text, dictionary, canSkip, clicks: Map(clave -> clasificación), startedAt }
 
 const CLASSES = {
   new: "Nueva", kanji: "Conocía la palabra, no el kanji", check: "La conocía, solo comprobaba"
 };
 
-function openText(id) {
+async function openText(id) {
   const text = texts.find((x) => x.id === id);
   if (!text) return;
+  const canSkip = !text.readAt && await skipsUsed() < MAX_SKIPS; // un texto ya leído no se salta
   const dictionary = {};
   for (const sentence of text.data.sentences) Object.assign(dictionary, sentence.dictionary);
-  reader = { text, dictionary, clicks: new Map(), startedAt: Date.now() };
+  reader = { text, dictionary, canSkip, clicks: new Map(), startedAt: Date.now() };
   switchView("read");
 }
 
@@ -925,7 +1068,7 @@ function sentenceHTML(sentence, index, known) {
 }
 
 function renderReader() {
-  const { text } = reader;
+  const { text, canSkip } = reader;
   const known = knownLemmas();
   // Las oraciones seguidas del mismo párrafo se leen como texto corrido
   const paragraphs = [];
@@ -951,14 +1094,14 @@ function renderReader() {
           `<span class="sent" data-sent="${index}">${sentenceHTML(sentence, index, known)}</span>`).join("")}</p>`).join("")}
       </div>
       <div class="row-actions">
-        <button id="readerDiscardBtn" class="button button-outline" type="button">${t("Descartar: es muy difícil")}</button>
+        ${canSkip ? `<button id="readerDiscardBtn" class="button button-outline" type="button">${t("Saltar: es muy difícil")}</button>` : ""}
         <button id="readerFinishBtn" class="button button-primary" type="button">${t("Terminar lectura")}</button>
       </div>
     </div>`;
 
   $("readerCloseBtn").onclick = () => { closeWordPop(); reader = null; renderRead(); };
   $("readerFinishBtn").onclick = () => finishReading(false);
-  $("readerDiscardBtn").onclick = () => finishReading(true);
+  if (canSkip) $("readerDiscardBtn").onclick = () => finishReading(true);
 }
 
 /* ---------- Popup de palabra ---------- */
@@ -1041,14 +1184,15 @@ async function finishReading(discarded) {
   const { text, clicks, startedAt } = reader;
   const now = Date.now();
 
-  if (discarded) text.discardedAt = now; else text.readAt = now;
-  text.updatedAt = now;
-  await putRecords("texts", [text]);
-  const record = {
-    id: newId(), textId: text.id, startedAt, finishedAt: now, discarded,
-    clicks: Object.fromEntries(clicks)
-  };
-  await putRecords("sessions", [record]);
+  let record;
+  if (discarded) {
+    record = await skipText(text, clicks, startedAt);
+  } else {
+    text.readAt = text.updatedAt = now;
+    await putRecords("texts", [text]);
+    record = { id: newId(), textId: text.id, startedAt, finishedAt: now, discarded, clicks: Object.fromEntries(clicks) };
+    await putRecords("sessions", [record]);
+  }
 
   const marked = [...clicks.values()].filter((cls) => cls === "new" || cls === "kanji").length;
   const unique = Object.keys(text.lemmas).length || 1;
@@ -1097,7 +1241,7 @@ function renderReadSummary({ discarded, looked, hard, easier, mastered, learning
   $("readArea").innerHTML = `
     <div class="empty-state">
       <div class="empty-icon">${discarded ? "…" : "✓"}</div>
-      <h3>${discarded ? t("Texto descartado") : t("Lectura terminada")}</h3>
+      <h3>${discarded ? t("Texto saltado") : t("Lectura terminada")}</h3>
       <p>${t("Consultaste {n} de este texto.", { n: plural(looked, "palabra", "palabras") })}
         ${mastered === undefined ? "" : t("En la evaluación: {mastered} y {learning}.", {
           mastered: plural(mastered, "palabra dominada", "palabras dominadas"),

@@ -300,3 +300,34 @@ begin
       using ((select auth.uid()) = user_id)', tbl || '_delete_own', tbl);
   end loop;
 end $$;
+
+-- =========================================
+-- GENERACIÓN DE TEXTOS CON IA
+-- =========================================
+
+-- Registro de cada llamada a la IA (función generate-text): sirve para el límite
+-- diario por usuario y para calcular costes por modelo. Solo la función puede
+-- leerla y escribirla (no hay políticas para los usuarios).
+create table if not exists public.generations (
+  id bigint generated always as identity primary key,
+  user_id uuid not null references auth.users (id) on delete cascade,
+  created_at timestamptz not null default now(),
+  model text,
+  level text,
+  length integer,
+  is_fix boolean not null default false,
+  prompt_tokens integer,
+  output_tokens integer,
+  thought_tokens integer,
+  ok boolean not null default false,
+  error text
+);
+
+-- Qué clave de la IA respondió y qué intentos fallaron antes (p. ej. "personal/gemini-3.8-flash:429")
+alter table public.generations add column if not exists key_label text;
+alter table public.generations add column if not exists attempts text;
+
+create index if not exists generations_user_created_idx on public.generations (user_id, created_at);
+
+alter table public.generations enable row level security;
+revoke all on public.generations from anon, authenticated;
