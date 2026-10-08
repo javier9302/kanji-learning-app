@@ -914,7 +914,45 @@ function bindSync() {
    15. EVENTOS
    ========================================= */
 
+/* Instalar como app (PWA). Chrome, Edge y Android avisan con "beforeinstallprompt"
+   y dejan instalar con un botón; Safari no, así que allí se explica el camino. */
+let installPrompt = null;
+
+function renderInstall() {
+  const standalone = matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+  const agent = navigator.userAgent;
+  const ios = /iPad|iPhone|iPod/.test(agent) || agent.includes("Mac") && navigator.maxTouchPoints > 1;
+  const safari = /Safari/.test(agent) && !/Chrome|Chromium|Edg|CriOS|FxiOS|Android/.test(agent);
+  $("installBtn").classList.toggle("hidden", standalone || !installPrompt);
+  $("installHelp").textContent = standalone ? t("Ya estás usando la app instalada.")
+    : installPrompt ? t("Instálala para abrirla desde tu pantalla de inicio o escritorio, a pantalla completa y también sin conexión.")
+    : ios ? t("En iPhone o iPad: abre esta página en Safari, pulsa Compartir y elige “Añadir a pantalla de inicio”.")
+    : safari ? t("En Safari para Mac: menú Archivo → “Añadir al Dock”.")
+    : t("Abre el menú del navegador y elige “Instalar app” o “Añadir a pantalla de inicio”. Si no aparece, usa Chrome o Edge.");
+}
+
+function bindInstall() {
+  window.addEventListener("beforeinstallprompt", (event) => {
+    event.preventDefault(); // se ofrece con nuestro botón, no con el aviso del navegador
+    installPrompt = event;
+    renderInstall();
+  });
+  window.addEventListener("appinstalled", () => {
+    installPrompt = null;
+    renderInstall();
+  });
+  $("installBtn").addEventListener("click", async () => {
+    if (!installPrompt) return;
+    installPrompt.prompt();
+    await installPrompt.userChoice.catch(() => {});
+    installPrompt = null; // cada aviso solo se puede usar una vez
+    renderInstall();
+  });
+  renderInstall();
+}
+
 function bindSettings() {
+  bindInstall();
   for (const id of ["studyType", "studyMode", "studyCount"]) {
     if ([...$(id).options].some((o) => o.value === String(prefs[id]))) $(id).value = prefs[id];
     $(id).addEventListener("change", () => {

@@ -5,7 +5,7 @@
    y, si falla, la copia guardada.
    ========================================= */
 
-const CACHE = "kanji-learning-v9";
+const CACHE = "kanji-learning-v10";
 const SHELL = [
   "./",
   "index.html",
@@ -22,6 +22,8 @@ const SHELL = [
   "app.js",
   "manifest.webmanifest",
   "icons/icon.svg",
+  "icons/icon-192.png",
+  "icons/icon-512.png",
   "https://unpkg.com/wanakana@5.3.1/wanakana.min.js",
   "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js"
 ];

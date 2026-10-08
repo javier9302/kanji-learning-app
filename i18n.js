@@ -9,6 +9,14 @@
 const LANGS = ["es", "en"];
 
 const EN = {
+  /* ---------- Instalar como app ---------- */
+  "Instalar la app": "Install the app",
+  "Instalar app": "Install app",
+  "Ya estás usando la app instalada.": "You are already using the installed app.",
+  "Instálala para abrirla desde tu pantalla de inicio o escritorio, a pantalla completa y también sin conexión.": "Install it to open it from your home screen or desktop, full screen and also offline.",
+  "En iPhone o iPad: abre esta página en Safari, pulsa Compartir y elige “Añadir a pantalla de inicio”.": "On iPhone or iPad: open this page in Safari, tap Share and choose “Add to Home Screen”.",
+  "En Safari para Mac: menú Archivo → “Añadir al Dock”.": "In Safari for Mac: File menu → “Add to Dock”.",
+  "Abre el menú del navegador y elige “Instalar app” o “Añadir a pantalla de inicio”. Si no aparece, usa Chrome o Edge.": "Open the browser menu and choose “Install app” or “Add to Home screen”. If it is not there, use Chrome or Edge.",
   /* ---------- Fase 2: repaso con FSRS y agregar palabra ---------- */
   "Agregar palabra": "Add a word",
   "TU VOCABULARIO": "YOUR VOCABULARY",

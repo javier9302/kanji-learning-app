@@ -3,9 +3,12 @@
   "short_name": "Kanji",
   "description": "Repaso de kanjis y palabras japonesas con repetición espaciada.",
   "lang": "es",
+  "id": "./",
   "start_url": ".",
   "scope": ".",
   "display": "standalone",
+  "orientation": "any",
+  "categories": ["education"],
   "background_color": "#f7f9f6",
   "theme_color": "#173f35",
   "icons": [
