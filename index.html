@@ -17,7 +17,10 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js" defer></script>
   <script src="config.js" defer></script>
   <script src="i18n.js" defer></script>
+  <script src="vendor/ts-fsrs/index.umd.js" defer></script>
   <script src="bank/bank.js" defer></script>
+  <script src="bank/frequency.js" defer></script>
+  <script src="study-config.js" defer></script>
   <script src="reading.js" defer></script>
   <script src="study.js" defer></script>
   <script src="app.js" defer></script>
@@ -83,6 +86,7 @@
 
     <nav class="subtabs hidden" data-group="words" aria-label="Mis palabras">
       <button class="subtab" data-view="progress" type="button">Estadísticas</button>
+      <button class="subtab" data-view="add" type="button">Agregar palabra</button>
     </nav>
 
     <!-- LECTURA -->
@@ -181,18 +185,6 @@
             <option value="word">Palabras</option>
             <option value="kanji">Kanjis</option>
             <option value="mixed">Palabras y kanjis</option>
-          </select>
-        </label>
-
-        <label class="field">
-          <span>Nivel JLPT</span>
-          <select id="studyLevel">
-            <option>N5</option>
-            <option>N4</option>
-            <option selected>N3</option>
-            <option>N2</option>
-            <option>N1</option>
-            <option value="ALL">Todos</option>
           </select>
         </label>
 
@@ -387,6 +379,44 @@
     </section>
 
     <!-- DATOS -->
+    <section id="view-add" class="view hidden">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">TU VOCABULARIO</p>
+          <h2>Agregar palabra</h2>
+        </div>
+      </div>
+
+      <form id="addWordForm" class="panel add-word" autocomplete="off">
+        <label class="field">
+          <span>Escritura</span>
+          <input id="addWriting" class="search" type="text" lang="ja" placeholder="勉強"
+            autocapitalize="off" spellcheck="false" required>
+        </label>
+        <label class="field">
+          <span>Lectura (hiragana)</span>
+          <input id="addReading" class="search" type="text" lang="ja" placeholder="べんきょう"
+            autocapitalize="off" spellcheck="false">
+        </label>
+        <label class="field">
+          <span>Significado (opcional)</span>
+          <input id="addMeaning" class="search" type="text" maxlength="120">
+        </label>
+        <p class="helper">Si la palabra está en nuestro banco, la lectura y el significado se rellenan solos.</p>
+        <div class="inline-form">
+          <button class="button button-primary" type="submit" value="learn">Quiero aprenderla</button>
+          <button class="button button-outline" type="submit" value="mastered">Ya la domino</button>
+        </div>
+        <p class="helper">
+          «Quiero aprenderla»: será la primera palabra nueva de tu próximo repaso. «Ya la domino»: no se presenta como nueva, vuelve a repasarse dentro de mucho y sus kanjis cuentan como conocidos.
+        </p>
+        <p id="addWordMessage" class="message" role="status"></p>
+      </form>
+
+      <h3 class="block-title">Palabras que agregaste</h3>
+      <ul id="addedWords" class="missed-list added-list"></ul>
+    </section>
+
     <section id="view-data" class="view hidden">
       <div class="section-heading">
         <div>
@@ -485,6 +515,21 @@
 
       <div class="panel import-panel">
         <div>
+          <h3>Repaso</h3>
+          <p class="helper">Palabras nuevas como máximo en cada sesión. Los repasos pendientes salen siempre antes y no cuentan.</p>
+        </div>
+        <div class="import-actions">
+          <input id="maxNewInput" class="search goal-input" type="number"
+            min="0" max="50" step="1" aria-label="Palabras nuevas por sesión">
+          <label class="check-line">
+            <input id="debugStudyInput" type="checkbox">
+            <span>Mostrar por qué sale cada palabra nueva</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="panel import-panel">
+        <div>
           <h3>Meta diaria</h3>
           <p class="helper">Número de respuestas que quieres hacer cada día.</p>
         </div>
@@ -504,6 +549,7 @@
           <a href="https://www.edrdg.org/" target="_blank" rel="noopener">Electronic Dictionary Research and Development Group</a>,
           bajo su <a href="https://www.edrdg.org/edrdg/licence.html" target="_blank" rel="noopener">licencia</a> (CC BY-SA 4.0).
           Los trazos de los kanjis son de <a href="https://kanjivg.tagaini.net/" target="_blank" rel="noopener">KanjiVG</a> (CC BY-SA 3.0).
+          El repaso espaciado usa <a href="https://github.com/open-spaced-repetition/ts-fsrs" target="_blank" rel="noopener">ts-fsrs</a> (MIT).
           El análisis del japonés lo hace <a href="https://github.com/takuyaa/kuromoji.js" target="_blank" rel="noopener">kuromoji.js</a>
           (Apache 2.0) con el diccionario IPADIC.
         </p>

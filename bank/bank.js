@@ -77,6 +77,23 @@ const BANK = {
     }
   },
 
+  frequency: {},         // id de palabra -> puesto en la lista de frecuencia
+  kanaByFrequency: [],   // palabras solo en kana, de más a menos frecuente
+  kanjiLevels: {},       // carácter -> nivel (de todo el banco, cargado o no)
+  setFrequency(ranks, kana) {
+    this.frequency = ranks;
+    this.kanaByFrequency = kana;
+  },
+  setKanjiLevels(byLevel) {
+    for (const [level, chars] of Object.entries(byLevel)) {
+      for (const c of chars) this.kanjiLevels[c] = level;
+    }
+  },
+  /* Nivel de un kanji aunque su nivel no esté descargado (null = fuera del banco) */
+  kanjiLevel(c) {
+    return this.kanji.get(c)?.level || this.kanjiLevels[c] || null;
+  },
+
   loaded(level) {
     return [...this.words.values()].some((word) => word.level === level);
   },

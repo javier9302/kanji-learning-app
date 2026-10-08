@@ -169,6 +169,26 @@ Cada palabra indica de dónde salió: del diccionario JMdict, solo de la IA, o s
 
 Sin sesión iniciada no se consulta el diccionario general ni se anotan palabras: se usa lo que explique la IA.
 
+## Repaso espaciado y palabras nuevas
+
+El repaso usa **FSRS** (`vendor/ts-fsrs`). Todo lo ajustable está en un solo archivo,
+[`study-config.js`](study-config.js): palabras nuevas por sesión, los pesos con los que se
+elige la siguiente palabra nueva (agregada a mano > vista en lecturas > kanjis conocidos >
+frecuencia), la regla de las palabras básicas con kanji avanzado y los parámetros de FSRS.
+Cámbialo, recarga la página y listo.
+
+- Tras actualizar la app hay que volver a ejecutar `supabase/schema.sql` en el SQL Editor:
+  añade las columnas `fsrs`, `origin` y `meaning` a `user_words`, y `fsrs` y `seen_at` a
+  `user_kanji`. Mientras no existan, la app sigue sincronizando sin esos datos.
+- El prompt ahora incluye palabras en kana preferentes: vuelve a desplegar la función
+  `generate-text` con el contenido nuevo de `supabase/functions/generate-text/index.ts`.
+- `bank/frequency.js` (el puesto de cada palabra del banco) se generó a partir de
+  `data/frecuencia_6000.tsv`. Esa lista **no se publica**: la carpeta `data/` está en
+  `.gitignore`. En `data/frecuencia_fuera_del_banco.tsv` quedan las palabras de la lista
+  que no están en el banco.
+- En **Ajustes → Repaso** se cambia el máximo de palabras nuevas y se activa la vista de
+  depuración, que muestra en **Repasar** la puntuación de cada palabra nueva y su porqué.
+
 ## Avisos al administrador por correo (opcional)
 
 Para recibir un correo cada vez que alguien sube un texto que espera aprobación:

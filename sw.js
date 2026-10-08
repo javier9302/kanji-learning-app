@@ -5,14 +5,17 @@
    y, si falla, la copia guardada.
    ========================================= */
 
-const CACHE = "kanji-learning-v8";
+const CACHE = "kanji-learning-v9";
 const SHELL = [
   "./",
   "index.html",
   "style.css",
   "config.js",
   "i18n.js",
+  "vendor/ts-fsrs/index.umd.js",
   "bank/bank.js",
+  "bank/frequency.js",
+  "study-config.js",
   "bank/n5.js",
   "reading.js",
   "study.js",

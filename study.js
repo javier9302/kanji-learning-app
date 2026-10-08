@@ -16,9 +16,12 @@
    Progreso del usuario:
      userWords  (reading.js)  por palabra, clave "escritura|lectura"
      userKanji  (aquí)        por kanji, clave el carácter
-   Los dos llevan los mismos campos de repaso espaciado: studied, repetitions,
-   interval, ease, nextReview, lastReviewed, correctCount, incorrectCount,
+   Los dos llevan los mismos campos de repaso espaciado: studied, fsrs (la
+   tarjeta de FSRS), nextReview, interval y repetitions (copias de la tarjeta
+   que usan las estadísticas), lastReviewed, correctCount, incorrectCount,
    streakDays y lastCorrectDay.
+
+   Los números que se pueden ajustar están en study-config.js.
    ========================================= */
 
 const MASTER_STREAK = 3;   // aciertos seguidos en días distintos para darla por dominada
@@ -84,33 +87,69 @@ async function loadStudyData() {
 
 const isDue = (record) => record.studied && record.nextReview <= today();
 
-/* Calcula, sin modificar nada, cómo quedaría el repaso tras una respuesta */
-function schedule(record, rating, card = {}) {
-  const ease = record.ease || 2.5;
-  const prev = record.interval || 0;
-  const reps = record.repetitions || 0;
+/* ---------- Repaso espaciado: FSRS (vendor/ts-fsrs) ----------
+   Cada registro guarda su tarjeta en record.fsrs. Una palabra nueva pasa por
+   unos pasos cortos (minutos) dentro de la misma sesión y después FSRS decide
+   cuántos días tarda en volver según lo bien que se recuerda. */
 
-  if (rating === "again") {
-    return { interval: 0, repetitions: 0, ease: Math.max(1.3, ease - 0.2) };
-  }
-  // Acertada tras fallarla en esta misma sesión: vuelve mañana.
-  if (card.failed) return { interval: 1, repetitions: 1, ease };
-  // Práctica extra (aún no tocaba): no cambia el calendario.
-  if (card.group === "extra") return { interval: prev, repetitions: reps, ease, keepDate: true };
+const RATING = { again: 1, hard: 2, good: 3, easy: 4 };
+const DAY_MS = 86400000;
+let scheduler = null;
+const fsrsScheduler = () => scheduler ??= FSRS.fsrs(FSRS.generatorParameters(STUDY_CONFIG.fsrs));
 
-  if (rating === "hard") {
-    return { interval: Math.max(1, Math.round(prev * 1.2)), repetitions: reps + 1, ease: Math.max(1.3, ease - 0.15) };
-  }
-  if (rating === "easy") {
-    return {
-      interval: reps === 0 ? 4 : Math.max(prev + 2, Math.round(prev * ease * 1.3)),
-      repetitions: reps + 1, ease: ease + 0.15
-    };
-  }
+/* Tarjeta FSRS de un registro. Lo repasado antes de FSRS se convierte: el
+   intervalo que tenía pasa a ser su estabilidad y la facilidad, su dificultad. */
+function fsrsCard(record, now = new Date()) {
+  if (record.fsrs) return { ...record.fsrs };
+  const card = FSRS.createEmptyCard(now);
+  if (!record.studied || !record.interval) return card;
+  const due = new Date(`${record.nextReview || today()}T00:00:00`);
   return {
-    interval: reps === 0 ? 1 : Math.max(prev + 1, reps === 1 ? 3 : Math.round(prev * ease)),
-    repetitions: reps + 1, ease
+    ...card, state: FSRS.State.Review, due,
+    stability: record.interval, scheduled_days: record.interval,
+    difficulty: Math.min(10, Math.max(1, 5 - ((record.ease || 2.5) - 2.5) * 5)),
+    reps: record.repetitions || 1,
+    last_review: record.lastReviewed ? new Date(record.lastReviewed) : new Date(due - record.interval * DAY_MS)
   };
+}
+
+/* Cómo quedaría la tarjeta tras una respuesta, sin modificar nada */
+const nextCard = (record, rating, now = new Date()) =>
+  fsrsScheduler().next(fsrsCard(record, now), now, RATING[rating]).card;
+
+/* Guarda la tarjeta en el registro, con las fechas como texto para IndexedDB y Supabase */
+function applyCard(record, card) {
+  record.fsrs = {
+    ...card, due: new Date(card.due).toISOString(),
+    last_review: card.last_review ? new Date(card.last_review).toISOString() : null
+  };
+  record.nextReview = isoDate(new Date(card.due));
+  record.interval = card.scheduled_days;
+  record.repetitions = card.reps;
+  record.studied = true;
+}
+
+/* Una tarjeta que ya se domina: entra directamente con un intervalo largo */
+function masteredCard(days, now = new Date()) {
+  return {
+    ...FSRS.createEmptyCard(now), state: FSRS.State.Review, reps: 1,
+    stability: days, difficulty: 4, scheduled_days: days,
+    due: new Date(now.getTime() + days * DAY_MS), last_review: now
+  };
+}
+
+/* Sigue en los pasos cortos: vuelve a salir en esta misma sesión */
+const staysInSession = (card) => card.scheduled_days === 0;
+
+/* "10 min", "3 d", "2 meses": cuánto falta para que vuelva a salir */
+function intervalLabel(card, now = new Date()) {
+  const minutes = Math.max(1, Math.round((new Date(card.due) - now) / 60000));
+  if (minutes < 60) return `${minutes} min`;
+  if (minutes < 60 * 24) return `${Math.round(minutes / 60)} h`;
+  const days = card.scheduled_days || Math.round(minutes / 1440);
+  if (days < 60) return `${days} d`;
+  if (days < 365) return plural(Math.round(days / 30), "mes", "meses");
+  return plural(Math.round(days / 36.5) / 10, "año", "años");
 }
 
 /* Elementos ya estudiados, con la forma que usan las estadísticas */
@@ -140,11 +179,6 @@ function studyItems() {
    2. QUÉ TOCA ESTUDIAR
    ========================================= */
 
-const levelFits = (entryLevel, level) => level === "ALL" || entryLevel === level || entryLevel === null;
-
-/* Tarjetas posibles con los filtros elegidos, por grupos:
-   due (toca repasar), fresh (nuevas, primero las que está aprendiendo al leer)
-   y extra (ya estudiadas que aún no tocan) */
 /* El contenido depende del modo. Escribir la lectura solo existe para
    palabras: en ese modo "Kanjis" y "Palabras y kanjis" ni se muestran.
    En el modo tarjetas están las tres opciones. */
@@ -159,27 +193,117 @@ function syncStudyControls() {
   }
 }
 
+const userLevel = () => meta.reading.level || "N5";
+const withinLevel = (level) => !level || BANK.LEVELS.indexOf(level) <= BANK.LEVELS.indexOf(userLevel());
+const maxNewCards = () => Math.max(0, Number(prefs.maxNew ?? STUDY_CONFIG.maxNewPerSession) || 0);
+
+/* De dónde salió una palabra: manual (la agregó el usuario), lectura o frecuencia (el banco) */
+const originOf = (rec) => rec?.origin || (rec && (rec.seen || rec.lookups) ? "lectura" : "frecuencia");
+
+/* Kanjis CONOCIDOS: los que el usuario marcó o acertó y los de las palabras
+   que domina (también las del nivel que se le dio por sabido). */
+function knownKanji() {
+  const known = new Set();
+  for (const level of assumedLevels()) {
+    for (const word of levelVocabulary(level)) {
+      if (!word.kana) for (const c of word.kanji) known.add(c);
+    }
+  }
+  for (const rec of userWords.values()) {
+    if (rec.status === "mastered" || rec.studied && rec.canReadKanji) {
+      for (const c of wordEntry(rec.id)?.kanji || []) known.add(c);
+    }
+  }
+  for (const rec of userKanji.values()) {
+    if (rec.knowsMeaning || rec.canWrite || rec.status === "mastered") known.add(rec.id);
+  }
+  return known;
+}
+
+/* Kanjis VISTOS: los que salieron en una lectura que el usuario terminó */
+function seenKanji() {
+  const seen = new Set();
+  for (const rec of userKanji.values()) if (rec.seenAt) seen.add(rec.id);
+  for (const text of texts) {
+    if (!text.readAt) continue;
+    for (const key of Object.keys(text.lemmas || {})) {
+      for (const c of kanjiOf(key.split("|")[0])) seen.add(c);
+    }
+  }
+  return seen;
+}
+
+/* Puntuación de una palabra nueva (pesos en study-config.js) y su porqué.
+   blocked: kanjis avanzados que aún no han salido en una lectura. */
+function scoreWord(entry, rec, known, seen) {
+  const W = STUDY_CONFIG.weights;
+  const manual = rec?.origin === "manual";
+  const reading = !!rec && (rec.seen > 0 || rec.lookups > 0 || rec.origin === "lectura");
+  const kanjiKnown = entry.kanji.filter((c) => known.has(c)).length;
+  const coverage = entry.kanji.length ? kanjiKnown / entry.kanji.length : 0;
+  const rank = BANK.frequency[entry.id] || 0;
+  const frequency = rank ? Math.max(0, 1 - (rank - 1) / STUDY_CONFIG.frequencyMaxRank) : 0;
+
+  const exempt = manual || !!rec?.knowsMeaning; // "Conozco la palabra pero no el kanji"
+  const blocked = !exempt && STUDY_CONFIG.basicWordLevels.includes(entry.level)
+    ? entry.kanji.filter((c) => STUDY_CONFIG.advancedKanjiLevels.includes(BANK.kanjiLevel(c)) && !seen.has(c))
+    : [];
+
+  return {
+    score: manual * W.manual + reading * W.reading + coverage * W.kanji + frequency * W.frequency,
+    manual, reading, kanjiKnown, kanjiTotal: entry.kanji.length, rank, blocked
+  };
+}
+
+/* Palabras nuevas posibles, de mayor a menor puntuación. Salen del banco
+   (hasta el nivel del usuario) y de las que el usuario agregó a mano o marcó
+   al leer. excluded: las que esperan a que su kanji avanzado salga en una lectura. */
+function newWordCandidates() {
+  const known = knownKanji(), seen = seenKanji();
+  const list = [], excluded = [];
+  const consider = (entry, rec) => {
+    const info = scoreWord(entry, rec, known, seen);
+    (info.blocked.length ? excluded : list).push({ kind: "word", id: entry.id, entry, rec, group: "new", info });
+  };
+
+  const mine = new Set();
+  for (const rec of userWords.values()) {
+    const entry = wordEntry(rec.id);
+    if (!entry) continue;
+    mine.add(rec.id);
+    if (rec.studied || rec.status === "mastered") continue;
+    if (!hasKanjiChar(entry.w) || entry.kana) continue; // en kana no hay lectura que preguntar
+    const manual = rec.origin === "manual";
+    // Por encima de su nivel, o fuera del banco, solo lo que el usuario pidió
+    if (entry.custom ? !manual && rec.status !== "learning" : !manual && !withinLevel(entry.level)) continue;
+    consider(entry, rec);
+  }
+  for (const entry of BANK.words.values()) {
+    if (!mine.has(entry.id) && !entry.kana && withinLevel(entry.level)) consider(entry, null);
+  }
+
+  const order = (a, b) => b.info.score - a.info.score ||
+    BANK.LEVELS.indexOf(a.entry.level) - BANK.LEVELS.indexOf(b.entry.level);
+  return { list: list.sort(order), excluded: excluded.sort(order) };
+}
+
+/* Tarjetas posibles, por grupos: due (toca repasar), fresh (nuevas, ya en el
+   orden en que se presentan) y extra (ya estudiadas que aún no tocan). */
 function studyCards() {
   const type = $("studyMode").value === "type" ? "word" : $("studyType").value;
-  const level = $("studyLevel").value;
-  const due = [], learning = [], fresh = [], extra = [];
+  const due = [], extra = [], fresh = [];
+  let excluded = [];
   const card = (kind, entry, rec, group) => ({ kind, id: entry.id || entry.c, entry, rec, group });
 
   if (type !== "kanji") {
-    const seen = new Set();
     for (const rec of userWords.values()) {
-      const entry = wordEntry(rec.id);
-      if (!entry || !hasKanjiChar(entry.w)) continue; // en kana no hay lectura que preguntar
-      seen.add(rec.id);
-      if (entry.kana && !rec.studied) continue;       // casi siempre va en kana (有る): no se estudia
-      if (!levelFits(entry.level, level)) continue;
-      if (rec.studied) (isDue(rec) ? due : extra).push(card("word", entry, rec, isDue(rec) ? "due" : "extra"));
-      else if (rec.status === "learning") learning.push(card("word", entry, rec, "new"));
-      else if (rec.status !== "mastered") fresh.push(card("word", entry, rec, "new"));
+      const entry = rec.studied && wordEntry(rec.id);
+      if (!entry || !hasKanjiChar(entry.w)) continue;
+      (isDue(rec) ? due : extra).push(card("word", entry, rec, isDue(rec) ? "due" : "extra"));
     }
-    for (const entry of BANK.words.values()) {
-      if (!seen.has(entry.id) && !entry.kana && levelFits(entry.level, level)) fresh.push(card("word", entry, null, "new"));
-    }
+    const candidates = newWordCandidates();
+    fresh.push(...candidates.list);
+    excluded = candidates.excluded;
   }
 
   if (type !== "word") {
@@ -190,26 +314,57 @@ function studyCards() {
         for (const c of wordEntry(rec.id)?.kanji || []) inKnownWords.add(c);
       }
     }
-    const later = [];
+    const first = [], later = [];
     for (const kanji of BANK.kanji.values()) {
-      if (!levelFits(kanji.level, level) || !meaningOf(kanji).length) continue;
+      if (!withinLevel(kanji.level) || !meaningOf(kanji).length) continue;
       const rec = userKanji.get(kanji.c);
       if (rec?.studied) (isDue(rec) ? due : extra).push(card("kanji", kanji, rec, isDue(rec) ? "due" : "extra"));
-      else (inKnownWords.has(kanji.c) ? learning : later).push(card("kanji", kanji, rec || null, "new"));
+      else if (rec?.status !== "mastered") (inKnownWords.has(kanji.c) ? first : later).push(card("kanji", kanji, rec || null, "new"));
     }
-    fresh.push(...later);
+    // En "Palabras y kanjis" se alternan: una palabra, un kanji
+    const kanjiFresh = [...first, ...later];
+    const words = fresh.splice(0);
+    for (let i = 0; i < Math.max(words.length, kanjiFresh.length); i++) {
+      if (words[i]) fresh.push(words[i]);
+      if (kanjiFresh[i]) fresh.push(kanjiFresh[i]);
+    }
   }
 
-  return {
-    due, extra: extra.sort((a, b) => a.rec.nextReview.localeCompare(b.rec.nextReview)),
-    fresh: [...shuffle(learning), ...shuffle(fresh)]
-  };
+  return { due, fresh, excluded, extra: extra.sort((a, b) => a.rec.nextReview.localeCompare(b.rec.nextReview)) };
 }
 
-/* El banco del nivel elegido se descarga la primera vez que hace falta */
-async function ensureStudyBank() {
-  const level = $("studyLevel").value;
-  await (level === "ALL" ? BANK.loadUpTo(meta.reading.level || "N5") : BANK.load(level));
+/* El banco se descarga hasta el nivel del usuario: por encima no se presentan palabras */
+const ensureStudyBank = () => BANK.loadUpTo(userLevel());
+
+/* Vista de depuración (Ajustes): por qué sale cada palabra nueva */
+function debugHTML(fresh, excluded) {
+  const row = ({ entry, info }) => `
+    <tr>
+      <td lang="ja">${escapeHTML(entry.w)}</td>
+      <td>${info.score.toFixed(2)}</td>
+      <td>${[
+        info.manual ? t("agregada a mano") : "",
+        info.reading ? t("vista en lecturas") : "",
+        t("kanjis conocidos {known}/{total}", { known: info.kanjiKnown, total: info.kanjiTotal }),
+        info.rank ? t("frecuencia n.º {rank}", { rank: info.rank }) : t("sin puesto de frecuencia"),
+        info.blocked.length ? t("espera al kanji {kanji}", { kanji: info.blocked.join("、") }) : ""
+      ].filter(Boolean).map(escapeHTML).join(" · ")}</td>
+    </tr>`;
+  const words = fresh.filter((card) => card.kind === "word");
+  return `
+    <details class="debug-panel" open>
+      <summary>${t("Depuración: próximas palabras nuevas")}</summary>
+      <p class="helper">${t("Puntuación = a mano × {manual} + lectura × {reading} + kanjis conocidos × {kanji} + frecuencia × {frequency}. Los pesos están en study-config.js.", STUDY_CONFIG.weights)}</p>
+      <div class="table-scroll"><table class="debug-table">
+        <thead><tr><th>${t("Palabra")}</th><th>${t("Puntos")}</th><th>${t("Por qué")}</th></tr></thead>
+        <tbody>${words.slice(0, 20).map(row).join("")}</tbody>
+      </table></div>
+      ${excluded.length ? `
+      <p class="helper">${t("{n} en espera: son básicas pero llevan un kanji avanzado que aún no ha salido en tus lecturas.", { n: plural(excluded.length, "palabra", "palabras") })}</p>
+      <div class="table-scroll"><table class="debug-table">
+        <tbody>${excluded.slice(0, 10).map(row).join("")}</tbody>
+      </table></div>` : ""}
+    </details>`;
 }
 
 async function renderStudyHome() {
@@ -225,22 +380,28 @@ async function renderStudyHome() {
   }
   if (session || $("againBtn")) return; // mientras cargaba empezó o terminó una sesión
 
-  const { due, fresh } = studyCards();
+  const { due, fresh, excluded } = studyCards();
+  const news = Math.min(fresh.length, maxNewCards());
   area.innerHTML = `
     <div class="empty-state">
       <div class="empty-icon" lang="ja">学</div>
-      <h3>${plural(due.length, "repaso pendiente", "repasos pendientes")} · ${plural(fresh.length, "nuevo", "nuevos")}</h3>
-      <p>${due.length || fresh.length
-        ? t("Pulsa “Iniciar repaso” para empezar. Primero salen los repasos pendientes y después elementos nuevos.")
-        : t("No queda nada por estudiar con estos filtros. Cambia el contenido o el nivel.")}</p>
-    </div>`;
+      <h3>${plural(due.length, "repaso pendiente", "repasos pendientes")} · ${plural(news, "nuevo", "nuevos")}</h3>
+      <p>${due.length || news
+        ? t("Pulsa “Iniciar repaso” para empezar. Primero salen los repasos pendientes y después, como mucho, {n} de tu nivel ({level}).", {
+            n: plural(maxNewCards(), "elemento nuevo", "elementos nuevos"), level: userLevel() })
+        : t("No queda nada por estudiar ahora. Lee un texto o agrega palabras en “Mis palabras”.")}</p>
+    </div>
+    ${prefs.debugStudy ? debugHTML(fresh, excluded) : ""}`;
 }
 
 async function startSession() {
   await ensureStudyBank().catch(() => {});
   const count = Number($("studyCount").value) || Infinity; // 0 = todas
   const { due, fresh, extra } = studyCards();
-  const queue = [...shuffle(due), ...fresh, ...extra].slice(0, count);
+  // Primero lo pendiente; después las nuevas, con su tope; el resto, práctica extra
+  const reviews = shuffle(due).slice(0, count);
+  const news = fresh.slice(0, Math.min(maxNewCards(), count - reviews.length));
+  const queue = [...reviews, ...news, ...extra].slice(0, count);
 
   if (!queue.length) {
     session = null;
@@ -345,7 +506,7 @@ function showCard() {
   area.innerHTML = `
     <div class="card">
       <div class="card-top">
-        <span class="pill">${card.failed ? t("Otra vez") : GROUP_LABEL()[card.group]}</span>
+        <span class="pill">${card.failed ? t("Otra vez") : card.attempts ? t("Aprendiendo") : GROUP_LABEL()[card.group]}</span>
         <span class="card-progress">${session.done + 1} / ${session.total}</span>
       </div>
       <div class="meter" aria-hidden="true">
@@ -365,6 +526,7 @@ function showCard() {
       </div>`}
       <p id="feedback" class="message"></p>
       <div id="answer"></div>
+      ${prefs.debugStudy && card.info ? `<p class="helper debug-line">${t("Puntos")}: ${card.info.score.toFixed(2)}</p>` : ""}
     </div>`;
 
   const feedback = $("feedback");
@@ -372,17 +534,22 @@ function showCard() {
 
   /* Muestra la respuesta y los botones para continuar: [valoración, etiqueta, clase] */
   function reveal(ratings, preferred) {
-    const days = (rating) => rating === "next" ? null : schedule(card.rec || {}, rating, card).interval;
+    const now = new Date();
+    // Debajo de cada botón, cuándo volvería a salir. La práctica extra no mueve el calendario.
+    const when = (rating) => rating === "next" || keepsDate(card, rating) ? ""
+      : ` · ${intervalLabel(nextCard(card.rec || {}, rating, now), now)}`;
     answer.innerHTML = `
       ${answerHTML(card)}
       <div class="card-actions">
         ${ratings.map(([rating, label, cls], i) => `
           <button class="button ${cls}" type="button" data-rate="${rating}">
             ${label}
-            <small>${i + 1}${days(rating) === null || card.group === "extra" && rating !== "again"
-              ? "" : ` · ${days(rating) ? `${days(rating)} d` : t("hoy")}`}</small>
+            <small>${i + 1}${when(rating)}</small>
           </button>`).join("")}
-      </div>`;
+      </div>
+      ${ratings.length > 1 ? `<p class="helper rating-help">${ratings.some(([rating]) => rating === "again")
+        ? t("Otra vez: no la sabías, vuelve a salir en esta sesión. Difícil: te costó. Bien: la recordaste. Fácil: la sabías al instante. Debajo de cada botón ves cuándo volverá a salir.")
+        : t("Difícil: te costó. Bien: la recordaste. Fácil: la sabías al instante. Debajo de cada botón ves cuándo volverá a salir.")}</p>` : ""}`;
     if ($("speakBtn")) $("speakBtn").onclick = () => speak(entry.w);
     answer.querySelectorAll("[data-rate]").forEach((button) => {
       button.onclick = async () => {
@@ -456,14 +623,16 @@ function showCard() {
   });
 }
 
-/* Pasa a la siguiente tarjeta; las falladas vuelven a salir un poco después */
+/* Pasa a la siguiente tarjeta. Las falladas vuelven a salir un poco después y
+   las que siguen en los pasos cortos (palabras nuevas), al final de la sesión. */
 function advance(card) {
   const index = session.queue.indexOf(card);
   if (index >= 0) session.queue.splice(index, 1);
 
-  if (card.pendingRetry) {
-    card.pendingRetry = false;
-    session.queue.splice(Math.min(3, session.queue.length), 0, card);
+  if (card.requeue) {
+    const position = card.requeue === "soon" ? Math.min(3, session.queue.length) : session.queue.length;
+    card.requeue = null;
+    session.queue.splice(position, 0, card);
   } else {
     session.done++;
     if (!card.failed) session.firstTry++;
@@ -485,6 +654,9 @@ function bindShortcuts() {
   });
 }
 
+/* Práctica extra (aún no tocaba) acertada: no cambia el calendario */
+const keepsDate = (card, rating) => card.group === "extra" && rating !== "again" && !card.failed;
+
 /* Registra la respuesta: repaso espaciado, historial del día y estado del elemento */
 async function gradeCard(card, rating) {
   const correct = rating !== "again";
@@ -492,14 +664,23 @@ async function gradeCard(card, rating) {
     ? userWords.get(card.id) || blankUserWord(card.entry.w, card.entry.r)
     : userKanji.get(card.id) || blankUserKanji(card.id);
   withSRS(rec);
-  const next = schedule(rec, rating, card);
+  if (card.kind === "word") rec.origin ??= originOf(rec);
 
   // Historial diario: solo cuenta el primer intento de cada tarjeta
-  if (!card.failed) {
+  if (!card.attempts) {
     const day = meta.days[today()] ??= { r: 0, c: 0, n: 0 };
     day.r++;
     if (correct) day.c++;
     if (!rec.studied) day.n++;
+  }
+  card.attempts = (card.attempts || 0) + 1;
+
+  if (keepsDate(card, rating)) {
+    rec.studied = true;
+  } else {
+    const next = nextCard(rec, rating);
+    applyCard(rec, next);
+    if (staysInSession(next)) card.requeue = correct ? "later" : "soon";
   }
 
   if (correct) {
@@ -509,23 +690,17 @@ async function gradeCard(card, rating) {
     rec.incorrectCount++;
     rec.streakDays = 0;
     card.failed = true;
-    card.pendingRetry = true;
+    card.requeue = "soon";
     session?.missed.set(card.id, card);
   }
-
-  rec.repetitions = next.repetitions;
-  rec.interval = next.interval;
-  rec.ease = next.ease;
-  if (!next.keepDate) rec.nextReview = daysFromNow(next.interval);
-  rec.studied = true;
   rec.lastReviewed = new Date().toISOString();
   rec.lastSeen = Date.now();
 
-  // Aprendida: tres aciertos seguidos en días distintos. Un fallo la devuelve a "learning".
+  // Dominada: tres aciertos seguidos en días distintos o un intervalo largo. Un fallo la devuelve a "learning".
   if (card.kind === "word") rec.canReadKanji = correct; else rec.knowsMeaning = correct;
   if (!correct) rec.status = "learning";
-  else if (rec.streakDays >= MASTER_STREAK) rec.status = "mastered";
-  else if (rec.status === "unknown") rec.status = "learning";
+  else if (rec.streakDays >= MASTER_STREAK || rec.interval >= STUDY_CONFIG.masteredAtDays) rec.status = "mastered";
+  else if (rec.status !== "mastered") rec.status = "learning";
 
   if (card.kind === "word") await saveUserWord(rec); else await saveUserKanji(rec);
   await saveMeta();
@@ -741,7 +916,113 @@ async function nextDraw() {
 }
 
 /* =========================================
-   5. MIGRACIÓN DEL MODELO ANTERIOR
+   5. AGREGAR PALABRA
+   -----------------------------------------
+   "Quiero aprenderla": pasa a ser la primera palabra nueva del repaso.
+   "Ya la domino": entra con un intervalo largo y sus kanjis cuentan como
+   conocidos. Si la palabra está en el banco se usa su entrada; si no, se
+   guarda en el diccionario propio del usuario con lo que haya escrito.
+   ========================================= */
+
+const isKanaText = (text) => /^[\p{Script=Hiragana}\p{Script=Katakana}ー・]+$/u.test(text);
+const ORIGIN_LABEL = () => ({ manual: t("a mano"), lectura: t("lectura"), frecuencia: t("lista de frecuencia") });
+
+/* La entrada del banco para lo escrito: por escritura y, si hay varias, por lectura */
+function bankMatch(writing, reading) {
+  const senses = BANK.byWriting.get(writing) || [];
+  const typed = normalizeReading(reading);
+  return senses.find((word) => normalizeReading(word.r) === typed) ||
+    senses.find((word) => word.alt.some((alt) => normalizeReading(alt) === typed)) ||
+    (typed ? null : senses[0]) || null;
+}
+
+async function addWord(mode) {
+  const say = (text, cls = "") => {
+    $("addWordMessage").textContent = text;
+    $("addWordMessage").className = `message ${cls}`;
+  };
+  const writing = normalizeText($("addWriting").value);
+  let reading = normalizeText($("addReading").value);
+  const meaning = $("addMeaning").value.trim();
+
+  if (!writing || !/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u.test(writing)) {
+    return say(t("Escribe la palabra en japonés."), "incorrect");
+  }
+  await BANK.loadUpTo("N1").catch(() => {}); // para reconocerla aunque sea de un nivel más alto
+  const found = bankMatch(writing, reading);
+  if (!reading) reading = found?.r || (isKanaText(writing) ? writing : "");
+  if (!reading || !isKanaText(reading)) return say(t("Escribe la lectura en hiragana."), "incorrect");
+
+  const id = found?.id || wordKey(writing, reading);
+  if (!found && !words.has(id) || !found && meaning) {
+    // Fuera del banco: su significado es el que escribió el usuario (o el del diccionario común)
+    const known = meaning ? null : (await lookupDictionary([writing])).get(writing);
+    const entry = {
+      ...(words.get(id) || {}), id, lemma: writing, reading,
+      meanings: meaning ? [meaning] : known?.meanings || words.get(id)?.meanings || [],
+      meaningsEs: meaning ? [meaning] : known?.meanings_es || words.get(id)?.meaningsEs || [],
+      pos: words.get(id)?.pos || "", source: "manual", updatedAt: Date.now()
+    };
+    words.set(id, entry);
+    await putRecords("words", [entry]);
+  }
+
+  const rec = withSRS(userWords.get(id) || blankUserWord(found?.w || writing, found?.r || reading));
+  rec.origin = "manual";
+  if (meaning && !found) rec.meaning = meaning;
+  rec.lastSeen = Date.now();
+  if (mode === "mastered") {
+    applyCard(rec, masteredCard(STUDY_CONFIG.masteredIntervalDays));
+    Object.assign(rec, { status: "mastered", canReadKanji: true, knowsMeaning: true });
+  } else if (!rec.studied) {
+    rec.status = "learning";
+  }
+  await saveUserWord(rec);
+
+  $("addWordForm").reset();
+  $("addWriting").focus();
+  const kana = !hasKanjiChar(rec.lemma);
+  say(mode === "mastered"
+    ? t("{word} guardada como dominada.", { word: rec.lemma })
+    : rec.studied ? t("{word} ya está en tus repasos.", { word: rec.lemma })
+    : kana ? t("{word} guardada. Al ir solo en kana no se repasa, pero se usará en tus textos.", { word: rec.lemma })
+    : t("{word} agregada: será de las primeras palabras nuevas del repaso.", { word: rec.lemma }), "correct");
+  renderAddWord();
+  updateCounts();
+}
+
+function renderAddWord() {
+  const mine = [...userWords.values()].filter((rec) => rec.origin === "manual")
+    .sort((a, b) => b.updatedAt - a.updatedAt);
+  const STATUS = { mastered: t("dominada"), learning: t("por aprender") };
+  $("addedWords").innerHTML = mine.length ? mine.slice(0, 100).map((rec) => {
+    const entry = wordEntry(rec.id);
+    return `<li><strong lang="ja">${escapeHTML(rec.lemma)}</strong>
+      <span><span lang="ja">${escapeHTML(rec.reading)}</span>${entry && meaningOf(entry).length ? ` · ${escapeHTML(gloss(entry, 2))}` : ""}
+        · ${STATUS[rec.status] || t("por aprender")}</span></li>`;
+  }).join("") : `<li><span>${t("Todavía no has agregado ninguna palabra.")}</span></li>`;
+}
+
+function bindAddWord() {
+  if (window.wanakana?.bind) window.wanakana.bind($("addReading"), { IMEMode: "toHiragana" });
+  $("addWordForm").addEventListener("submit", (event) => {
+    event.preventDefault();
+    addWord(event.submitter?.value === "mastered" ? "mastered" : "learn");
+  });
+  // Al salir de la escritura, lo que ya sabe el banco se rellena solo
+  $("addWriting").addEventListener("change", async () => {
+    const writing = normalizeText($("addWriting").value);
+    if (!writing) return;
+    await BANK.loadUpTo("N1").catch(() => {});
+    const found = bankMatch(writing, $("addReading").value);
+    if (!found || normalizeText($("addWriting").value) !== writing) return;
+    if (!$("addReading").value) $("addReading").value = found.r;
+    $("addMeaning").placeholder = gloss(found);
+  });
+}
+
+/* =========================================
+   6. MIGRACIÓN DEL MODELO ANTERIOR
    -----------------------------------------
    Antes kanjis y palabras eran el mismo tipo de registro (almacén "items")
    y un kanji se repasaba con una "palabra ancla". Su progreso pasa a la

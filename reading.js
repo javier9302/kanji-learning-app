@@ -1152,8 +1152,16 @@ function promptParams({ type, topic, length }) {
   const readingOf = new Map([...userWords.values()].map((w) => [w.lemma, w.reading]));
   const all = [...new Set([...knownLemmas()].map((lemma) =>
     label(lemma, readingOf.get(lemma) || BANK.byWriting.get(lemma)?.[0].r)))];
+  // Palabras solo en kana: no se estudian como tarjeta, así que se aprenden
+  // leyendo. Van por frecuencia, primero las que menos han salido en sus lecturas.
+  const timesSeen = (kana) => userWords.get(wordKey(kana, kana))?.seen || 0;
+  const prefer = BANK.kanaByFrequency
+    .map((kana, index) => ({ kana, index, seen: timesSeen(kana) }))
+    .sort((a, b) => a.seen - b.seen || a.index - b.index)
+    .slice(0, STUDY_CONFIG.kanaWordsInPrompt).map((entry) => entry.kana);
+
   const params = {
-    level: meta.reading.level, type, topic, length,
+    level: meta.reading.level, type, topic, length, prefer,
     known: all, assumedLevels: [],
     learning: [...userWords.values()].filter((w) => w.status === "learning")
       .map((w) => label(w.lemma, w.reading)).slice(0, 60)
@@ -1247,13 +1255,13 @@ RULES
 }
 
 /* Versión del prompt segmentado (formato nuevo): súbela al cambiar su texto. */
-const SEGMENTED_VERSION = "2026-10-09.1-seg";
+const SEGMENTED_VERSION = "2026-10-09.2-seg";
 
 /* Prompt del formato nuevo: la IA solo escribe el texto separado en unidades
    con "|" y la traducción de cada oración. Lemas, lecturas y significados los
    pone la app (kuromoji + diccionario). IMPORTANTE: la función generate-text
    lleva una copia de esta función; si cambias una, cambia la otra. */
-function renderPromptSeg({ level, type, topic, length, known, assumedLevels, learning }) {
+function renderPromptSeg({ level, type, topic, length, known, assumedLevels, learning, prefer = [] }) {
   const fresh = Math.round(length * 0.1);
   const minUnits = Math.round(length * 0.9), maxUnits = Math.round(length * 1.25);
   const minSentences = Math.ceil(length / 9), maxSentences = Math.ceil(length / 6.5);
@@ -1269,7 +1277,7 @@ function renderPromptSeg({ level, type, topic, length, known, assumedLevels, lea
 LEARNER
 - Target level: JLPT ${level}.
 - ${knownLine}
-${learning.length ? `- Words the learner is still learning (reuse a few of them): ${learning.join("、")}\n` : ""}- A word written with its reading in brackets, like 角(かど), has several readings: use it ONLY with that reading and its meaning (角(かど) is "corner", never つの "horn"). Never write the brackets in the text.
+${learning.length ? `- Words the learner is still learning (reuse a few of them): ${learning.join("、")}\n` : ""}${prefer.length ? `- Common words written in kana, most frequent first. Prefer them when they fit naturally; they do not count as new words: ${prefer.join("、")}\n` : ""}- A word written with its reading in brackets, like 角(かど), has several readings: use it ONLY with that reading and its meaning (角(かど) is "corner", never つの "horn"). Never write the brackets in the text.
 
 TEXT
 - Type: ${type}. Topic: ${topic}.
@@ -1714,6 +1722,7 @@ async function classifyWord(cls) {
   const mine = userWords.get(key) || blankUserWord(token.lemma, reader.dictionary[token.lemma].reading);
   if (reader.clicks.get(key) === "looked" || !reader.clicks.has(key)) mine.lookups++;
   mine.lastSeen = Date.now();
+  mine.origin ??= "lectura";
 
   if (cls === "new") Object.assign(mine, { status: "learning", canReadKanji: false, knowsMeaning: false });
   if (cls === "kanji") Object.assign(mine, { status: "learning", canReadKanji: false, knowsMeaning: true });
@@ -1771,12 +1780,24 @@ async function markSeenWords(text, clicks) {
       mine = blankUserWord(entry.lemma, entry.reading);
       mine.status = "pre_known";
     }
+    mine.origin ??= "lectura";
     mine.seen++;
     mine.lastSeen = mine.updatedAt = now;
     userWords.set(key, mine);
     seen.push(mine);
   }
   await putRecords("userWords", seen);
+
+  // Los kanjis del texto quedan como "vistos": desbloquean las palabras básicas que los llevan
+  const seenKanji = [];
+  for (const c of new Set(Object.keys(text.lemmas).flatMap((key) => kanjiOf(key.split("|")[0])))) {
+    const record = userKanji.get(c) || blankUserKanji(c);
+    if (record.seenAt) continue;
+    record.seenAt = record.updatedAt = now;
+    userKanji.set(c, record);
+    seenKanji.push(record);
+  }
+  await putRecords("userKanji", seenKanji);
 
   const hasKanji = (word) => /\p{Script=Han}/u.test(word.lemma);
   return shuffle(seen.filter((word) => word.status === "pre_known"))
@@ -2190,9 +2211,11 @@ const profilePrint = (profile) => `${profile.level}|${profile.assumed}|${profile
 function ensureWordEntry(mine) {
   if (words.has(mine.id)) return null;
   const word = BANK.words.get(mine.id);
-  if (!word) return null;
-  const entry = { id: mine.id, lemma: mine.lemma, reading: mine.reading, meanings: word.en,
-    meaningsEs: word.es, pos: "", source: "jmdict", updatedAt: Date.now() };
+  // Fuera del banco solo se puede reconstruir lo que el usuario agregó a mano
+  if (!word && mine.origin !== "manual") return null;
+  const own = mine.meaning ? [mine.meaning] : [];
+  const entry = { id: mine.id, lemma: mine.lemma, reading: mine.reading, meanings: word?.en || own,
+    meaningsEs: word?.es || own, pos: "", source: word ? "jmdict" : "manual", updatedAt: Date.now() };
   words.set(entry.id, entry);
   return entry;
 }
@@ -2204,14 +2227,31 @@ const srsToRow = (record) => ({
   next_review: /^\d{4}-\d{2}-\d{2}$/.test(record.nextReview || "") ? record.nextReview : null,
   last_reviewed: record.lastReviewed ? isoOf(Date.parse(record.lastReviewed)) : null,
   correct_count: whole(record.correctCount), incorrect_count: whole(record.incorrectCount),
-  streak_days: whole(record.streakDays), last_correct_day: record.lastCorrectDay || null
+  streak_days: whole(record.streakDays), last_correct_day: record.lastCorrectDay || null,
+  fsrs: record.fsrs || null
 });
 const srsFromRow = (row) => ({
   studied: !!row.studied, repetitions: row.repetitions || 0, interval: row.interval_days || 0,
   ease: row.ease || 2.5, nextReview: row.next_review || today(), lastReviewed: row.last_reviewed || null,
   correctCount: row.correct_count || 0, incorrectCount: row.incorrect_count || 0,
-  streakDays: row.streak_days || 0, lastCorrectDay: row.last_correct_day || ""
+  streakDays: row.streak_days || 0, lastCorrectDay: row.last_correct_day || "",
+  ...(row.fsrs ? { fsrs: row.fsrs } : {})
 });
+
+/* Sube el progreso. Si la base de datos aún no tiene las columnas de la fase 2
+   (falta ejecutar supabase/schema.sql) se sube sin ellas y no se marca como
+   subido, para volver a enviarlo completo cuando existan. */
+const PHASE2_COLUMNS = ["fsrs", "origin", "meaning", "seen_at"];
+async function pushProgress(table, rows, marks, pushed) {
+  try {
+    await pushRows(table, "user_id,id", rows, marks, pushed);
+  } catch (error) {
+    if (error?.code !== "PGRST204") throw error;
+    console.warn(`Faltan columnas en ${table}: ejecuta supabase/schema.sql.`);
+    const plain = rows.map((row) => Object.fromEntries(Object.entries(row).filter(([key]) => !PHASE2_COLUMNS.includes(key))));
+    await pushRows(table, "user_id,id", plain, [], pushed);
+  }
+}
 
 async function pullReading(userId) {
   const cursors = sync.config.cursors;
@@ -2294,6 +2334,7 @@ async function pullReading(userId) {
       canReadKanji: row.can_read_kanji, knowsMeaning: row.knows_meaning, canWrite: row.can_write,
       seen: row.seen, lookups: row.lookups, evalCorrect: row.eval_correct, evalWrong: row.eval_wrong,
       firstSeen: msOf(row.first_seen), lastSeen: msOf(row.last_seen), updatedAt: stamp,
+      ...(row.origin ? { origin: row.origin } : {}), ...(row.meaning ? { meaning: row.meaning } : {}),
       ...srsFromRow(row)
     };
     userWords.set(record.id, record);
@@ -2319,7 +2360,7 @@ async function pullReading(userId) {
     const record = {
       id: row.id, status: row.status, knowsMeaning: row.knows_meaning, canWrite: row.can_write,
       writes: row.writes || 0, firstSeen: msOf(row.first_seen), lastSeen: msOf(row.last_seen),
-      updatedAt: stamp, ...srsFromRow(row)
+      updatedAt: stamp, ...(row.seen_at ? { seenAt: msOf(row.seen_at) } : {}), ...srsFromRow(row)
     };
     userKanji.set(record.id, record);
     newerKanji.push(record);
@@ -2398,21 +2439,22 @@ async function pushReading(userId) {
 
   // Progreso por palabra
   const changed = [...userWords.values()].filter((word) => pushed.words[word.id] !== String(word.updatedAt));
-  await pushRows("user_words", "user_id,id", changed.map((word) => ({
+  await pushProgress("user_words", changed.map((word) => ({
     user_id: userId, id: word.id, lemma: word.lemma, reading: word.reading, status: word.status,
     can_read_kanji: !!word.canReadKanji, knows_meaning: !!word.knowsMeaning, can_write: !!word.canWrite,
     seen: whole(word.seen), lookups: whole(word.lookups),
     eval_correct: whole(word.evalCorrect), eval_wrong: whole(word.evalWrong),
     first_seen: isoOf(word.firstSeen), last_seen: isoOf(word.lastSeen),
+    origin: word.origin || null, meaning: word.meaning || null,
     client_updated_at: Math.round(word.updatedAt), ...srsToRow(word)
   })), changed.map((word) => [word.id, String(word.updatedAt)]), pushed.words);
 
   // Progreso por kanji
   const kanjiChanged = [...userKanji.values()].filter((k) => pushed.kanji[k.id] !== String(k.updatedAt));
-  await pushRows("user_kanji", "user_id,id", kanjiChanged.map((k) => ({
+  await pushProgress("user_kanji", kanjiChanged.map((k) => ({
     user_id: userId, id: k.id, status: k.status || "unknown",
     knows_meaning: !!k.knowsMeaning, can_write: !!k.canWrite, writes: whole(k.writes),
-    first_seen: isoOf(k.firstSeen), last_seen: isoOf(k.lastSeen),
+    first_seen: isoOf(k.firstSeen), last_seen: isoOf(k.lastSeen), seen_at: isoOf(k.seenAt),
     client_updated_at: Math.round(k.updatedAt), ...srsToRow(k)
   })), kanjiChanged.map((k) => [k.id, String(k.updatedAt)]), pushed.kanji);
 

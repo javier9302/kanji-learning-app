@@ -147,13 +147,13 @@ RULES
 
 // Copia de SEGMENTED_VERSION y renderPromptSeg de reading.js: si cambias una, cambia la otra.
 /* Versión del prompt segmentado (formato nuevo): súbela al cambiar su texto. */
-const SEGMENTED_VERSION = "2026-10-09.1-seg";
+const SEGMENTED_VERSION = "2026-10-09.2-seg";
 
 /* Prompt del formato nuevo: la IA solo escribe el texto separado en unidades
    con "|" y la traducción de cada oración. Lemas, lecturas y significados los
    pone la app (kuromoji + diccionario). IMPORTANTE: la función generate-text
    lleva una copia de esta función; si cambias una, cambia la otra. */
-function renderPromptSeg({ level, type, topic, length, known, assumedLevels, learning }: any) {
+function renderPromptSeg({ level, type, topic, length, known, assumedLevels, learning, prefer = [] }: any) {
   const fresh = Math.round(length * 0.1);
   const minUnits = Math.round(length * 0.9), maxUnits = Math.round(length * 1.25);
   const minSentences = Math.ceil(length / 9), maxSentences = Math.ceil(length / 6.5);
@@ -169,7 +169,7 @@ function renderPromptSeg({ level, type, topic, length, known, assumedLevels, lea
 LEARNER
 - Target level: JLPT ${level}.
 - ${knownLine}
-${learning.length ? `- Words the learner is still learning (reuse a few of them): ${learning.join("、")}\n` : ""}- A word written with its reading in brackets, like 角(かど), has several readings: use it ONLY with that reading and its meaning (角(かど) is "corner", never つの "horn"). Never write the brackets in the text.
+${learning.length ? `- Words the learner is still learning (reuse a few of them): ${learning.join("、")}\n` : ""}${prefer.length ? `- Common words written in kana, most frequent first. Prefer them when they fit naturally; they do not count as new words: ${prefer.join("、")}\n` : ""}- A word written with its reading in brackets, like 角(かど), has several readings: use it ONLY with that reading and its meaning (角(かど) is "corner", never つの "horn"). Never write the brackets in the text.
 
 TEXT
 - Type: ${type}. Topic: ${topic}.
@@ -249,6 +249,7 @@ function readParams(body: any) {
     known: words(body.known, 1500),
     assumedLevels: Array.isArray(body.assumedLevels) ? LEVELS.filter((l) => body.assumedLevels.includes(l)) : [],
     learning: words(body.learning, 60),
+    prefer: words(body.prefer, 80),
   };
 }
 

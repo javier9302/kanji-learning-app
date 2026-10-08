@@ -184,6 +184,11 @@ alter table public.user_words add column if not exists incorrect_count integer n
 alter table public.user_words add column if not exists streak_days integer not null default 0;
 alter table public.user_words add column if not exists last_correct_day date;
 
+-- Fase 2: tarjeta de FSRS, de dónde salió la palabra y el significado que escribió el usuario
+alter table public.user_words add column if not exists fsrs jsonb;
+alter table public.user_words add column if not exists origin text check (origin in ('manual', 'lectura', 'frecuencia'));
+alter table public.user_words add column if not exists meaning text;
+
 create index if not exists user_words_user_updated_idx on public.user_words (user_id, updated_at);
 
 -- Progreso del usuario por kanji: significado (Estudio) y escritura (Escribir).
@@ -211,6 +216,10 @@ create table if not exists public.user_kanji (
   updated_at timestamptz not null default now(),
   primary key (user_id, id)
 );
+
+-- Fase 2: tarjeta de FSRS y cuándo salió el kanji en una lectura terminada
+alter table public.user_kanji add column if not exists fsrs jsonb;
+alter table public.user_kanji add column if not exists seen_at timestamptz;
 
 create index if not exists user_kanji_user_updated_idx on public.user_kanji (user_id, updated_at);
 

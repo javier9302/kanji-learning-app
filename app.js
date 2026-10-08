@@ -111,7 +111,7 @@ function saveLocal(key, value) {
 }
 
 const prefs = loadLocal("kanji-prefs", {
-  studyType: "word", studyLevel: "N5", studyMode: "type", studyCount: "10", goal: 20,
+  studyType: "word", studyMode: "type", studyCount: "10", goal: 20,
   furigana: "unknown" // furigana al leer: unknown | all | none
 });
 
@@ -164,7 +164,7 @@ function formatDate(iso) {
 const NAV = {
   study: ["read", "study", "draw"],
   library: ["library"],
-  words: ["progress"],
+  words: ["progress", "add"],
   settings: ["data"]
 };
 // Vista que se abre al pulsar cada sección: la última usada
@@ -189,6 +189,7 @@ function switchView(name) {
   if (name === "study") renderStudyHome();
   if (name === "draw") renderDraw();
   if (name === "progress") renderStats();
+  if (name === "add") renderAddWord();
   if (name === "data") renderDataView();
 }
 
@@ -914,7 +915,7 @@ function bindSync() {
    ========================================= */
 
 function bindSettings() {
-  for (const id of ["studyType", "studyLevel", "studyMode", "studyCount"]) {
+  for (const id of ["studyType", "studyMode", "studyCount"]) {
     if ([...$(id).options].some((o) => o.value === String(prefs[id]))) $(id).value = prefs[id];
     $(id).addEventListener("change", () => {
       prefs[id] = $(id).value;
@@ -930,6 +931,20 @@ function bindSettings() {
     saveLocal("kanji-prefs", prefs);
     updateCounts();
   });
+
+  $("maxNewInput").value = prefs.maxNew ?? STUDY_CONFIG.maxNewPerSession;
+  $("maxNewInput").addEventListener("change", () => {
+    const value = Math.round(Number($("maxNewInput").value));
+    prefs.maxNew = Math.min(50, Math.max(0, Number.isFinite(value) ? value : STUDY_CONFIG.maxNewPerSession));
+    $("maxNewInput").value = prefs.maxNew;
+    saveLocal("kanji-prefs", prefs);
+  });
+  $("debugStudyInput").checked = !!prefs.debugStudy;
+  $("debugStudyInput").addEventListener("change", () => {
+    prefs.debugStudy = $("debugStudyInput").checked;
+    saveLocal("kanji-prefs", prefs);
+  });
+  bindAddWord();
 
   $("drawLevel").addEventListener("change", () => { draw = null; renderDraw(); });
   $("startBtn").addEventListener("click", startSession);
