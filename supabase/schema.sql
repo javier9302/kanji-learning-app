@@ -378,8 +378,57 @@ alter table public.generations add column if not exists raw text;
 create index if not exists generations_user_created_idx on public.generations (user_id, created_at);
 create index if not exists generations_request_idx on public.generations (user_id, request_id);
 
+-- Versión del prompt, parámetros con que se pidió y tipo de resultado:
+--   ok | invalid_json | missing_fields | tokens_mismatch | empty_units | too_short |
+--   truncated | empty | provider | quota
+-- raw guarda la respuesta de la IA en todos los casos, también cuando fue bien.
+alter table public.generations add column if not exists prompt_version text;
+alter table public.generations add column if not exists params jsonb;
+alter table public.generations add column if not exists result text;
+
 alter table public.generations enable row level security;
 revoke all on public.generations from anon, authenticated;
+
+-- Solo la función escribe aquí; los administradores pueden leer para exportar los registros
+grant select on public.generations to authenticated;
+drop policy if exists "generations_admin_select" on public.generations;
+create policy "generations_admin_select" on public.generations
+  for select to authenticated using ((select public.is_admin()));
+
+-- Problemas de un texto que no detecta la validación del servidor:
+--   kind 'auto': lo que la app tuvo que arreglar al recibirlo (details.repairs)
+--   kind 'user': lo que alguien marca con el botón "Reportar error"
+create table if not exists public.text_reports (
+  id bigint generated always as identity primary key,
+  text_id text,
+  request_id text,                 -- enlaza con generations.request_id
+  prompt_version text,
+  model text,
+  kind text not null check (kind in ('auto', 'user')),
+  category text not null,          -- repaired | translation | reading | tokens | difficulty | other
+  comment text,
+  details jsonb not null default '{}'::jsonb,
+  user_id uuid default auth.uid() references auth.users (id) on delete set null,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists text_reports_created_idx on public.text_reports (created_at);
+
+alter table public.text_reports enable row level security;
+revoke all on public.text_reports from anon;
+grant select, insert, delete on public.text_reports to authenticated;
+
+drop policy if exists "text_reports_insert" on public.text_reports;
+create policy "text_reports_insert" on public.text_reports
+  for insert to authenticated with check ((select auth.uid()) = user_id);
+
+drop policy if exists "text_reports_admin_select" on public.text_reports;
+create policy "text_reports_admin_select" on public.text_reports
+  for select to authenticated using ((select public.is_admin()));
+
+drop policy if exists "text_reports_admin_delete" on public.text_reports;
+create policy "text_reports_admin_delete" on public.text_reports
+  for delete to authenticated using ((select public.is_admin()));
 
 -- =========================================
 -- DICCIONARIO GENERAL

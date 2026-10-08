@@ -129,6 +129,31 @@ from generations where not ok order by created_at desc limit 20;
 
 Si cambias el texto del prompt en `reading.js` (función `renderPrompt`), copia el mismo cambio a la función y vuelve a desplegarla.
 
+## Formato de los textos y análisis del japonés
+
+Desde la versión de prompt `2026-10-09.1-seg`, la IA solo escribe el texto separado en unidades con `|` y la traducción de cada oración:
+
+```json
+{"title":"…","title_en":"…","title_es":"…","sentences":[
+  {"p":1,"ja":"私|は|毎朝|コーヒー|を|飲みます|。","en":"…","es":"…"}]}
+```
+
+La app pone el lema, la lectura y el tipo de cada unidad con **kuromoji**, y los significados con el banco y el diccionario general. La respuesta de la IA ocupa unas diez veces menos que antes.
+
+- kuromoji y su diccionario están en `vendor/kuromoji/` (unos 19 MB). El navegador los descarga la primera vez que se analiza un texto y después los guarda. Hay que subir esa carpeta al repositorio.
+- El formato antiguo (con `tokens` y `dictionary`) se sigue aceptando al pegar, y los textos ya guardados no cambian.
+- La versión del prompt nuevo es `SEGMENTED_VERSION`, también en `reading.js` y en la función.
+
+## Registros de generación y reportes de error
+
+Cada intento de generar un texto queda en la tabla `generations` con la fecha, el modelo, la versión del prompt (`prompt_version`), los parámetros con que se pidió, la respuesta de la IA y el tipo de resultado (`result`): `ok`, `invalid_json`, `missing_fields`, `tokens_mismatch`, `too_short`, `truncated`, `empty`, `provider` o `quota`.
+
+La tabla `text_reports` guarda lo que la validación del servidor no detecta: lo que la app tuvo que arreglar al recibir el texto (`kind` = `auto`) y lo que alguien marca con el botón **Reportar error** del lector (`kind` = `user`).
+
+En `admin.html`, la pestaña **Registros** muestra los últimos fallos y reportes y tiene el botón **Exportar registros (JSON)**, que descarga todo.
+
+La versión del prompt es la constante `PROMPT_VERSION`, que está en `reading.js` y en la función `generate-text`. Súbela en los dos sitios cada vez que cambies el texto del prompt, y vuelve a desplegar la función.
+
 ## Diccionario general y palabras por revisar
 
 Cuando un texto trae una palabra que no está en el banco de la app, el texto se muestra igualmente y la palabra se resuelve así: primero en el diccionario general (tabla `dictionary`) y, si no está, con lo que explicó la IA. Esas palabras quedan anotadas para que las revises.

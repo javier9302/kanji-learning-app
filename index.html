@@ -112,9 +112,14 @@
         <h3>Agregar un texto</h3>
         <label class="field">
           <span>JSON del texto</span>
-          <textarea id="textInput" rows="6" spellcheck="false"
+          <textarea id="textInput" rows="6" spellcheck="false" autocomplete="off"
+            autocapitalize="off" autocorrect="off"
             placeholder='{ "title": "…", "level": "N5", "sentences": [ … ] }'></textarea>
         </label>
+        <div class="inline-form paste-tools">
+          <button id="textPasteBtn" class="button button-outline" type="button">Pegar del portapapeles</button>
+          <span id="textInputCount" class="helper"></span>
+        </div>
         <div class="form-footer">
           <p class="helper">
             Pega el JSON que te devolvió la IA. Se comprueba antes de guardarlo
@@ -489,6 +494,20 @@
         </div>
       </div>
 
+      <div class="panel">
+        <h3>Créditos</h3>
+        <p class="helper">
+          Esta app usa los diccionarios
+          <a href="https://www.edrdg.org/wiki/index.php/JMdict-EDICT_Dictionary_Project" target="_blank" rel="noopener">JMdict</a> y
+          <a href="https://www.edrdg.org/wiki/index.php/KANJIDIC_Project" target="_blank" rel="noopener">KANJIDIC2</a>,
+          propiedad del
+          <a href="https://www.edrdg.org/" target="_blank" rel="noopener">Electronic Dictionary Research and Development Group</a>,
+          bajo su <a href="https://www.edrdg.org/edrdg/licence.html" target="_blank" rel="noopener">licencia</a> (CC BY-SA 4.0).
+          Los trazos de los kanjis son de <a href="https://kanjivg.tagaini.net/" target="_blank" rel="noopener">KanjiVG</a> (CC BY-SA 3.0).
+          El análisis del japonés lo hace <a href="https://github.com/takuyaa/kuromoji.js" target="_blank" rel="noopener">kuromoji.js</a>
+          (Apache 2.0) con el diccionario IPADIC.
+        </p>
+      </div>
     </section>
   </main>
 
@@ -532,6 +551,41 @@
         <button id="authToSignup" class="link-btn" type="button">Crear una cuenta</button>
         <button id="authToLogin" class="link-btn" type="button">Ya tengo cuenta</button>
         <button id="authToReset" class="link-btn" type="button">¿Olvidaste tu contraseña?</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="reportDialog" class="dialog">
+    <form id="reportForm">
+      <div class="dialog-head">
+        <div>
+          <h3>Reportar un error en este texto</h3>
+          <p class="helper">Sirve para mejorar los textos que escribe la IA.</p>
+        </div>
+      </div>
+
+      <label class="field">
+        <span>Tipo de error</span>
+        <select id="reportCategory">
+          <option value="translation">Traducción incorrecta</option>
+          <option value="reading">Lectura o furigana incorrecta</option>
+          <option value="tokens">Palabras mal separadas</option>
+          <option value="difficulty">Demasiado difícil para mi nivel</option>
+          <option value="other">Otro</option>
+        </select>
+      </label>
+
+      <label class="field">
+        <span>Comentario (opcional)</span>
+        <textarea id="reportComment" rows="3" maxlength="2000"></textarea>
+      </label>
+
+      <p id="reportMessage" class="message" role="status"></p>
+
+      <div class="dialog-actions">
+        <button id="reportCancelBtn" class="button button-secondary" type="button">Cancelar</button>
+        <span class="spacer"></span>
+        <button id="reportSendBtn" class="button button-primary" type="submit">Enviar reporte</button>
       </div>
     </form>
   </dialog>

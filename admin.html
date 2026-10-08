@@ -50,6 +50,7 @@
     <nav id="adminTabs" class="tabs admin-tabs hidden" aria-label="Secciones">
       <button class="tab active" data-admin="texts" type="button">Textos</button>
       <button class="tab" data-admin="words" type="button">Palabras por revisar</button>
+      <button class="tab" data-admin="logs" type="button">Registros</button>
     </nav>
 
     <!-- Palabras por revisar -->
@@ -77,6 +78,28 @@
           <button id="dictImportBtn" class="button button-outline" type="button">Importar diccionario</button>
         </div>
       </div>
+    </section>
+
+    <!-- Registros de generación y reportes -->
+    <section id="logsPanel" class="hidden">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">CALIDAD DE LOS TEXTOS</p>
+          <h2>Registros</h2>
+        </div>
+        <span id="logsCount" class="pill"></span>
+      </div>
+      <div class="panel import-panel">
+        <div>
+          <h3>Exportar todo</h3>
+          <p class="helper">Descarga un JSON con cada generación (fecha, modelo, versión del prompt, parámetros, respuesta de la IA y resultado) y todos los reportes.</p>
+        </div>
+        <div class="import-actions">
+          <button id="logsExportBtn" class="button button-primary" type="button">↓ Exportar registros (JSON)</button>
+        </div>
+      </div>
+      <div class="list-toolbar"><h3>Últimos fallos y reportes</h3></div>
+      <div id="logsList" class="items-list"></div>
     </section>
 
     <!-- Panel -->

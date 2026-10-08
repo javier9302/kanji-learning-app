@@ -40,6 +40,7 @@ function show(view) {
   $("adminTabs").classList.toggle("hidden", view !== "panel");
   $("adminPanel").classList.toggle("hidden", view !== "panel" || section !== "texts");
   $("wordsPanel").classList.toggle("hidden", view !== "panel" || section !== "words");
+  $("logsPanel").classList.toggle("hidden", view !== "panel" || section !== "logs");
 }
 
 /* Con sesión: comprueba el permiso y muestra el panel o el motivo */
@@ -202,6 +203,88 @@ async function wordAction(action, id, card) {
   renderWords();
 }
 
+/* ---------- Registros de generación y reportes ---------- */
+
+const RESULT_LABEL = {
+  ok: "Correcto", invalid_json: "JSON inválido", missing_fields: "Faltan campos", tokens_mismatch: "Los tokens no coinciden con el texto",
+  empty_units: "Unidades vacías en la segmentación", too_short: "Texto demasiado corto", truncated: "Respuesta cortada", empty: "Respuesta vacía", provider: "Error del servicio", quota: "Sin cuota"
+};
+const REPORT_LABEL = {
+  repaired: "Arreglado por la app", translation: "Traducción incorrecta", reading: "Lectura incorrecta",
+  tokens: "Palabras mal separadas", difficulty: "Demasiado difícil", other: "Otro"
+};
+
+/* Todas las filas de una tabla, de mil en mil */
+async function fetchAll(table) {
+  const all = [];
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await sb.from(table).select("*").order("created_at").range(from, from + 999);
+    if (error) throw error;
+    all.push(...data);
+    if (data.length < 1000) return all;
+  }
+}
+
+async function loadLogs() {
+  $("logsList").innerHTML = `<p class="message">Cargando…</p>`;
+  const [failed, reports, total] = await Promise.all([
+    sb.from("generations").select("created_at, model, prompt_version, result, error, params, attempt")
+      .neq("result", "ok").order("created_at", { ascending: false }).limit(15),
+    sb.from("text_reports").select("*").order("created_at", { ascending: false }).limit(15),
+    sb.from("generations").select("id", { count: "exact", head: true })
+  ]);
+  if (failed.error || reports.error) {
+    $("logsList").innerHTML = "";
+    return say(`No se pudieron cargar los registros (${(failed.error || reports.error).message}). ¿Ejecutaste supabase/schema.sql?`, true);
+  }
+  $("logsCount").textContent = `${total.count ?? 0} generaciones`;
+  const date = (iso) => new Date(iso).toLocaleString("es", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  const rowsHTML = [
+    ...failed.data.map((row) => ({ at: row.created_at, html: `
+      <article class="item-row">
+        <div class="item-info">
+          <div class="item-title">${escapeHTML(RESULT_LABEL[row.result] || row.result || "Fallo")} · intento ${row.attempt}</div>
+          <div class="item-sub">${date(row.created_at)} · ${escapeHTML(row.model)} · prompt ${escapeHTML(row.prompt_version || "—")} ·
+            ${escapeHTML(row.params?.level || "")} ${escapeHTML(row.params?.topic || "")} · ${escapeHTML((row.error || "").slice(0, 160))}</div>
+        </div>
+      </article>` })),
+    ...reports.data.map((row) => ({ at: row.created_at, html: `
+      <article class="item-row">
+        <div class="item-info">
+          <div class="item-title">${row.kind === "user" ? "⚑ Reporte" : "Arreglo automático"}: ${escapeHTML(REPORT_LABEL[row.category] || row.category)}
+            · <span lang="ja">${escapeHTML(row.details?.title || "")}</span></div>
+          <div class="item-sub">${date(row.created_at)} · prompt ${escapeHTML(row.prompt_version || "—")} ·
+            ${escapeHTML(row.comment || (row.details?.repairs || []).slice(0, 4).join("; "))}</div>
+        </div>
+      </article>` }))
+  ].sort((a, b) => b.at.localeCompare(a.at));
+  $("logsList").innerHTML = rowsHTML.length ? rowsHTML.map((row) => row.html).join("")
+    : `<div class="no-items">No hay fallos ni reportes todavía.</div>`;
+}
+
+async function exportLogs() {
+  const button = $("logsExportBtn");
+  button.disabled = true;
+  try {
+    say("Preparando la exportación…");
+    const [generations, reports] = await Promise.all([fetchAll("generations"), fetchAll("text_reports")]);
+    const blob = new Blob([JSON.stringify({ exportedAt: new Date().toISOString(), generations, reports }, null, 2)],
+      { type: "application/json" });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = `registros-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+    say(`Exportados ${generations.length} registros de generación y ${reports.length} reportes.`);
+  } catch (error) {
+    say(`No se pudo exportar (${error.message}).`, true);
+  } finally {
+    button.disabled = false;
+  }
+}
+
 /* ---------- Diccionario general ---------- */
 
 async function dictionaryCount() {
@@ -235,6 +318,7 @@ async function importDictionary() {
 
 function bind() {
   $("dictImportBtn").addEventListener("click", importDictionary);
+  $("logsExportBtn").addEventListener("click", exportLogs);
   $("adminTabs").addEventListener("click", (event) => {
     const tab = event.target.closest("[data-admin]");
     if (!tab) return;
@@ -242,7 +326,9 @@ function bind() {
     document.querySelectorAll("[data-admin]").forEach((t) => t.classList.toggle("active", t === tab));
     say("");
     show("panel");
-    if (section === "words") { loadWords(); dictionaryCount(); } else loadTexts();
+    if (section === "words") { loadWords(); dictionaryCount(); }
+    else if (section === "logs") loadLogs();
+    else loadTexts();
   });
 
   $("wordsList").addEventListener("click", (event) => {

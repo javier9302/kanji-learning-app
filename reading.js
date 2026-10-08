@@ -108,8 +108,8 @@ function normalizePos(pos) {
 
 /* Las IA suelen envolver el JSON en ```json … ``` o añadir una frase alrededor */
 function extractJSON(raw) {
-  const start = raw.indexOf("{");
-  const end = raw.lastIndexOf("}");
+  const start = raw.search(/[{[]/); // el formato nuevo también puede llegar como una lista
+  const end = Math.max(raw.lastIndexOf("}"), raw.lastIndexOf("]"));
   return start >= 0 && end > start ? raw.slice(start, end + 1) : raw;
 }
 
@@ -257,15 +257,239 @@ async function lookupDictionary(lemmas) {
   return found;
 }
 
+/* Una respuesta cortada a medias (pasa al pegar en el móvil o cuando la IA no
+   termina de escribir): devuelve el JSON con las oraciones que sí llegaron
+   completas, o null si no hay ninguna. */
+function recoverSentences(raw) {
+  const text = raw.slice(Math.max(0, raw.indexOf("{")));
+  const key = text.indexOf('"sentences"');
+  const open = key < 0 ? -1 : text.indexOf("[", key);
+  if (open < 0) return null;
+
+  let depth = 0, inString = false, escaped = false, lastEnd = -1, count = 0;
+  for (let i = open + 1; i < text.length; i++) {
+    const ch = text[i];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (ch === "\\") escaped = true;
+      else if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') inString = true;
+    else if (ch === "{" || ch === "[") depth++;
+    else if (ch === "}" || ch === "]") {
+      if (depth === 0) break; // fin del array: no estaba cortado aquí
+      depth--;
+      if (depth === 0 && ch === "}") { lastEnd = i; count++; }
+    }
+  }
+  if (lastEnd < 0) return null;
+  try {
+    return { count, json: JSON.stringify(JSON.parse(`${text.slice(0, lastEnd + 1)}]}`)) };
+  } catch {
+    return null;
+  }
+}
+
+/* ---------- Formato nuevo: texto segmentado con "|" ---------- */
+
+let tokenizerPromise = null;
+
+/* kuromoji y su diccionario (unos 18 MB) se descargan la primera vez que hacen
+   falta; después quedan guardados. Van dentro de la app (vendor/kuromoji)
+   porque la librería no sabe cargar su diccionario desde otra dirección. */
+function loadTokenizer() {
+  return tokenizerPromise ??= new Promise((resolve, reject) => {
+    const build = () => window.kuromoji.builder({ dicPath: "vendor/kuromoji/dict/" })
+      .build((error, tokenizer) => error ? reject(error) : resolve(tokenizer));
+    if (window.kuromoji) return build();
+    const script = document.createElement("script");
+    script.src = "vendor/kuromoji/kuromoji.js";
+    script.onload = build;
+    script.onerror = () => reject(new Error("kuromoji"));
+    document.head.appendChild(script);
+  }).catch((error) => { tokenizerPromise = null; throw error; });
+}
+
+const isSegmented = (data) => {
+  const list = Array.isArray(data) ? data : data?.sentences;
+  return Array.isArray(list) && list.some((sentence) => typeof sentence?.ja === "string");
+};
+
+/* Lo que hace inservible un texto segmentado (la función generate-text lleva
+   la misma comprobación, checkSegmented) */
+function segmentErrors(data) {
+  const errors = [];
+  const list = Array.isArray(data) ? data : data.sentences;
+  if (!isList(list)) return [t("“sentences” debe ser una lista con al menos una oración.")];
+  list.forEach((sentence, index) => {
+    const n = index + 1;
+    if (!sentence || !isText(sentence.ja)) return errors.push(t("Oración {n}: falta “{field}”.", { n, field: "ja" }));
+    if (sentence.ja.split("|").some((unit) => !unit.trim())) {
+      errors.push(t("Oración {n}: hay una unidad vacía (dos “|” seguidos, o uno al principio o al final).", { n }));
+    }
+  });
+  return errors;
+}
+
+const KUROMOJI_POS = {
+  "動詞": "verb", "形容詞": "i_adjective", "副詞": "adverb", "助詞": "particle", "助動詞": "auxiliary",
+  "接続詞": "conjunction", "感動詞": "interjection", "連体詞": "determiner", "接頭詞": "prefix",
+  "記号": "symbol", "フィラー": "interjection"
+};
+const NOUN_DETAIL = { "固有名詞": "proper_noun", "数": "number", "代名詞": "pronoun", "形容動詞語幹": "na_adjective", "接尾": "suffix" };
+const piecePos = (piece) => piece.pos === "名詞" ? NOUN_DETAIL[piece.pos_detail_1] || "noun" : KUROMOJI_POS[piece.pos] || "expression";
+/* Piezas con contenido: de ellas sale el lema de la unidad */
+const isContentPiece = (piece) => ["動詞", "形容詞", "名詞", "副詞", "連体詞", "感動詞", "接続詞"].includes(piece.pos) &&
+  piece.pos_detail_1 !== "非自立" && piece.pos_detail_1 !== "接尾";
+const pieceBase = (piece) => piece.basic_form && piece.basic_form !== "*" ? piece.basic_form : piece.surface_form;
+const pieceReading = (piece) => piece.reading && piece.reading !== "*"
+  ? piece.reading.replace(/[ァ-ヶ]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0x60))
+  : isKana(piece.surface_form) ? piece.surface_form : null;
+
+/* Partículas habituales: una unidad que sea exactamente una de estas lo es siempre */
+const PARTICLES = new Set(("は が を に で も と の か ね よ へ や な わ ぞ さ し ば て から まで より など って けど ので のに " +
+  "でも だけ しか ばかり くらい ぐらい ほど こそ さえ かな よね とか には では にも とは へは").split(" "));
+
+/* Analiza unas piezas seguidas como una sola unidad */
+function unitOf(pieces) {
+  const surface = pieces.map((piece) => piece.surface_form).join("");
+  const content = pieces.find(isContentPiece) || pieces[0];
+  const readings = pieces.map(pieceReading);
+  const katakana = /^[ァ-ヶー]+$/.test(surface);
+  return {
+    surface, pieces,
+    punct: PUNCTUATION.test(surface),
+    pos: PUNCTUATION.test(surface) ? "punctuation" : PARTICLES.has(surface) ? "particle" : piecePos(content),
+    basic: pieces.length === 1 || isContentPiece(pieces[0]) || pieces.some(isContentPiece) ? pieceBase(content) : surface,
+    // Lectura de la unidad tal como está escrita (para el furigana); "" si kuromoji no la conoce
+    reading: katakana ? surface : readings.every((r) => r !== null) ? readings.join("") : "",
+    // Conjugación que da kuromoji: no se muestra todavía, se guarda para más adelante
+    morph: pieces.map((piece) => [piece.surface_form, piece.pos, piece.conjugated_type, piece.conjugated_form, pieceBase(piece)])
+  };
+}
+
+/* Convierte el formato segmentado en el que usa la app: a cada unidad le pone
+   lema, lectura y tipo con kuromoji, sin IA. Resolución de cada unidad:
+     1. la forma exacta está en el diccionario;
+     2. su lema (forma de diccionario) está en el diccionario;
+     3. la IA segmentó mal: se prueba a unirla con la siguiente o a dividirla;
+     4. si no, se queda con su lema y sigue el camino normal de palabras sin resolver. */
+async function fromSegmented(data, repairs) {
+  const tokenizer = await loadTokenizer();
+  const list = Array.isArray(data) ? data : data.sentences;
+
+  /* kuromoji acierta más con la oración entera que con cada unidad suelta, así
+     que se analiza la oración y sus piezas se reparten entre las unidades.
+     Si una pieza cae entre dos unidades, esas se analizan por separado. */
+  const analyse = (ja) => {
+    const units = ja.split("|").map((unit) => unit.trim());
+    const pieces = tokenizer.tokenize(units.join(""));
+    const grouped = units.map(() => []);
+    let unit = 0, unitEnd = units[0].length, offset = 0, clean = units.map(() => true);
+    for (const piece of pieces) {
+      const end = offset + piece.surface_form.length;
+      while (unit < units.length - 1 && offset >= unitEnd) unitEnd += units[++unit].length;
+      if (end > unitEnd) { // cruza la frontera: las unidades que toca se analizarán solas
+        clean[unit] = false;
+        for (let next = unit + 1, reach = unitEnd; next < units.length && reach < end; next++) {
+          clean[next] = false;
+          reach += units[next].length;
+        }
+      }
+      grouped[unit].push(piece);
+      offset = end;
+    }
+    return units.map((text, i) => unitOf(clean[i] && grouped[i].length ? grouped[i] : tokenizer.tokenize(text)));
+  };
+  const analysed = list.map((sentence) => analyse(sentence.ja));
+
+  // Una sola consulta al diccionario general con todo lo que el banco no tiene
+  const wanted = new Set();
+  const want = (form) => { if (form && !bankLookup(form, "")) wanted.add(form); };
+  for (const units of analysed) {
+    units.forEach((unit, i) => {
+      if (unit.punct || UNCOUNTED_POS.has(unit.pos)) return;
+      want(unit.surface);
+      want(unit.basic);
+      if (units[i + 1] && !units[i + 1].punct) want(unit.surface + units[i + 1].surface);
+      unit.pieces.filter(isContentPiece).forEach((piece) => want(pieceBase(piece)));
+    });
+  }
+  const extra = await lookupDictionary([...wanted]);
+  const known = (form) => !!bankLookup(form, "") || extra.has(form);
+  const token = (unit, lemma) => ({ surface: unit.surface, lemma, reading: unit.reading, pos: unit.pos, morph: unit.morph });
+
+  const sentences = list.map((sentence, index) => {
+    const units = analysed[index], tokens = [];
+    for (let i = 0; i < units.length; i++) {
+      const unit = units[i], next = units[i + 1];
+      if (unit.punct || UNCOUNTED_POS.has(unit.pos)) { tokens.push(token(unit, unit.surface)); continue; }
+      if (known(unit.surface)) { tokens.push(token(unit, unit.surface)); continue; }
+      if (known(unit.basic)) { tokens.push(token(unit, unit.basic)); continue; }
+
+      // 3a. Unida a la siguiente forma una palabra del diccionario (食事 + 中)
+      if (next && !next.punct && known(unit.surface + next.surface)) {
+        const joined = unitOf([...unit.pieces, ...next.pieces]);
+        tokens.push(token(joined, joined.surface));
+        repairs.push(`units merged: ${unit.surface}|${next.surface}`);
+        i++;
+        continue;
+      }
+      // 3b. Eran varias palabras en una unidad: se divide por sus piezas con contenido
+      const content = unit.pieces.filter(isContentPiece);
+      if (content.length > 1 && content.every((piece) => known(pieceBase(piece)))) {
+        const groups = [];
+        for (const piece of unit.pieces) {
+          if (isContentPiece(piece) || !groups.length) groups.push([piece]);
+          else groups[groups.length - 1].push(piece);
+        }
+        for (const group of groups) {
+          const part = unitOf(group);
+          tokens.push(token(part, part.basic));
+        }
+        repairs.push(`unit split: ${unit.surface}`);
+        continue;
+      }
+      tokens.push(token(unit, unit.basic)); // 4. sin resolver
+    }
+    return {
+      id: index + 1, paragraph: Number.isInteger(sentence.p) ? sentence.p : sentence.paragraph,
+      jp: tokens.map((tok) => tok.surface).join(""), en: sentence.en, es: sentence.es,
+      tokens, dictionary: {}
+    };
+  });
+  const head = Array.isArray(data) ? {} : data;
+  return { title: head.title, title_en: head.title_en, title_es: head.title_es, topic: head.topic, level: head.level, sentences };
+}
+
 async function validateText(raw) {
   let data;
   try {
     data = JSON.parse(extractJSON(String(raw)));
   } catch (error) {
-    return { errors: [t("No es un JSON válido: {error}", { error: error.message })], text: null, flagged: [] };
+    const partial = recoverSentences(String(raw));
+    const errors = partial
+      ? [t("La respuesta está incompleta: llegaron {chars} caracteres y el JSON se corta a medias. Suele pasar al pegar en el móvil o cuando la IA no termina de escribir. Prueba el botón “Pegar del portapapeles”, o pega el resto a continuación.", { chars: String(raw).length })]
+      : [t("No es un JSON válido: {error}", { error: error.message })];
+    return { errors, text: null, flagged: [], repairs: [], partial };
+  }
+  const repairs = []; // lo que la app tuvo que arreglar: sirve para mejorar el prompt
+  // Un texto puede traer palabras de cualquier nivel: para reconocerlas hace falta el banco entero
+  await BANK.loadUpTo("N1").catch(() => {});
+  const segmented = isSegmented(data);
+  if (segmented) {
+    const broken = segmentErrors(data);
+    if (broken.length) return { errors: broken, text: null, flagged: [], repairs };
+    try {
+      data = await fromSegmented(data, repairs);
+    } catch (error) {
+      console.error("No se pudo analizar el texto:", error);
+      return { errors: [t("No se pudo cargar el analizador de japonés (unos 18 MB la primera vez). Comprueba la conexión y vuelve a intentarlo.")], text: null, flagged: [], repairs };
+    }
   }
   const errors = structureErrors(data);
-  if (errors.length) return { errors: [...new Set(errors)], text: null, flagged: [] };
+  if (errors.length) return { errors: [...new Set(errors)], text: null, flagged: [], repairs };
 
   // Lo que explicó la IA, de cualquier oración del texto
   const given = new Map();
@@ -282,9 +506,13 @@ async function validateText(raw) {
       const pos = normalizePos(token.pos) || (PUNCTUATION.test(surface) ? "punctuation" : "expression");
       const lemma = isText(token.lemma) ? normalizeText(token.lemma) : surface;
       const reading = isText(token.reading) ? normalizeText(token.reading) : isKana(surface) ? surface : "";
+      if (!normalizePos(token.pos)) repairs.push(`pos: ${surface} (${token.pos ?? "missing"})`);
+      if (!isText(token.lemma)) repairs.push(`lemma missing: ${surface}`);
+      if (!isText(token.reading) && pos !== "punctuation" && pos !== "symbol") repairs.push(`reading missing: ${surface}`);
       if (!UNCOUNTED_POS.has(pos) && !bankLookup(lemma, "")) pending.add(lemma);
-      return { surface, lemma, reading, pos };
+      return { surface, lemma, reading, pos, ...(token.morph ? { morph: token.morph } : {}) };
     });
+    for (const field of ["en", "es"]) if (!isText(sentence[field])) repairs.push(`sentence ${index + 1}: "${field}" missing`);
     return {
       id: index + 1,
       ...(Number.isInteger(sentence.paragraph) && sentence.paragraph > 0 ? { paragraph: sentence.paragraph } : {}),
@@ -302,7 +530,10 @@ async function validateText(raw) {
     for (const token of sentence.tokens) {
       if (UNCOUNTED_POS.has(token.pos) && !given.has(token.lemma)) continue;
       const { entry, source, word, uk } = resolveWord(token.lemma, given.get(token.lemma), extra);
-      if (source === "none") { token.pos = UNCOUNTED_POS.has(token.pos) ? token.pos : "expression"; }
+      if (source === "none") {
+        token.pos = UNCOUNTED_POS.has(token.pos) ? token.pos : "expression";
+        repairs.push(`dictionary entry missing: ${token.lemma}`);
+      }
       if (!entry.reading) entry.reading = isKana(token.lemma) ? token.lemma : token.reading;
       if (!isKana(entry.reading || "")) continue; // sin lectura fiable no se puede enlazar: queda como texto
 
@@ -329,8 +560,14 @@ async function validateText(raw) {
   }
 
   const title = isText(data.title) ? data.title.trim() : sentences[0].jp.slice(0, 20);
+  // En el formato nuevo el tema y el nivel los pone la app: que falten no es un fallo de la IA
+  for (const field of segmented ? ["title", "title_en", "title_es"] : ["title", "title_en", "title_es", "topic", "level"]) {
+    if (field === "level" ? !LEVELS.includes(data.level) : !isText(data[field])) repairs.push(`"${field}" missing or invalid`);
+  }
+  for (const word of flagged.values()) if (word.source === "kana_fix") repairs.push(`kanji for a kana word: ${word.lemma}`);
   return {
     errors: [],
+    repairs,
     flagged: [...flagged.values()],
     text: {
       title,
@@ -346,12 +583,31 @@ async function validateText(raw) {
 
 /* Comprueba, guarda y anota las palabras por revisar. Lanza la lista de
    errores si el texto está roto. Lo usan las tres formas de agregar un texto. */
-async function addText(raw, source = "manual") {
-  const { errors, text, flagged } = await validateText(raw);
-  if (errors.length) throw errors;
-  const record = await saveText(text, source);
+async function addText(raw, source = "manual", origin = {}) {
+  const { errors, text, flagged, repairs, partial } = await validateText(raw);
+  if (errors.length) throw Object.assign(errors, { partial });
+  if (origin.topic) text.topic = origin.topic; // el formato nuevo no trae tema ni nivel: los pone la app
+  if (origin.level) text.level = origin.level;
+  const record = await saveText(text, source, origin);
   reportWords(flagged, record.id);
+  // Lo que hubo que arreglar queda registrado junto a la generación
+  if (repairs.length) sendReport(record, "auto", "repaired", "", { repairs: repairs.slice(0, 60) });
   return record;
+}
+
+/* Registro de problemas de un texto (tabla text_reports): los que arregla la app
+   sola ("auto") y los que marca una persona con el botón "Reportar error" ("user") */
+async function sendReport(record, kind, category, comment = "", details = {}) {
+  if (!sb || !sync.user) return false;
+  const { error } = await sb.from("text_reports").insert({
+    text_id: record.id, request_id: record.requestId || null,
+    prompt_version: record.promptVersion || null, model: record.model || null,
+    kind, category, comment: comment.slice(0, 2000),
+    details: { title: record.title, level: record.level, topic: record.topic, source: record.source, ...details },
+    user_id: sync.user.id
+  });
+  if (error) console.error("No se pudo guardar el reporte:", error);
+  return !error;
 }
 
 /* Las palabras por revisar van a Supabase si hay sesión; nunca bloquean la lectura */
@@ -415,7 +671,7 @@ function wordsFromText(data) {
   return fresh;
 }
 
-async function saveText(data, source = "manual") {
+async function saveText(data, source = "manual", origin = {}) {
   const first = data.sentences[0].jp;
   if (texts.some((x) => x.title === data.title && x.data.sentences[0].jp === first)) {
     throw new Error(t("Ese texto ya está en tu biblioteca."));
@@ -426,6 +682,8 @@ async function saveText(data, source = "manual") {
     title: data.title, titleEn: data.title_en, titleEs: data.title_es,
     topic: data.topic, level: data.level,
     source,
+    // De qué generación salió, para poder relacionar un reporte con su registro
+    requestId: origin.requestId || "", promptVersion: origin.promptVersion || PROMPT_VERSION, model: origin.model || "",
     owner: "",         // se rellena al subirlo con la sesión iniciada
     status: "private", // al subirlo pasa a "pending"; un administrador lo aprueba
     createdAt: now, updatedAt: now, readAt: null,
@@ -520,6 +778,37 @@ function renderLibrary() {
   }).join("");
 }
 
+/* Error al agregar un texto pegado. Si estaba cortado pero traía oraciones
+   completas, ofrece guardar solo esas (nunca se recorta sin avisar). */
+function showPasteError(error, target, usePartial) {
+  showTextErrors([].concat(error.message || error), target);
+  const partial = error.partial;
+  if (!partial) return;
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "button button-outline partial-btn";
+  button.textContent = t("Guardar solo las {n} completas", { n: plural(partial.count, "oración", "oraciones") });
+  button.onclick = () => usePartial(partial.json);
+  target.appendChild(button);
+}
+
+/* Cuadro para pegar: cuenta lo que llegó y permite pegar con el portapapeles
+   del navegador, que no pasa por el teclado del móvil (donde a veces se corta) */
+function bindPasteBox(box, counter, button) {
+  const update = () => { counter.textContent = box.value ? t("{n} caracteres", { n: box.value.length }) : ""; };
+  box.addEventListener("input", update);
+  button.addEventListener("click", async () => {
+    try {
+      box.value = await navigator.clipboard.readText();
+    } catch {
+      counter.textContent = t("El navegador no dejó leer el portapapeles: mantén pulsado el cuadro y elige Pegar.");
+      return;
+    }
+    update();
+  });
+  update();
+}
+
 function showTextErrors(errors, target = $("textMessage")) {
   const shown = errors.slice(0, MAX_SHOWN_ERRORS);
   const more = errors.length - shown.length;
@@ -543,8 +832,8 @@ async function addTextFromInput() {
   if (pendingOwnText()) {
     return showTextErrors([t("Tienes un texto sin terminar ({title}). Léelo o sáltalo antes de agregar otro.", { title: pendingOwnText().title })]);
   }
-  try {
-    const record = await addText(raw);
+  const save = async (content) => {
+    const record = await addText(content);
     $("textInput").value = "";
     $("textMessage").className = "message correct";
     $("textMessage").textContent = t("Texto guardado: {title} ({n}).", {
@@ -552,12 +841,13 @@ async function addTextFromInput() {
       n: plural(record.data.sentences.length, "oración", "oraciones")
     });
     renderLibrary();
-  } catch (error) {
-    showTextErrors([].concat(error.message || error));
-  }
+  };
+  const fail = (error) => showPasteError(error, $("textMessage"), (json) => save(json).catch(fail));
+  await save(raw).catch(fail);
 }
 
 function bindLibrary() {
+  bindPasteBox($("textInput"), $("textInputCount"), $("textPasteBtn"));
   $("addTextBtn").addEventListener("click", addTextFromInput);
   $("sampleTextBtn").addEventListener("click", () => {
     $("textInput").value = JSON.stringify(SAMPLE_TEXT, null, 2);
@@ -876,6 +1166,10 @@ function promptParams({ type, topic, length }) {
   return params;
 }
 
+/* Versión del prompt: súbela cada vez que cambies su texto. Se guarda con cada
+   generación para saber con qué versión salió cada error. */
+const PROMPT_VERSION = "2026-10-08.1";
+
 /* El prompt en sí. IMPORTANTE: supabase/functions/generate-text/index.ts lleva
    una copia de esta función (allí se genera el texto con la IA); si cambias
    una, cambia la otra. No usa nada de fuera salvo TOKEN_POS. */
@@ -908,7 +1202,7 @@ TEXT
 - Write with the kanji a normal text of this level would use. Words that Japanese normally writes in kana must stay in kana (ある, いる, する, できる, ください, たくさん, かわいい, おいしい): never use rare kanji spellings such as 有る, 居る, 為る, 出来る, 下さい or 沢山.
 
 OUTPUT
-Return ONLY one JSON object (no explanations, no markdown), with exactly this structure:
+Return ONLY one JSON object (no explanations, no markdown), as compact JSON without indentation or line breaks, with exactly this structure (shown indented here only for readability):
 
 {
   "title": "毎朝のコーヒー",
@@ -952,7 +1246,60 @@ RULES
 7. Sentence ids start at 1 and increase by 1. "paragraph" is the number of the paragraph the sentence belongs to, starting at 1.`;
 }
 
-const buildPrompt = (options) => renderPrompt(promptParams(options));
+/* Versión del prompt segmentado (formato nuevo): súbela al cambiar su texto. */
+const SEGMENTED_VERSION = "2026-10-09.1-seg";
+
+/* Prompt del formato nuevo: la IA solo escribe el texto separado en unidades
+   con "|" y la traducción de cada oración. Lemas, lecturas y significados los
+   pone la app (kuromoji + diccionario). IMPORTANTE: la función generate-text
+   lleva una copia de esta función; si cambias una, cambia la otra. */
+function renderPromptSeg({ level, type, topic, length, known, assumedLevels, learning }) {
+  const fresh = Math.round(length * 0.1);
+  const minUnits = Math.round(length * 0.9), maxUnits = Math.round(length * 1.25);
+  const minSentences = Math.ceil(length / 9), maxSentences = Math.ceil(length / 6.5);
+  const knownLine = assumedLevels.length
+    ? `Known words: all standard JLPT ${assumedLevels.join(", ")} vocabulary` +
+      (known.length ? `, plus: ${known.join("、")}` : ".")
+    : known.length
+      ? `Known words (the learner can read these): ${known.join("、")}`
+      : "Known words: none yet. Use only the most basic beginner vocabulary.";
+
+  return `You are writing a graded Japanese reading text for a learner.
+
+LEARNER
+- Target level: JLPT ${level}.
+- ${knownLine}
+${learning.length ? `- Words the learner is still learning (reuse a few of them): ${learning.join("、")}\n` : ""}- A word written with its reading in brackets, like 角(かど), has several readings: use it ONLY with that reading and its meaning (角(かど) is "corner", never つの "horn"). Never write the brackets in the text.
+
+TEXT
+- Type: ${type}. Topic: ${topic}.
+- LENGTH (strict): the text must contain between ${minUnits} and ${maxUnits} units that are not punctuation, in about ${minSentences}-${maxSentences} sentences. Count them before answering: a text with fewer than ${minUnits} is rejected. If you are short, continue the story with more sentences.
+- Natural Japanese with grammar no harder than JLPT ${level}.
+- Make it enjoyable to read: one concrete situation with a small story arc, a surprise or a touch of humour. Sentences must connect with each other; never a list of unrelated textbook sentences.
+- About 90% of the content words must be known words. Introduce at most ${fresh} new words (about 10%), useful ones at level ${level}.
+- Write with the kanji a normal text of this level would use. Words that Japanese normally writes in kana must stay in kana (ある, いる, する, できる, ください, たくさん, かわいい, おいしい): never use rare kanji spellings such as 有る, 居る, 為る, 出来る, 下さい or 沢山.
+
+OUTPUT
+Return ONLY one compact JSON object (no explanations, no markdown), with exactly these fields:
+
+{"title":"毎朝のコーヒー","title_en":"Morning coffee","title_es":"El café de cada mañana","sentences":[
+{"p":1,"ja":"私|は|毎朝|コーヒー|を|飲みます|。","en":"I drink coffee every morning.","es":"Bebo café todas las mañanas."},
+{"p":1,"ja":"今日|は|新しい|店|で|買いました|が|、|あまり|おいしくなかった|です|。","en":"Today I bought it at a new shop, but it was not very good.","es":"Hoy lo compré en una tienda nueva, pero no estaba muy bueno."},
+{"p":2,"ja":"「|明日|も|一緒に|行きません|か|」|と|友達|に|聞かれました|。","en":"\\"Won't you come with me tomorrow too?\\" my friend asked me.","es":"«¿No vienes conmigo mañana también?», me preguntó mi amigo."}]}
+
+SEGMENTATION RULES
+1. "ja" is the sentence with "|" between units. Removing every "|" must give the exact sentence: no spaces, nothing added, nothing dropped.
+2. A conjugated verb or adjective is ONE unit together with its endings and auxiliaries (食べています, 高くなかった, 行きましょう, 聞かれました).
+3. Particles are separate units (は, が, を, に, で, も, と, の, か, ね, よ). です and だ after a noun or adjective are their own unit.
+4. Compound words stay as they appear in a dictionary (毎日, 食事中, 図書館, 一緒に).
+5. Every punctuation mark and bracket is its own unit.
+6. No empty units: never "||", and no "|" at the start or the end.
+7. Do NOT give lemmas, readings, word translations or parts of speech. Only "p", "ja", "en" and "es".
+8. "p" is the paragraph number, starting at 1 (in a dialogue, one paragraph per speaker turn). "en" and "es" are natural translations of the whole sentence.`;
+}
+
+// La app pide siempre el formato nuevo; el antiguo se sigue aceptando al pegar
+const buildPrompt = (options) => renderPromptSeg(promptParams(options));
 
 async function renderReadHome() {
   const skips = await skipsUsed();
@@ -1019,7 +1366,12 @@ async function renderReadHome() {
           <span id="promptCopied" class="helper"></span>
         </div>
         <label class="field"><span>${t("Respuesta de la IA (JSON)")}</span>
-          <textarea id="promptAnswer" rows="6" spellcheck="false"></textarea></label>
+          <textarea id="promptAnswer" rows="6" spellcheck="false" autocomplete="off"
+            autocapitalize="off" autocorrect="off"></textarea></label>
+        <div class="inline-form paste-tools">
+          <button id="promptPasteBtn" class="button button-outline" type="button">${t("Pegar del portapapeles")}</button>
+          <span id="promptAnswerCount" class="helper"></span>
+        </div>
         <div class="form-footer">
           <span></span>
           <button id="promptOpenBtn" class="button button-primary" type="button">${t("Validar y leer")}</button>
@@ -1080,12 +1432,11 @@ async function renderReadHome() {
       message.textContent = t("Pega primero el JSON del texto.");
       return;
     }
-    try {
-      openText((await addText(raw)).id);
-    } catch (error) {
-      showTextErrors([].concat(error.message || error), message);
-    }
+    const save = async (content) => openText((await addText(content)).id);
+    const fail = (error) => showPasteError(error, message, (json) => save(json).catch(fail));
+    await save(raw).catch(fail);
   };
+  bindPasteBox($("promptAnswer"), $("promptAnswerCount"), $("promptPasteBtn"));
 }
 
 /* ---------- Generar el texto con la IA (función generate-text de Supabase) ---------- */
@@ -1132,7 +1483,7 @@ async function generateAndOpen(options) {
   say(t("La IA está escribiendo tu texto… puede tardar un minuto."));
 
   try {
-    const params = { ...promptParams(options), requestId: newId() };
+    const params = { ...promptParams(options), requestId: newId(), format: 2 };
     let answer = null;
     while (!answer) {
       try {
@@ -1142,7 +1493,11 @@ async function generateAndOpen(options) {
         say(t("El primer intento no salió bien. Probando de nuevo…"));
       }
     }
-    openText((await addText(answer.text, "api")).id);
+    say(t("Analizando el texto… la primera vez se descarga el analizador de japonés (18 MB)."));
+    openText((await addText(answer.text, "api", {
+      requestId: params.requestId, promptVersion: answer.promptVersion, model: answer.model,
+      topic: params.topic, level: params.level
+    })).id);
   } catch (error) {
     if (!message.isConnected) return;
     if (Array.isArray(error)) showTextErrors(error, message); // texto roto
@@ -1275,6 +1630,7 @@ function renderReader() {
         <button id="readerCloseBtn" class="button button-quiet" type="button">${t("Salir")}</button>
       </div>
       <div class="reader-tools">
+        <button id="reportBtn" class="link-btn report-btn" type="button">⚑ ${t("Reportar error")}</button>
         <span class="helper">Furigana</span>
         <div class="toggle-group" role="group" aria-label="Furigana">
           ${FURIGANA_MODES.map(([mode, label]) => `
@@ -1296,8 +1652,31 @@ function renderReader() {
     </div>`;
 
   $("readerCloseBtn").onclick = () => { reader = null; renderRead(); };
+  $("reportBtn").onclick = openReport;
   $("readerFinishBtn").onclick = () => finishReading(false);
   if (canSkip) $("readerDiscardBtn").onclick = () => finishReading(true);
+}
+
+/* ---------- Reportar un error del texto ---------- */
+
+function openReport() {
+  $("reportComment").value = "";
+  $("reportMessage").textContent = sb && sync.user ? "" : t("Inicia sesión para enviar reportes.");
+  $("reportSendBtn").disabled = !(sb && sync.user);
+  $("reportDialog").showModal();
+}
+
+async function submitReport(event) {
+  event.preventDefault();
+  if (!reader) return $("reportDialog").close();
+  $("reportSendBtn").disabled = true;
+  const sent = await sendReport(reader.text, "user", $("reportCategory").value, $("reportComment").value.trim());
+  $("reportSendBtn").disabled = false;
+  if (!sent) {
+    $("reportMessage").textContent = t("No se pudo enviar el reporte. Inténtalo de nuevo.");
+    return;
+  }
+  $("reportDialog").close();
 }
 
 /* Vuelve a dibujar el lector sin mover el texto y deja a la vista lo que se tocó
@@ -1616,6 +1995,9 @@ function bindReader() {
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && reader?.panel) showPanel(null);
   });
+
+  $("reportForm").addEventListener("submit", submitReport);
+  $("reportCancelBtn").addEventListener("click", () => $("reportDialog").close());
 
   // Ajustes de lectura
   $("furiganaSelect").value = prefs.furigana;

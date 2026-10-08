@@ -8,3 +8,6 @@ node_modules/
 .wrangler/
 .netlify/
 supabase/.temp/
+
+# Lista de frecuencia original: solo se usa para generar los rangos, no se publica
+data/

@@ -63,8 +63,15 @@ const TOKEN_POS = [
   "number", "prefix", "suffix", "expression", "punctuation", "symbol"
 ];
 
-// Copia de renderPrompt de reading.js: si cambias una, cambia la otra.
-// deno-lint-ignore no-explicit-any
+// Copia de PROMPT_VERSION y renderPrompt de reading.js: si cambias una, cambia la otra.
+// deno-lint-ignore-file no-explicit-any
+/* Versión del prompt: súbela cada vez que cambies su texto. Se guarda con cada
+   generación para saber con qué versión salió cada error. */
+const PROMPT_VERSION = "2026-10-08.1";
+
+/* El prompt en sí. IMPORTANTE: supabase/functions/generate-text/index.ts lleva
+   una copia de esta función (allí se genera el texto con la IA); si cambias
+   una, cambia la otra. No usa nada de fuera salvo TOKEN_POS. */
 function renderPrompt({ level, type, topic, length, known, assumedLevels, learning }: any) {
   const fresh = Math.round(length * 0.1);
   // Las IA cuentan mal "palabras": se da un mínimo de tokens y su equivalente en oraciones
@@ -94,7 +101,7 @@ TEXT
 - Write with the kanji a normal text of this level would use. Words that Japanese normally writes in kana must stay in kana (ある, いる, する, できる, ください, たくさん, かわいい, おいしい): never use rare kanji spellings such as 有る, 居る, 為る, 出来る, 下さい or 沢山.
 
 OUTPUT
-Return ONLY one JSON object (no explanations, no markdown), with exactly this structure:
+Return ONLY one JSON object (no explanations, no markdown), as compact JSON without indentation or line breaks, with exactly this structure (shown indented here only for readability):
 
 {
   "title": "毎朝のコーヒー",
@@ -138,6 +145,92 @@ RULES
 7. Sentence ids start at 1 and increase by 1. "paragraph" is the number of the paragraph the sentence belongs to, starting at 1.`;
 }
 
+// Copia de SEGMENTED_VERSION y renderPromptSeg de reading.js: si cambias una, cambia la otra.
+/* Versión del prompt segmentado (formato nuevo): súbela al cambiar su texto. */
+const SEGMENTED_VERSION = "2026-10-09.1-seg";
+
+/* Prompt del formato nuevo: la IA solo escribe el texto separado en unidades
+   con "|" y la traducción de cada oración. Lemas, lecturas y significados los
+   pone la app (kuromoji + diccionario). IMPORTANTE: la función generate-text
+   lleva una copia de esta función; si cambias una, cambia la otra. */
+function renderPromptSeg({ level, type, topic, length, known, assumedLevels, learning }: any) {
+  const fresh = Math.round(length * 0.1);
+  const minUnits = Math.round(length * 0.9), maxUnits = Math.round(length * 1.25);
+  const minSentences = Math.ceil(length / 9), maxSentences = Math.ceil(length / 6.5);
+  const knownLine = assumedLevels.length
+    ? `Known words: all standard JLPT ${assumedLevels.join(", ")} vocabulary` +
+      (known.length ? `, plus: ${known.join("、")}` : ".")
+    : known.length
+      ? `Known words (the learner can read these): ${known.join("、")}`
+      : "Known words: none yet. Use only the most basic beginner vocabulary.";
+
+  return `You are writing a graded Japanese reading text for a learner.
+
+LEARNER
+- Target level: JLPT ${level}.
+- ${knownLine}
+${learning.length ? `- Words the learner is still learning (reuse a few of them): ${learning.join("、")}\n` : ""}- A word written with its reading in brackets, like 角(かど), has several readings: use it ONLY with that reading and its meaning (角(かど) is "corner", never つの "horn"). Never write the brackets in the text.
+
+TEXT
+- Type: ${type}. Topic: ${topic}.
+- LENGTH (strict): the text must contain between ${minUnits} and ${maxUnits} units that are not punctuation, in about ${minSentences}-${maxSentences} sentences. Count them before answering: a text with fewer than ${minUnits} is rejected. If you are short, continue the story with more sentences.
+- Natural Japanese with grammar no harder than JLPT ${level}.
+- Make it enjoyable to read: one concrete situation with a small story arc, a surprise or a touch of humour. Sentences must connect with each other; never a list of unrelated textbook sentences.
+- About 90% of the content words must be known words. Introduce at most ${fresh} new words (about 10%), useful ones at level ${level}.
+- Write with the kanji a normal text of this level would use. Words that Japanese normally writes in kana must stay in kana (ある, いる, する, できる, ください, たくさん, かわいい, おいしい): never use rare kanji spellings such as 有る, 居る, 為る, 出来る, 下さい or 沢山.
+
+OUTPUT
+Return ONLY one compact JSON object (no explanations, no markdown), with exactly these fields:
+
+{"title":"毎朝のコーヒー","title_en":"Morning coffee","title_es":"El café de cada mañana","sentences":[
+{"p":1,"ja":"私|は|毎朝|コーヒー|を|飲みます|。","en":"I drink coffee every morning.","es":"Bebo café todas las mañanas."},
+{"p":1,"ja":"今日|は|新しい|店|で|買いました|が|、|あまり|おいしくなかった|です|。","en":"Today I bought it at a new shop, but it was not very good.","es":"Hoy lo compré en una tienda nueva, pero no estaba muy bueno."},
+{"p":2,"ja":"「|明日|も|一緒に|行きません|か|」|と|友達|に|聞かれました|。","en":"\\"Won't you come with me tomorrow too?\\" my friend asked me.","es":"«¿No vienes conmigo mañana también?», me preguntó mi amigo."}]}
+
+SEGMENTATION RULES
+1. "ja" is the sentence with "|" between units. Removing every "|" must give the exact sentence: no spaces, nothing added, nothing dropped.
+2. A conjugated verb or adjective is ONE unit together with its endings and auxiliaries (食べています, 高くなかった, 行きましょう, 聞かれました).
+3. Particles are separate units (は, が, を, に, で, も, と, の, か, ね, よ). です and だ after a noun or adjective are their own unit.
+4. Compound words stay as they appear in a dictionary (毎日, 食事中, 図書館, 一緒に).
+5. Every punctuation mark and bracket is its own unit.
+6. No empty units: never "||", and no "|" at the start or the end.
+7. Do NOT give lemmas, readings, word translations or parts of speech. Only "p", "ja", "en" and "es".
+8. "p" is the paragraph number, starting at 1 (in a dialogue, one paragraph per speaker turn). "en" and "es" are natural translations of the whole sentence.`;
+}
+
+/* Formato nuevo (texto segmentado con "|"): JSON válido, cada oración con "ja",
+   "en" y "es", y ninguna unidad vacía. Al quitar los "|" queda el texto tal
+   cual, así que no puede perder ni ganar caracteres. */
+function checkSegmented(text: string, length: number, lastAttempt: boolean): Check {
+  const start = text.search(/[{[]/), end = Math.max(text.lastIndexOf("}"), text.lastIndexOf("]"));
+  let data: any;
+  try {
+    data = JSON.parse(start >= 0 && end > start ? text.slice(start, end + 1) : text);
+  } catch (error) {
+    return { code: "invalid_json", problems: [`The answer is not valid JSON: ${(error as Error).message}`] };
+  }
+  const list = Array.isArray(data) ? data : data?.sentences;
+  if (!Array.isArray(list) || !list.length) return { code: "missing_fields", problems: ['"sentences" must be a non-empty list.'] };
+  const missing: string[] = [], empty: string[] = [];
+  let count = 0;
+  list.forEach((sentence: any, index: number) => {
+    const n = index + 1;
+    for (const field of ["ja", "en", "es"]) {
+      if (!sentence || typeof sentence[field] !== "string" || !sentence[field].trim()) missing.push(`Sentence ${n}: "${field}" is missing.`);
+    }
+    if (typeof sentence?.ja !== "string") return;
+    const units = sentence.ja.split("|");
+    if (units.some((unit: string) => !unit.trim())) empty.push(`Sentence ${n}: empty unit ("||", or "|" at the start or the end) in "${sentence.ja.slice(0, 60)}".`);
+    count += units.filter((unit: string) => unit.trim() && !/^[\s\p{P}\p{S}]+$/u.test(unit)).length;
+  });
+  if (missing.length) return { code: "missing_fields", problems: missing };
+  if (empty.length) return { code: "empty_units", problems: empty };
+  if (!lastAttempt && count < length * 0.7) {
+    return { code: "too_short", problems: [`The text is too short: it has ${count} units that are not punctuation and needs at least ${Math.round(length * 0.9)}. Keep the story and add sentences that continue it.`] };
+  }
+  return { code: "", problems: [] };
+}
+
 const words = (value: unknown, max: number): string[] =>
   Array.isArray(value)
     ? value.filter((w) => typeof w === "string" && JAPANESE.test(w)).slice(0, max)
@@ -152,6 +245,7 @@ function readParams(body: any) {
   if (!topic) return null;
   return {
     level: body.level, type: body.type, topic, length: body.length,
+    format: body.format === 2 ? 2 : 1, // 2 = texto segmentado con "|" (las versiones antiguas de la app piden el 1)
     known: words(body.known, 1500),
     assumedLevels: Array.isArray(body.assumedLevels) ? LEVELS.filter((l) => body.assumedLevels.includes(l)) : [],
     learning: words(body.learning, 60),
@@ -174,20 +268,24 @@ Return the complete corrected JSON object, following every rule above.`;
    reconstruyan la oración. (La app lleva la misma comprobación en reading.js,
    función structureErrors.) Si aún quedan intentos, también se devuelve a la
    IA un texto mucho más corto de lo pedido. */
-function checkStructure(text: string, length: number, lastAttempt: boolean): string[] {
+type Check = { code: string; problems: string[] };
+
+/* code: "" si es legible, o el tipo de fallo que se guarda en el registro:
+   invalid_json | missing_fields | tokens_mismatch | too_short */
+function checkStructure(text: string, length: number, lastAttempt: boolean): Check {
   const start = text.indexOf("{"), end = text.lastIndexOf("}");
   // deno-lint-ignore no-explicit-any
   let data: any;
   try {
     data = JSON.parse(start >= 0 && end > start ? text.slice(start, end + 1) : text);
   } catch (error) {
-    return [`The answer is not valid JSON: ${(error as Error).message}`];
+    return { code: "invalid_json", problems: [`The answer is not valid JSON: ${(error as Error).message}`] };
   }
   if (!data || typeof data !== "object" || !Array.isArray(data.sentences) || !data.sentences.length) {
-    return ['"sentences" must be a non-empty list.'];
+    return { code: "missing_fields", problems: ['"sentences" must be a non-empty list.'] };
   }
   const problems: string[] = [];
-  let count = 0;
+  let count = 0, mismatch = false;
   // deno-lint-ignore no-explicit-any
   data.sentences.forEach((sentence: any, index: number) => {
     const n = index + 1;
@@ -200,15 +298,17 @@ function checkStructure(text: string, length: number, lastAttempt: boolean): str
     // deno-lint-ignore no-explicit-any
     const joined = sentence.tokens.map((token: any) => token.surface).join("");
     if (joined !== sentence.jp) {
+      mismatch = true;
       problems.push(`Sentence ${n}: the token surfaces joined ("${joined.slice(0, 60)}") do not reproduce "jp" ("${sentence.jp.slice(0, 60)}").`);
     }
     // deno-lint-ignore no-explicit-any
     count += sentence.tokens.filter((token: any) => token.pos !== "punctuation" && token.pos !== "symbol").length;
   });
-  if (!problems.length && !lastAttempt && count < length * 0.7) {
-    problems.push(`The text is too short: it has ${count} non-punctuation tokens and needs at least ${Math.round(length * 0.9)}. Keep the story and add sentences that continue it.`);
+  if (problems.length) return { code: mismatch ? "tokens_mismatch" : "missing_fields", problems };
+  if (!lastAttempt && count < length * 0.7) {
+    return { code: "too_short", problems: [`The text is too short: it has ${count} non-punctuation tokens and needs at least ${Math.round(length * 0.9)}. Keep the story and add sentences that continue it.`] };
   }
-  return problems;
+  return { code: "", problems: [] };
 }
 
 async function callGemini(model: string, prompt: string, key: string, full = true) {
@@ -272,7 +372,9 @@ Deno.serve(async (req) => {
   if (rows.length >= DAILY_HARD_CAP) return reply(429, { error: "busy" });
 
   // En un reintento se le devuelve a la IA su respuesta anterior con el motivo del rechazo
-  let prompt = renderPrompt(params);
+  const segmented = params.format === 2;
+  const version = segmented ? SEGMENTED_VERSION : PROMPT_VERSION;
+  let prompt = segmented ? renderPromptSeg(params) : renderPrompt(params);
   if (attempt > 1) {
     const { data: previous } = await admin.from("generations").select("raw, error")
       .eq("user_id", user.id).eq("request_id", requestId).not("raw", "is", null)
@@ -307,13 +409,21 @@ Deno.serve(async (req) => {
     : candidate?.finishReason === "MAX_TOKENS" ? "truncated"
     : !text ? "empty" : "";
   let detail = failure ? `${result.status} ${JSON.stringify(result.data?.error?.message || "").slice(0, 300)}` : "";
+  // Tipo de resultado que queda en el registro: ok, o qué falló exactamente
+  let outcome = failure || "ok";
   if (!failure) {
-    const problems = checkStructure(text, params.length, attempt >= MAX_ATTEMPTS);
-    if (problems.length) { failure = "invalid"; detail = problems.slice(0, 12).join("\n"); }
+    const check = (segmented ? checkSegmented : checkStructure)(text, params.length, attempt >= MAX_ATTEMPTS);
+    if (check.code) { failure = "invalid"; outcome = check.code; detail = check.problems.slice(0, 12).join("\n"); }
   }
 
   await admin.from("generations").insert({
     user_id: user.id, request_id: requestId, attempt,
+    prompt_version: version, result: outcome,
+    // Con qué se pidió el texto (de las listas de palabras solo se guarda cuántas eran)
+    params: {
+      level: params.level, type: params.type, topic: params.topic, length: params.length, format: params.format,
+      known: params.known.length, learning: params.learning.length, assumedLevels: params.assumedLevels,
+    },
     model, key_label: label, attempts: attempts.join(" ") || null,
     level: params.level, length: params.length, is_fix: attempt > 1,
     prompt_tokens: usage.promptTokenCount ?? null,
@@ -321,7 +431,7 @@ Deno.serve(async (req) => {
     thought_tokens: usage.thoughtsTokenCount ?? null,
     ok: !failure,
     error: failure ? `${failure}: ${detail}` : null,
-    raw: failure && text ? text.slice(0, 60000) : null, // lo que respondió la IA, para revisarlo
+    raw: text ? text.slice(0, 80000) : null, // lo que respondió la IA, haya ido bien o mal
   });
 
   if (failure) {
@@ -329,5 +439,5 @@ Deno.serve(async (req) => {
     const canRetry = failure !== "quota" && attempt < MAX_ATTEMPTS;
     return reply(failure === "quota" ? 503 : 502, { error: failure, canRetry });
   }
-  return reply(200, { text, model, remaining: DAILY_TEXTS - delivered - 1 });
+  return reply(200, { text, model, requestId, promptVersion: version, remaining: DAILY_TEXTS - delivered - 1 });
 });

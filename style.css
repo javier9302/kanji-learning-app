@@ -2229,3 +2229,19 @@ div.hard-item {
 .admin-import {
   margin-top: 26px;
 }
+
+/* Pegado de textos y reporte de errores */
+
+.paste-tools {
+  margin: -6px 0 14px;
+}
+
+.partial-btn {
+  display: block;
+  margin-top: 10px;
+}
+
+.report-btn {
+  margin-right: auto;
+  text-decoration: none;
+}
