@@ -2598,3 +2598,50 @@ body[data-view="dict"] .intro {
   text-align: center;
   margin: 8px 0;
 }
+
+.tr-compare-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--label);
+  text-transform: uppercase;
+  letter-spacing: .4px;
+  margin: 12px 0 6px;
+}
+
+.tr-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tr-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 9px;
+  border: 1px solid var(--line-strong);
+  background: var(--white);
+  color: var(--ink);
+  font: 600 15px 'Noto Sans JP', 'DM Sans', sans-serif;
+  cursor: pointer;
+}
+
+.tr-chip small {
+  font: 500 10px 'DM Sans', sans-serif;
+  color: var(--muted);
+}
+
+.tr-chip:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.tr-chip-yes { background: var(--good-bg); border-color: transparent; color: var(--ok); }
+.tr-chip-no { background: var(--wrong-bg); border-color: transparent; color: var(--red); }
+.tr-chip-unclear { border-style: dashed; }
+.tr-chip-looked { background: var(--hard-bg); border-color: transparent; color: var(--hard-ink); }
+
+.translate-card .row-actions {
+  flex-wrap: wrap;
+}

@@ -700,6 +700,11 @@ alter table public.user_words drop constraint if exists user_words_origin_check;
 alter table public.user_words add constraint user_words_origin_check
   check (origin in ('manual', 'lectura', 'frecuencia', 'diccionario', 'traducir'));
 
+-- Correcciones con las que el estudiante no estuvo de acuerdo: van a text_reports
+-- con kind 'grade' (category 'contested'), enlazadas por request_id con translation_grades.
+alter table public.text_reports drop constraint if exists text_reports_kind_check;
+alter table public.text_reports add constraint text_reports_kind_check check (kind in ('auto', 'user', 'grade'));
+
 -- Historial diario: frases traducidas y cuántas bien. No cambian reviews/correct/new_items.
 alter table public.days add column if not exists translations integer not null default 0;
 alter table public.days add column if not exists translations_correct integer not null default 0;

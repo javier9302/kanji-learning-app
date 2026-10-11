@@ -279,6 +279,34 @@ export default async function extra({ page, step, check }) {
       state.last.result.words[1].understood === false, JSON.stringify(state.last.result));
     check(state.text.includes("78") && state.text.includes("Casi: te faltó") && state.text.includes("Bebo café todas las mañanas."), state.text);
     await shot(page, "traducir-ia");
+
+    // Fichas por palabra, con icono y texto; la nota sale al tocarla
+    const chips = await page.evaluate(() => {
+      document.querySelector(".tr-chip-no").click();
+      return { n: document.querySelectorAll(".tr-chip").length, no: document.querySelector(".tr-chip-no").textContent,
+        note: $("trChipNote").textContent, live: $("trResult").getAttribute("aria-live") };
+    });
+    check(chips.n === 4 && chips.no.includes("毎朝") && chips.note.includes("todas las mañanas") && chips.live === "polite", JSON.stringify(chips));
+    let word = await page.evaluate(() => userWords.get("毎朝|まいあさ"));
+    check(word.status === "learning" && word.meaningWrong === 1 && word.meaningCorrect === 0, `tras la IA: ${JSON.stringify(word)}`);
+    const dayBefore = await page.evaluate(() => ({ ...meta.days[today()] }));
+
+    // No estoy de acuerdo: se deshace el fallo y cuenta como entendida, con menos peso
+    await page.evaluate(() => $("trContestBtn").click());
+    await page.waitForFunction(() => translating?.result?.source === "contested" && !$("trContestBtn"), { timeout: 5000 });
+    const contested = await page.evaluate(() => ({ word: userWords.get("毎朝|まいあさ"), last: translationLog[translationLog.length - 1],
+      day: meta.days[today()], text: $("trResult").textContent }));
+    check(contested.word.status !== "learning" && !contested.word.meaningWrong && contested.word.meaningCorrect === 0.5, JSON.stringify(contested.word));
+    check(contested.last.contested === true && contested.last.source === "contested" && contested.last.result.original.verdict === "mostly", "registro");
+    check(contested.day.t === dayBefore.t && contested.day.tc === dayBefore.tc, "el día contó dos veces");
+    await page.evaluate(() => $("trNextBtn").click());
+
+    // La corrección discutida no se reutiliza: la misma respuesta vuelve a la IA
+    await page.waitForSelector("#trInput", { timeout: 5000 });
+    await typeAnswer("Bebo café");
+    await page.evaluate(() => $("trCheckBtn").click());
+    await page.waitForSelector("#trNextBtn", { timeout: 5000 });
+    check(await page.evaluate(() => sentBodies.length === 2 && !translating.result.cached), "reutilizó una corrección discutida");
     await page.evaluate(() => $("trNextBtn").click());
 
     // La función responde con un error de cuota: no se bloquea, se corrige él mismo
@@ -323,7 +351,11 @@ export default async function extra({ page, step, check }) {
     check(state.cards === before, "cambió la tarjeta de repaso");
     check(state.score.meaningFail === true, "sin prioridad entre las palabras nuevas");
     await page.evaluate(() => $("trNextBtn").click());
-    await page.waitForSelector("#translateArea .empty-state", { timeout: 5000 }); // demasiadas palabras sin conocer
+    // Demasiadas palabras sin conocer: no quedan frases y sale el resumen de la tanda
+    await page.waitForSelector("#trAgainBtn", { timeout: 5000 });
+    const summary = await page.evaluate(() => $("translateArea").textContent);
+    check(/\d+ (frases|sentences)/.test(summary) && summary.includes("毎朝"), summary.slice(0, 200));
+    await shot(page, "traducir-resumen");
     await page.evaluate(() => switchView("progress"));
     await page.waitForFunction(() => $("failedList").textContent.includes("毎朝"), { timeout: 5000 }); // "Las que más fallas"
     await page.evaluate(() => { translating = null; switchView("read"); });
