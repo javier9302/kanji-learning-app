@@ -361,6 +361,9 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
       return reply(200, {
         result: graded, model: usedModel, requestId, promptVersion: GRADING_PROMPT_VERSION,
         remaining: dailyGrades - delivered - 1,
+        // Para medir el consumo (tools/calibrate-grading.mjs); la app no lo usa
+        usage: { prompt: usage.promptTokenCount ?? null, output: usage.candidatesTokenCount ?? null, thought: usage.thoughtsTokenCount ?? null },
+        latencyMs: latency, attempts: attempt,
       });
     }
     if (failure === "quota") break; // sin cuota en ninguna clave no sirve repetir

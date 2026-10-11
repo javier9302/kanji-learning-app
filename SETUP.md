@@ -291,6 +291,16 @@ todo a JSON para revisar el prompt.
 Las frases respondidas (almacén `translations`) se quedan en cada dispositivo; lo que se sincroniza
 es el progreso de palabras y kanjis y el historial del día.
 
+Calibración (opcional, gasta cuota): `tools/calibrate-grading.mjs` corrige 30 frases con 4 tipos de
+respuesta en los dos idiomas (240 llamadas) contra la función ya desplegada y compara el veredicto
+esperado con el de la IA. Antes sube `DAILY_GRADES` (por ejemplo a `300`) y después vuelve a
+dejarlo. La cuenta se pasa por variables de entorno y no se guarda:
+
+```sh
+node tools/calibrate-grading.mjs --dry-run        # no llama a nada
+CALIBRATION_EMAIL=tu@correo CALIBRATION_PASSWORD='…' node tools/calibrate-grading.mjs --limit 20
+```
+
 Consumo y fallos:
 
 ```sql

@@ -78,6 +78,8 @@ test("respuesta válida: devuelve la corrección, con cada palabra y sin nada de
   });
   assert.equal(data.promptVersion, GRADING_PROMPT_VERSION);
   assert.equal(data.remaining, 29);
+  assert.deepEqual(data.usage, { prompt: 400, output: 120, thought: 30 });
+  assert.ok(data.latencyMs > 0 && data.attempts === 1);
   assert.equal(state.calls.length, 1);
 });
 
