@@ -200,6 +200,24 @@ function dictStatusHTML(entry) {
   return [status, review, lookups].filter(Boolean).join(" · ");
 }
 
+/* Frases de ejemplo de la palabra: primero las de los textos del usuario */
+function dictSentencesHTML(entry) {
+  const order = { text: 0, article: 0, tatoeba: 1, ai: 2 };
+  const list = [...sentencesFor(entry.id)].sort((a, b) => (order[a.source] ?? 3) - (order[b.source] ?? 3)).slice(0, 3);
+  if (!list.length) return "";
+  return `<ul class="dict-sentences">${list.map((sentence) => {
+    const target = sentence.tokens.findIndex((token) => token.key === entry.id);
+    const translation = sentenceTranslation(sentence);
+    return `<li>
+      <span class="card-sentence small" lang="ja">${sentenceLineHTML(sentence, { target, reveal: true })}</span>
+      ${"speechSynthesis" in window ? `<button class="link-btn" type="button" title="${t("Escuchar la frase")}" aria-label="${t("Escuchar la frase")}"
+        data-dict-speak="${escapeHTML(sentence.tokens.map((token) => token.surface).join(""))}">🔊</button>` : ""}
+      ${translation ? `<span class="helper">${escapeHTML(translation)}</span>` : ""}
+      ${sentenceCreditHTML(sentence)}
+    </li>`;
+  }).join("")}</ul>`;
+}
+
 /* Ficha de un resultado: todo lo que se sabe de la palabra */
 function dictCardHTML(entry) {
   const rec = userWords.get(entry.id);
@@ -232,6 +250,7 @@ function dictCardHTML(entry) {
       <p class="meaning">${escapeHTML(mine.join("; "))}</p>
       ${other?.length && other !== mine ? `<p class="helper">${escapeHTML(other.join("; "))}</p>` : ""}
       ${parts ? `<ul class="missed-list dict-kanji">${parts}</ul>` : ""}
+      ${dictSentencesHTML(entry)}
       <p class="dict-status">${dictStatusHTML(entry)}</p>
       <div class="inline-form dict-actions">
         <button class="button button-primary" type="button" data-dict-mark="learn"
@@ -339,6 +358,11 @@ async function openDictEntry(id) {
   }
   renderDictionary();
   document.querySelector("[data-dict-card]")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  // Sus frases comunes pueden no estar descargadas todavía
+  if (entry?.level && !staticSentences.has(entry.level)) {
+    await ensureSentences([entry.level]);
+    if (dictState.open === id && document.body.dataset.view === "dict") renderDictionary();
+  }
 }
 
 /* Botones de la ficha: "Estudiar esta palabra" y "Ya la domino" (los mismos

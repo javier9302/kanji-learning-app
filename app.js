@@ -112,7 +112,8 @@ function saveLocal(key, value) {
 
 const prefs = loadLocal("kanji-prefs", {
   studyType: "word", studyMode: "type", studyCount: "10", goal: 20,
-  furigana: "unknown" // furigana al leer: unknown | all | none
+  furigana: "unknown", // furigana al leer: unknown | all | none
+  sentenceReview: false // repasar las palabras dentro de una frase
 });
 
 /* =========================================
@@ -980,6 +981,11 @@ function bindSettings() {
     const value = Math.round(Number($("maxNewInput").value));
     prefs.maxNew = Math.min(50, Math.max(0, Number.isFinite(value) ? value : STUDY_CONFIG.maxNewPerSession));
     $("maxNewInput").value = prefs.maxNew;
+    saveLocal("kanji-prefs", prefs);
+  });
+  $("sentenceReviewInput").checked = !!prefs.sentenceReview;
+  $("sentenceReviewInput").addEventListener("change", () => {
+    prefs.sentenceReview = $("sentenceReviewInput").checked;
     saveLocal("kanji-prefs", prefs);
   });
   $("debugStudyInput").checked = !!prefs.debugStudy;

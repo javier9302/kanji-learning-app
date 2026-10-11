@@ -416,6 +416,12 @@ async function startSession() {
     return renderStudyHome();
   }
   session = { queue, total: queue.length, done: 0, firstTry: 0, missed: new Map(), mode: $("studyMode").value };
+  if (prefs.sentenceReview && session.mode === "type") {
+    // Frases comunes de los niveles de estas palabras (las del usuario ya están en memoria)
+    const current = session;
+    await ensureSentences(queue.map((card) => card.entry.level).filter(Boolean)).catch(() => {});
+    if (session !== current) return;
+  }
   document.body.classList.add("studying");
   showCard();
   $("studyArea").scrollIntoView({ behavior: "smooth", block: "start" });
@@ -450,6 +456,35 @@ function questionHTML(card) {
   return `<div class="card-symbol ${[...entry.w].length > 1 ? "word" : ""}" lang="ja">${escapeHTML(entry.w)}</div>
     ${BANK.isAmbiguous(entry)
       ? `<p class="card-sense">（${escapeHTML(gloss(entry, 2))}）</p>` : ""}`;
+}
+
+/* Con "Repasar con frases": la palabra se pregunta dentro de una frase. Se
+   pide su lectura entera (nunca la de un kanji suelto) y se corrige igual que
+   la tarjeta de siempre. pick: lo que devuelve sentenceForCard. */
+function sentenceQuestionHTML(card, pick) {
+  const { sentence, target, extra } = pick;
+  const token = sentence.tokens[target];
+  const translation = sentenceTranslation(sentence);
+  return `
+    <div class="card-sentence" lang="ja">${sentenceLineHTML(sentence, { target, extra })}${
+      translation ? `<button class="sent-btn" type="button" data-sent-translate
+        title="${t("Traducción de la frase")}" aria-label="${t("Traducción de la frase")}" lang="ja">訳</button>` : ""}</div>
+    ${translation ? `<p id="sentTranslation" class="sent-translation hidden">${escapeHTML(translation)}</p>` : ""}
+    <p id="sentExtra" class="helper sent-gloss hidden"></p>
+    <p class="helper">${t("¿Cómo se lee la palabra marcada?")}${token.surface !== card.entry.w
+      ? ` ${t("Vale su lectura aquí o la de su forma de diccionario ({word}).", { word: card.entry.w })}` : ""}</p>`;
+}
+
+/* La frase al enseñar la respuesta: entera, con furigana y traducción */
+function sentenceAnswerHTML(pick) {
+  const { sentence, target } = pick;
+  const translation = sentenceTranslation(sentence);
+  return `
+    <div class="card-sentence answered" lang="ja">${sentenceLineHTML(sentence, { target, reveal: true })}</div>
+    ${translation ? `<p class="sent-translation">${escapeHTML(translation)}</p>` : ""}
+    ${"speechSynthesis" in window
+      ? `<button id="sentSpeakBtn" class="button button-quiet speak-btn" type="button">🔊 ${t("Escuchar la frase")}</button>` : ""}
+    ${sentenceCreditHTML(sentence)}`;
 }
 
 /* Lo que se enseña al responder */
@@ -509,6 +544,8 @@ function showCard() {
   const area = $("studyArea");
   // La lectura se escribe solo en palabras; un kanji siempre es tarjeta que se voltea
   const form = session.mode === "type" && card.kind === "word" ? "type" : "flash";
+  // Con el ajuste "Repasar con frases": dentro de una frase si hay alguna que valga
+  const pick = form === "type" && prefs.sentenceReview ? sentenceForCard(card) : null;
 
   area.innerHTML = `
     <div class="card">
@@ -519,7 +556,7 @@ function showCard() {
       <div class="meter" aria-hidden="true">
         <div style="width:${(session.done / session.total) * 100}%"></div>
       </div>
-      ${questionHTML(card)}
+      ${pick ? sentenceQuestionHTML(card, pick) : questionHTML(card)}
       ${form === "type" ? `
       <form id="readingForm" autocomplete="off">
         <input id="readingInput" class="reading-input" type="text" lang="ja" inputmode="text"
@@ -545,7 +582,10 @@ function showCard() {
     // Debajo de cada botón, cuándo volvería a salir. La práctica extra no mueve el calendario.
     const when = (rating) => rating === "next" || keepsDate(card, rating) ? ""
       : ` · ${intervalLabel(nextCard(card.rec || {}, rating, now), now)}`;
+    if (pick) area.querySelector(".card-sentence").remove(); // abajo va entera, con furigana
+    area.querySelector("#sentTranslation")?.remove();
     answer.innerHTML = `
+      ${pick ? sentenceAnswerHTML(pick) : ""}
       ${answerHTML(card)}
       <div class="card-actions">
         ${ratings.map(([rating, label, cls], i) => `
@@ -558,6 +598,7 @@ function showCard() {
         ? t("Otra vez: no la sabías, vuelve a salir en esta sesión. Difícil: te costó. Bien: la recordaste. Fácil: la sabías al instante. Debajo de cada botón ves cuándo volverá a salir.")
         : t("Difícil: te costó. Bien: la recordaste. Fácil: la sabías al instante. Debajo de cada botón ves cuándo volverá a salir.")}</p>` : ""}`;
     if ($("speakBtn")) $("speakBtn").onclick = () => speak(entry.w);
+    if ($("sentSpeakBtn")) $("sentSpeakBtn").onclick = () => speak(pick.sentence.tokens.map((token) => token.surface).join(""));
     answer.querySelectorAll("[data-rate]").forEach((button) => {
       button.onclick = async () => {
         answer.querySelectorAll("[data-rate]").forEach((b) => { b.disabled = true; });
@@ -575,6 +616,7 @@ function showCard() {
   async function finish(correct, message) {
     feedback.textContent = message;
     feedback.className = `message ${correct ? "correct" : "incorrect"}`;
+    if (pick) sentencePracticed(pick, card, correct);
     if (correct) return reveal(PASSED, "good");
     await gradeCard(card, "again");
     reveal(NEXT, "next");
@@ -587,6 +629,21 @@ function showCard() {
     };
     $("revealBtn").focus();
     return;
+  }
+
+  if (pick) {
+    // 訳 enseña u oculta la traducción; la palabra desconocida de más se explica al tocarla
+    const translate = area.querySelector("[data-sent-translate]");
+    if (translate) translate.onclick = () => {
+      translate.classList.toggle("on", !$("sentTranslation").classList.toggle("hidden"));
+    };
+    const extra = area.querySelector("[data-sent-extra]");
+    if (extra) extra.onclick = extra.onkeydown = (event) => {
+      if (event.type === "keydown" && event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      $("sentExtra").innerHTML = tokenGlossHTML(pick.sentence.tokens[pick.extra]);
+      $("sentExtra").classList.toggle("hidden");
+    };
   }
 
   const input = $("readingInput");
@@ -612,7 +669,9 @@ function showCard() {
       feedback.textContent = t("Escribe una lectura primero.");
       return;
     }
-    const correct = typed === normalizeReading(entry.r);
+    // En una frase también vale la lectura de la palabra tal como está escrita (行きます -> いきます)
+    const correct = typed === normalizeReading(entry.r) ||
+      !!pick && typed === normalizeReading(pick.sentence.tokens[pick.target].reading);
     // Otra lectura válida de la MISMA palabra (にほん / にっぽん) no es un fallo
     if (!correct && entry.alt.some((alt) => normalizeReading(alt) === typed)) {
       feedback.textContent = t("Esa lectura también existe, pero aquí se pide la más habitual.");
@@ -628,6 +687,11 @@ function showCard() {
       : other ? t("Esa es la lectura de otro significado ({meaning}).", { meaning: gloss(other, 2) })
       : t("No es correcto."));
   });
+}
+
+/* Una palabra se ha preguntado dentro de una frase: la frase cuenta como vista */
+function sentencePracticed(pick, card, correct) {
+  markSentenceShown(pick.sentence.id).catch((error) => console.error("No se pudo anotar la frase:", error));
 }
 
 /* Pasa a la siguiente tarjeta. Las falladas vuelven a salir un poco después y

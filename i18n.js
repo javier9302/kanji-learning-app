@@ -44,6 +44,11 @@ const EN = {
   "No se encontró ninguna oración en japonés.": "No Japanese sentence was found.",
   "El texto es demasiado largo ({n} caracteres; el máximo es {max}). Pégalo en partes.": "The text is too long ({n} characters; the maximum is {max}). Paste it in parts.",
   "Texto guardado: {title} ({n}). Se queda solo en este dispositivo: no se sube ni se comparte.": "Text saved: {title} ({n}). It stays on this device only: it is not uploaded or shared.",
+  "Repasar con frases": "Review with sentences",
+  "Repasar con frases: en «Escribir la lectura», la palabra se pregunta dentro de una frase hecha con palabras que ya conoces, si hay alguna; si no, sale sola como siempre.": "Review with sentences: in “Type the reading”, the word is asked inside a sentence made of words you already know, if there is one; otherwise it appears alone as usual.",
+  "¿Cómo se lee la palabra marcada?": "How is the highlighted word read?",
+  "Vale su lectura aquí o la de su forma de diccionario ({word}).": "Its reading here or that of its dictionary form ({word}) are both accepted.",
+  "Escuchar la frase": "Listen to the sentence",
   "resultado": "result",
   "resultados": "results",
   /* ---------- Instalar como app ---------- */

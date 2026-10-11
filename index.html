@@ -551,10 +551,15 @@
         <div>
           <h3>Repaso</h3>
           <p class="helper">Palabras nuevas como máximo en cada sesión. Los repasos pendientes salen siempre antes y no cuentan.</p>
+          <p class="helper">Repasar con frases: en «Escribir la lectura», la palabra se pregunta dentro de una frase hecha con palabras que ya conoces, si hay alguna; si no, sale sola como siempre.</p>
         </div>
         <div class="import-actions">
           <input id="maxNewInput" class="search goal-input" type="number"
             min="0" max="50" step="1" aria-label="Palabras nuevas por sesión">
+          <label class="check-line">
+            <input id="sentenceReviewInput" type="checkbox">
+            <span>Repasar con frases</span>
+          </label>
           <label class="check-line">
             <input id="debugStudyInput" type="checkbox">
             <span>Mostrar por qué sale cada palabra nueva</span>

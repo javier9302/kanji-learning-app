@@ -64,6 +64,68 @@ export default async function extra({ page, step, check }) {
     check(state.sentences.some((s) => s[3].includes("学校|がっこう")), "学校 no es target");
   });
 
+  /* Una sesión con una sola tarjeta, para preguntar justo esa palabra */
+  const studyOne = (id) => page.evaluate((wordId) => {
+    const entry = BANK.words.get(wordId), rec = userWords.get(wordId) || null;
+    session = { queue: [{ kind: "word", id: wordId, entry, rec, group: "new" }], total: 1, done: 0, firstTry: 0, missed: new Map(), mode: "type" };
+    switchView("study");
+    document.body.classList.add("studying");
+    showCard();
+  }, id);
+  const answer = async (typed) => {
+    await page.evaluate((value) => { $("readingInput").value = value; $("checkBtn").click(); }, typed);
+    await page.waitForSelector('[data-rate="good"], [data-rate="next"]', { timeout: 5000 });
+  };
+
+  await step("repasar con frases: desactivado, la tarjeta es la de siempre", async () => {
+    await page.evaluate(async () => { meta.reading.assumed = "N5"; await saveMeta(); }); // conoce el vocabulario de N5
+    await studyOne("学校|がっこう");
+    check(await page.evaluate(() => !document.querySelector(".card-sentence") && !!document.querySelector(".card-symbol")), "salió una frase");
+  });
+
+  await step("repasar con frases: la palabra dentro de una frase, corregida como siempre", async () => {
+    await page.evaluate(() => { $("sentenceReviewInput").click(); });
+    check(await page.evaluate(() => prefs.sentenceReview === true), "el ajuste no se guardó");
+    await studyOne("学校|がっこう");
+    const shown = await page.evaluate(() => ({
+      target: document.querySelector(".sent-target")?.textContent,
+      ruby: !!document.querySelector(".sent-target rt"),
+      line: document.querySelector(".card-sentence")?.textContent
+    }));
+    check(shown.target === "学校" && !shown.ruby && shown.line.includes("学校"), JSON.stringify(shown));
+    await shot(page, "frase-pregunta");
+    await answer("がっこう");
+    const after = await page.evaluate(() => ({
+      ok: $("feedback").classList.contains("correct"),
+      ruby: document.querySelector(".card-sentence.answered .sent-target rt")?.textContent,
+      stats: [...sentenceStats.values()].map((s) => s.shown)
+    }));
+    check(after.ok && after.ruby === "がっこう" && after.stats.join() === "1", JSON.stringify(after));
+    await shot(page, "frase-respuesta");
+    await page.evaluate(() => document.querySelector('[data-rate="good"]').click());
+    await page.waitForFunction(() => userWords.get("学校|がっこう")?.studied, { timeout: 5000 });
+  });
+
+  await step("repasar con frases: verbo conjugado, vale su lectura en la frase; un fallo sigue siendo fallo", async () => {
+    await studyOne("行く|いく");
+    check(await page.evaluate(() => document.querySelector(".sent-target")?.textContent === "行きます"), "no salió 行きます");
+    await answer("いきます");
+    check(await page.evaluate(() => $("feedback").classList.contains("correct")), "いきます no se aceptó");
+    await page.evaluate(() => document.querySelector('[data-rate="good"]').click());
+    await page.waitForFunction(() => !document.querySelector('[data-rate]') || !session, { timeout: 5000 });
+    await studyOne("友達|ともだち");
+    check(await page.evaluate(() => document.querySelector(".sent-target")?.textContent === "友達"), "no salió 友達 en una frase");
+    await answer("ともたち");
+    check(await page.evaluate(() => $("feedback").classList.contains("incorrect") && userWords.get("友達|ともだち").incorrectCount === 1), "el fallo no se registró");
+    // Se deja todo como estaba para los pasos siguientes
+    await page.evaluate(async () => {
+      session = null;
+      document.body.classList.remove("studying");
+      meta.reading.assumed = "";
+      await saveMeta();
+    });
+  });
+
   await step("diccionario: buscar en romaji abre la vista con resultados", async () => {
     await page.type("#dictInput", "mizu");
     await page.waitForSelector(".dict-row", { timeout: 5000 });

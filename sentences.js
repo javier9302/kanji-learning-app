@@ -146,6 +146,104 @@ async function rebuildSentencesIfNeeded() {
 }
 
 /* =========================================
+   3. FRASES COMUNES Y BÚSQUEDA POR PALABRA
+   -----------------------------------------
+   Las frases comunes van en bank/sentences/<nivel>.json y se descargan por
+   nivel cuando hacen falta (el service worker las guarda al primer uso). Ya
+   traen sus unidades analizadas: para enseñarlas no hace falta kuromoji.
+   ========================================= */
+
+const staticSentences = new Map(); // nivel -> frases comunes ya descargadas
+const staticLoading = {};          // nivel -> promesa
+let sentenceIndex = null;          // id de palabra -> frases (se calcula una vez y se guarda)
+
+/* Descarga las frases comunes de un nivel (una sola vez). Si el archivo no
+   existe todavía o no hay conexión, ese nivel se queda sin frases comunes. */
+function loadStaticSentences(level) {
+  if (!BANK.LEVELS.includes(level)) return Promise.resolve();
+  return staticLoading[level] ??= fetch(`bank/sentences/${level.toLowerCase()}.json`)
+    .then((response) => response.ok ? response.json() : [])
+    .then((list) => {
+      staticSentences.set(level, Array.isArray(list) ? list : []);
+      forgetSentenceIndex();
+    })
+    .catch(() => { delete staticLoading[level]; }); // sin conexión: se reintenta la próxima vez
+}
+
+/* Frases para estas palabras: carga las comunes de sus niveles */
+const ensureSentences = (levels) => Promise.all([...new Set(levels)].map(loadStaticSentences));
+
+function forgetSentenceIndex() {
+  sentenceIndex = null;
+}
+
+/* Todas las frases que sirven para preguntar una palabra */
+function sentencesFor(wordId) {
+  if (!sentenceIndex) {
+    sentenceIndex = new Map();
+    const add = (sentence) => {
+      for (const target of sentence.targets || []) {
+        if (!sentenceIndex.has(target)) sentenceIndex.set(target, []);
+        sentenceIndex.get(target).push(sentence);
+      }
+    };
+    for (const sentence of userSentences.values()) add(sentence);
+    for (const list of staticSentences.values()) list.forEach(add);
+  }
+  return sentenceIndex.get(wordId) || [];
+}
+
+/* La frase para una tarjeta según lo que el usuario conoce, o null */
+function sentenceForCard(card) {
+  const candidates = sentencesFor(card.id);
+  if (!candidates.length) return null;
+  const known = knownLemmas();
+  return chooseSentence({ id: card.id }, {
+    candidates,
+    isKnown: (key) => isKnownKey(key, known),
+    statsOf: (id) => sentenceStats.get(id)
+  });
+}
+
+/* =========================================
+   4. LA FRASE EN PANTALLA
+   ========================================= */
+
+const sentenceTranslation = (sentence) => (lang === "es" ? sentence.es || sentence.en : sentence.en || sentence.es) || "";
+
+/* La frase con sus unidades. options:
+     target    índice de la unidad preguntada: va marcada y nunca lleva furigana
+     extra     índice de la palabra desconocida de más: siempre con furigana y se puede tocar
+     furigana  "all" | "unknown" | "none" para las demás (por defecto, el ajuste de lectura)
+     reveal    true al enseñar la respuesta: furigana en todo, también en la preguntada */
+function sentenceLineHTML(sentence, { target = -1, extra = -1, furigana = prefs.furigana, reveal = false } = {}) {
+  const known = knownLemmas();
+  return sentence.tokens.map((token, index) => {
+    const hasKanji = /\p{Script=Han}/u.test(token.surface) && token.reading;
+    if (index === target) {
+      return `<mark class="sent-target">${reveal && hasKanji ? rubyHTML(token.surface, token.reading) : escapeHTML(token.surface)}</mark>`;
+    }
+    const unknown = !!token.key && !UNCOUNTED_POS.has(token.pos) && !isKnownKey(token.key, known);
+    const ruby = hasKanji && (reveal || index === extra || furigana === "all" || furigana === "unknown" && unknown);
+    const html = ruby ? rubyHTML(token.surface, token.reading) : escapeHTML(token.surface);
+    return index === extra
+      ? `<span class="sent-extra" role="button" tabindex="0" data-sent-extra="${index}">${html}</span>` : html;
+  }).join("");
+}
+
+/* Lo que se sabe de una unidad para explicarla al tocarla: lectura y significado */
+function tokenGlossHTML(token) {
+  const entry = token.key ? wordEntry(token.key) : null;
+  const meaning = entry ? gloss(entry, 3) : "";
+  return `<span lang="ja">${escapeHTML(token.lemma)}（${escapeHTML(entry?.r || token.reading)}）</span>${meaning ? ` ${escapeHTML(meaning)}` : ""}`;
+}
+
+/* De dónde es la frase: las de Tatoeba llevan su autor y su licencia */
+function sentenceCreditHTML(sentence) {
+  return sentence.attribution ? `<p class="helper sent-credit">${escapeHTML(sentence.attribution)}</p>` : "";
+}
+
+/* =========================================
    5. SINCRONIZACIÓN (tabla user_sentences de Supabase)
    -----------------------------------------
    Se suben las frases de los textos que también se suben y el contador de
@@ -230,6 +328,3 @@ async function pushSentences(userId) {
     console.warn("Falta la tabla user_sentences: ejecuta supabase/schema.sql.");
   }
 }
-
-/* El índice palabra -> frases se rehace cuando cambian las frases (sección 3) */
-function forgetSentenceIndex() {}
