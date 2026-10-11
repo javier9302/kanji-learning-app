@@ -53,6 +53,10 @@ const STUDY_CONFIG = {
     maxChars: 40,
     /* Con más palabras desconocidas que estas la frase no se propone */
     maxUnknown: 2,
+    /* La respuesta: máximo de caracteres (el servidor aplica el mismo límite) y
+       mínimo de letras para que merezca la pena corregirla */
+    answerMax: 100,
+    answerMinLetters: 3,
 
     /* Qué frase sale primero: gana la suma más alta.
          known      proporción de sus palabras que el usuario conoce (0 a 1)

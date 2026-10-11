@@ -2533,3 +2533,63 @@ body[data-view="dict"] .intro {
   margin-left: 6px;
   vertical-align: middle;
 }
+
+/* =========================================
+   TRADUCIR
+   ========================================= */
+
+.translate-card .card-sentence {
+  margin-top: 22px;
+}
+
+.tr-tok {
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.tr-tools {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 6px 0 14px;
+}
+
+#trCount.limit {
+  color: var(--red);
+  font-weight: 600;
+}
+
+.tr-compare {
+  margin: 14px 0;
+  display: grid;
+  gap: 4px;
+}
+
+.tr-compare dt {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--label);
+  text-transform: uppercase;
+  letter-spacing: .4px;
+  margin-top: 8px;
+}
+
+.tr-compare dd {
+  margin: 0;
+  font-size: 15px;
+}
+
+.tr-verdict {
+  font-size: 18px;
+  font-weight: 700;
+  text-align: center;
+  margin: 14px 0 4px;
+}
+
+.tr-verdict.tr-correct { color: var(--ok); }
+.tr-verdict.tr-partial { color: var(--hard-ink); }
+.tr-verdict.tr-incorrect { color: var(--red); }
+
+.tr-origin {
+  text-align: center;
+}

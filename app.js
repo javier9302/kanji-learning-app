@@ -164,7 +164,7 @@ function formatDate(iso) {
 
 /* Secciones principales y las vistas que agrupa cada una */
 const NAV = {
-  study: ["read", "study", "draw"],
+  study: ["read", "study", "translate", "draw"],
   library: ["library"],
   words: ["progress", "add"],
   settings: ["data"],
@@ -190,6 +190,7 @@ function switchView(name) {
   if (name === "read") renderRead();
   if (name === "library") renderLibrary();
   if (name === "study") renderStudyHome();
+  if (name === "translate") renderTranslate();
   if (name === "draw") renderDraw();
   if (name === "progress") renderStats();
   if (name === "add") renderAddWord();
@@ -1035,6 +1036,7 @@ async function init() {
   bindSettings();
   bindLibrary();
   bindDictionary();
+  bindTranslate();
   bindReader();
   bindReadingStats();
   bindSync();

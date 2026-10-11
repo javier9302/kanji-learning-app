@@ -141,6 +141,55 @@ export default async function extra({ page, step, check }) {
     check(state.next === "私|は|毎朝|コーヒー|を|飲みます|。", `siguiente: ${state.next}`);
   });
 
+  const typeAnswer = (value) => page.evaluate((text) => {
+    $("trInput").value = text;
+    $("trInput").dispatchEvent(new Event("input"));
+  }, value);
+
+  await step("traducir: la frase, el contador y las respuestas que no se corrigen", async () => {
+    await page.evaluate(() => switchView("translate"));
+    await page.waitForSelector("#trInput", { timeout: 10000 });
+    check(await page.evaluate(() => document.querySelector(".translate-card .card-sentence").textContent.includes("コーヒー")), "no salió la frase");
+    check(await page.evaluate(() => $("trInput").maxLength === STUDY_CONFIG.translate.answerMax), "sin límite de caracteres");
+    await page.evaluate(() => $("trCheckBtn").click());
+    check(await page.evaluate(() => $("trFeedback").classList.contains("incorrect") && translating.phase === "answer"), "aceptó una respuesta vacía");
+    await typeAnswer("  ¡¡ a !! ");
+    await page.evaluate(() => $("trCheckBtn").click());
+    check(await page.evaluate(() => translating.phase === "answer" && translationLog.length === 0), "aceptó una respuesta demasiado corta");
+    await typeAnswer("Bebo café");
+    check(await page.evaluate(() => $("trCount").textContent.startsWith("9 /")), "el contador no cuenta");
+    await shot(page, "traducir-pregunta");
+  });
+
+  await step("traducir: tocar una palabra la anota como consultada", async () => {
+    await page.evaluate(() => document.querySelector(".tr-tok").click());
+    const state = await page.evaluate(() => ({ lookups: [...translating.lookups], gloss: $("trGloss").textContent, typed: $("trInput").value }));
+    check(state.lookups.length === 1 && state.lookups[0] === "私|わたし" && state.gloss.includes("わたし"), JSON.stringify(state));
+    check(state.typed === "Bebo café", "se perdió lo escrito");
+  });
+
+  await step("traducir: sin IA, el estudiante se corrige con la referencia; No lo sé y Saltar", async () => {
+    await typeAnswer("Bebo   café\ntodas las mañanas");
+    await page.keyboard.down("Control"); await page.focus("#trInput"); await page.keyboard.press("Enter"); await page.keyboard.up("Control");
+    await page.waitForSelector('[data-tr-self="correct"]', { timeout: 5000 });
+    check(await page.evaluate(() => translating.answer === "Bebo café todas las mañanas"), "la respuesta no se normalizó");
+    await page.evaluate(() => document.querySelector('[data-tr-self="correct"]').click());
+    await page.waitForSelector("#trNextBtn", { timeout: 5000 });
+    let last = await page.evaluate(() => translationLog[translationLog.length - 1]);
+    check(last.source === "self" && last.verdict === "correct" && last.lookups.length === 1, JSON.stringify(last));
+    await shot(page, "traducir-resultado");
+    await page.evaluate(() => $("trNextBtn").click());
+    await page.waitForSelector("#trUnknownBtn", { timeout: 5000 });
+    await page.evaluate(() => $("trUnknownBtn").click());
+    await page.waitForSelector("#trNextBtn", { timeout: 5000 });
+    last = await page.evaluate(() => translationLog[translationLog.length - 1]);
+    check(last.source === "unknown" && last.verdict === "incorrect", JSON.stringify(last));
+    await page.evaluate(() => $("trNextBtn").click());
+    await page.waitForSelector("#trSkipBtn", { timeout: 5000 });
+    await page.evaluate(() => $("trSkipBtn").click());
+    await page.waitForFunction(() => translationLog.length === 3 && translationLog[2].source === "skip", { timeout: 5000 });
+  });
+
   await step("diccionario: buscar en romaji abre la vista con resultados", async () => {
     await page.type("#dictInput", "mizu");
     await page.waitForSelector(".dict-row", { timeout: 5000 });

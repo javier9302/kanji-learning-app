@@ -4,6 +4,7 @@
    para poder probarlas con Node. Se carga después de sentences-core.js.
 
    1. Qué frases se pueden proponer y cuál sale (chooseTranslationSentence).
+   2. La respuesta: cómo se limpia y cuándo no merece corregirse.
    Los números (pesos, límites) vienen siempre de STUDY_CONFIG.translate.
    ========================================= */
 
@@ -72,7 +73,49 @@ function chooseTranslationSentence(state, config) {
   return best ? best.sentence : null;
 }
 
+/* =========================================
+   2. LA RESPUESTA
+   ========================================= */
+
+/* Deja la respuesta lista para enviarla: sin caracteres de control, con los
+   espacios seguidos reducidos a uno, sin espacios en los extremos y recortada
+   al máximo. */
+function normalizeAnswer(text, max = 100) {
+  const clean = String(text ?? "").normalize("NFC")
+    .replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u2028-\u202e\u2060\ufeff]/g, " ")
+    .replace(/\s+/g, " ").trim();
+  return [...clean].slice(0, max).join("").trim();
+}
+
+/* Por qué una respuesta no se puede corregir: "empty", "short" o "" si vale.
+   Se comprueba en el dispositivo: no gasta ninguna llamada a la IA. */
+function answerProblem(answer, config) {
+  if (!answer) return "empty";
+  return (answer.match(/\p{L}/gu) || []).length < config.answerMinLetters ? "short" : "";
+}
+
+/* Resultado hecho en el dispositivo (sin IA), con la misma forma que el de la IA:
+     source   "self" (el estudiante se corrige), "unknown" (No lo sé), "local" (coincide con la referencia)
+     verdict  "correct" | "mostly" | "partial" | "incorrect"
+   Todas las palabras de la frase quedan igual: entendidas, no entendidas, o sin
+   saber (null) cuando el estudiante dice que la entendió solo en parte. */
+function localResult(sentence, source, verdict) {
+  const understood = verdict === "correct" || verdict === "mostly" ? true : verdict === "incorrect" ? false : null;
+  const seen = new Set(), words = [];
+  for (const token of sentence.tokens) {
+    if (!trIsContent(token) || seen.has(token.key)) continue;
+    seen.add(token.key);
+    words.push({ lemma: token.lemma, key: token.key, understood, note: "" });
+  }
+  return {
+    source, verdict, score: { correct: 100, mostly: 80, partial: 50, incorrect: 0 }[verdict],
+    feedback: "", better: "", grammar_note: "", words
+  };
+}
+
 /* Para las pruebas (Node); en el navegador son globales */
 if (typeof module !== "undefined") {
-  module.exports = { isTranslatable, chooseTranslationSentence, trContentKeys, trLength };
+  module.exports = {
+    isTranslatable, chooseTranslationSentence, trContentKeys, trLength, normalizeAnswer, answerProblem, localResult
+  };
 }

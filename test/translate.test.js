@@ -76,3 +76,31 @@ test("a igualdad total, la que hace más que no sale", () => {
   const seen = { a: NOW - 20 * DAY, b: NOW - 30 * DAY };
   assert.equal(choose([a, b], words({}), { lastSeenOf: (id) => seen[id] }).id, "b");
 });
+
+test("normalizeAnswer: espacios, caracteres de control y longitud", () => {
+  assert.equal(core.normalizeAnswer("  Bebo   café\n todas\tlas mañanas.  "), "Bebo café todas las mañanas.");
+  assert.equal(core.normalizeAnswer("hola\u0000\u0007 mundo\u200b\u202e!"), "hola mundo !");
+  assert.equal(core.normalizeAnswer("\u0001\u0002  "), "");
+  assert.equal(core.normalizeAnswer(null), "");
+  assert.equal(core.normalizeAnswer("a".repeat(150)).length, 100);
+  assert.equal(core.normalizeAnswer("añ" + "o".repeat(200), 5), "añooo");
+  assert.equal([...core.normalizeAnswer("😀".repeat(120))].length, 100);   // cuenta caracteres, no unidades UTF-16
+  assert.equal(core.normalizeAnswer("abcd ef", 5), "abcd");               // no deja un espacio al final al recortar
+});
+
+test("answerProblem: vacía o demasiado corta se rechaza sin llamar a la IA", () => {
+  assert.equal(core.answerProblem("", CONFIG), "empty");
+  assert.equal(core.answerProblem("sí", CONFIG), "short");
+  assert.equal(core.answerProblem("... 12 !!", CONFIG), "short");   // solo cuentan las letras
+  assert.equal(core.answerProblem("voy", CONFIG), "");
+  assert.equal(core.answerProblem("I go to school.", CONFIG), "");
+});
+
+test("localResult: todas las palabras con contenido, una vez cada una", () => {
+  const s = sentence("a", [N("学校"), WA, N("毎日"), WA, N("学校"), DOT]);
+  const right = core.localResult(s, "self", "correct");
+  assert.deepEqual(right.words.map((w) => [w.lemma, w.understood]), [["学校", true], ["毎日", true]]);
+  assert.equal(right.score, 100);
+  assert.deepEqual(core.localResult(s, "unknown", "incorrect").words.map((w) => w.understood), [false, false]);
+  assert.deepEqual(core.localResult(s, "self", "partial").words.map((w) => w.understood), [null, null]); // no se sabe cuáles
+});
