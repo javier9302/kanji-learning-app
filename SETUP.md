@@ -225,6 +225,55 @@ que valga, sale la tarjeta de siempre. La corrección y el calendario de repasos
   y `node tools/size-report.mjs`, del tamaño de los archivos.
 - «Lecturas de kanji practicadas», en Estadísticas, se guarda en cada dispositivo y no se sincroniza.
 
+## Traducir: corrección de traducciones con IA
+
+En **Estudiar → Traducir** el estudiante escribe la traducción de una frase de sus textos. Sin
+configurar nada ya funciona: ve la traducción de referencia y se corrige él mismo. Para que
+corrija la IA hay que desplegar la función `grade-translation`.
+
+1. **Tabla de registro.** Vuelve a ejecutar `supabase/schema.sql` (crea `translation_grades`).
+2. **Desplegar la función.** En **Edge Functions → Deploy a new function → Via Editor**, ponle el
+   nombre exacto `grade-translation`, pega el contenido de
+   [`supabase/functions/grade-translation/index.ts`](supabase/functions/grade-translation/index.ts)
+   y despliega. **Deja activada la verificación de JWT.** Con la CLI:
+   `supabase functions deploy grade-translation`.
+3. **Secretos.** Usa las mismas claves que `generate-text` (`GEMINI_API_KEYS` o `GEMINI_API_KEY`):
+   si aquella ya funciona no hay que añadir nada. Opcionales:
+
+| Secreto | Valor |
+|---|---|
+| `GRADE_MODEL` | modelo para corregir; por defecto el de `GEMINI_MODEL` o `gemini-3.8-flash` |
+| `GRADE_FALLBACK_MODEL` | por defecto el de `GEMINI_FALLBACK_MODEL` o `gemini-3.5-flash-lite` |
+| `DAILY_GRADES` | correcciones entregadas por usuario y día; por defecto `30` |
+| `DAILY_GRADES_HARD_CAP` | tope de llamadas a la IA por usuario y día, cuenten o no; por defecto el triple |
+
+Cómo funciona:
+
+- Solo responde a usuarios con sesión. El límite diario es aparte del de los textos generados.
+- Al estudiante solo le cuenta una corrección que recibe. Si la IA responde algo que no vale, la
+  función se lo vuelve a pedir (hasta tres intentos) y esos fallos no cuentan.
+- Antes de llamar a la IA la app ahorra lo que puede: una respuesta vacía o demasiado corta no se
+  envía, una que coincide con la traducción de referencia se da por buena, y la misma respuesta a
+  la misma frase reutiliza la corrección anterior.
+- Si la IA no está disponible (sin sesión, sin conexión, sin cuota, límite alcanzado o función sin
+  desplegar), la app lo dice y el estudiante se corrige con la referencia.
+- **Privacidad.** A Gemini solo se le envían la frase en japonés, su traducción de referencia, la
+  respuesta del estudiante y el idioma; nunca su identificador, su correo ni su progreso. Aun así,
+  en el plan gratuito de Gemini **Google puede usar lo enviado para mejorar sus productos**, así
+  que conviene avisar a los estudiantes de que no escriban datos personales en la respuesta.
+  La tabla `translation_grades` sí guarda quién hizo cada corrección y lo que escribió (hace falta
+  para el límite diario y para revisar correcciones dudosas); solo la leen los administradores.
+- La versión del prompt es `GRADING_PROMPT_VERSION`, en la propia función. Súbela al cambiar el
+  prompt y vuelve a desplegar.
+
+Consumo y fallos:
+
+```sql
+select model, key_label, result, count(*) as llamadas, sum(prompt_tokens) as entrada,
+       sum(output_tokens) as salida, round(avg(latency_ms)) as ms
+from translation_grades group by model, key_label, result order by llamadas desc;
+```
+
 ## Pruebas
 
 Hace falta Node 20 o posterior. La app no usa nada de esto al ejecutarse.

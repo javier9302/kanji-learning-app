@@ -631,3 +631,50 @@ create policy "user_sentences_update_own" on public.user_sentences
 drop policy if exists "user_sentences_delete_own" on public.user_sentences;
 create policy "user_sentences_delete_own" on public.user_sentences
   for delete to authenticated using ((select auth.uid()) = user_id);
+
+-- =========================================
+-- TRADUCIR: CORRECCIONES DE LA IA
+-- =========================================
+
+-- Registro de cada llamada a la IA de la función grade-translation: sirve para
+-- el límite diario por usuario (aparte del de generate-text), para medir tokens
+-- y tiempos, y para revisar las correcciones dudosas. Solo la función escribe;
+-- los administradores pueden leer.
+--   result: ok | invalid_json | missing_fields | missing_words | truncated |
+--           empty | provider | quota
+create table if not exists public.translation_grades (
+  id bigint generated always as identity primary key,
+  user_id uuid not null references auth.users (id) on delete cascade,
+  created_at timestamptz not null default now(),
+  request_id text,                 -- una corrección; sus reintentos lo comparten
+  attempt integer not null default 1,
+  prompt_version text,
+  result text,
+  ok boolean not null default false,
+  error text,
+  model text,
+  key_label text,
+  attempts text,                   -- claves que fallaron antes: "personal/gemini-3.8-flash:429"
+  prompt_tokens integer,
+  output_tokens integer,
+  thought_tokens integer,
+  latency_ms integer,
+  sentence_id text,
+  lang text,
+  ja text,                         -- la frase
+  answer text,                     -- lo que escribió el estudiante
+  verdict text,
+  score integer,
+  raw text                         -- lo que respondió la IA, haya ido bien o mal
+);
+
+create index if not exists translation_grades_user_created_idx on public.translation_grades (user_id, created_at);
+create index if not exists translation_grades_request_idx on public.translation_grades (request_id);
+
+alter table public.translation_grades enable row level security;
+revoke all on public.translation_grades from anon, authenticated;
+
+grant select on public.translation_grades to authenticated;
+drop policy if exists "translation_grades_admin_select" on public.translation_grades;
+create policy "translation_grades_admin_select" on public.translation_grades
+  for select to authenticated using ((select public.is_admin()));

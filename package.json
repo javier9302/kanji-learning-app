@@ -3,7 +3,7 @@
   "private": true,
   "description": "Herramientas y pruebas. La app no usa nada de aquí al ejecutarse: se publica tal cual, sin compilar.",
   "scripts": {
-    "test": "node --test",
+    "test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test",
     "smoke": "node tools/smoke.mjs"
   },
   "devDependencies": {

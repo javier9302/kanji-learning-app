@@ -180,8 +180,11 @@ async function checkTranslation() {
       : t("Es demasiado corta para corregirla: escribe al menos una palabra."), "incorrect");
   }
   translating.answer = answer;
+  const current = translating;
+  $("trCheckBtn").disabled = $("trUnknownBtn").disabled = $("trSkipBtn").disabled = $("trInput").disabled = true;
+  say(t("Corrigiendo…"));
   const result = await gradeTranslation(translating.sentence, answer);
-  if (!translating) return;
+  if (translating !== current || current.phase !== "answer") return;
   if (result) return finishTranslation(result);
   // Sin corrección automática: ve la referencia y se corrige él mismo
   translating.phase = "self";
@@ -198,7 +201,77 @@ async function gradeTranslation(sentence, answer) {
   if (before) return { ...before.result, cached: true };
   // 2. Coincide con la traducción de referencia: no hace falta preguntar a la IA
   if (matchesReference(answer, sentence, STUDY_CONFIG.translate)) return localResult(sentence, "local", "correct");
-  return null;
+  // 3. La IA (función grade-translation). Si no está disponible no se bloquea al
+  //    estudiante: se le explica por qué y se corrige él mismo con la referencia.
+  const unavailable = aiUnavailable();
+  if (unavailable) { translating.notice = unavailable; return null; }
+  try {
+    return await requestGrade(sentence, answer);
+  } catch (error) {
+    translating.notice = error.message;
+    return null;
+  }
+}
+
+/* Por qué no se puede preguntar a la IA ahora mismo ("" si se puede) */
+function aiUnavailable() {
+  if (!sb || !sync.user) return t("Inicia sesión para que la IA corrija tus traducciones. Mientras tanto, compárala tú con la referencia.");
+  if (!navigator.onLine) return t("Sin conexión: compárala tú con la traducción de referencia.");
+  return "";
+}
+
+/* Mensaje claro para cada fallo de la función */
+function gradingMessage(code, limit) {
+  const messages = {
+    unauthorized: t("Inicia sesión para que la IA corrija tus traducciones. Mientras tanto, compárala tú con la referencia."),
+    limit: t("Has llegado al límite de hoy ({n} correcciones de la IA). Puedes seguir practicando y corregirte tú.", { n: limit }),
+    busy: t("Hoy ha habido demasiados intentos fallidos con la IA. Puedes seguir practicando y corregirte tú."),
+    invalid: t("La IA no consiguió corregir esta respuesta. No se ha descontado de tu límite; compárala tú con la referencia."),
+    quota: t("La IA ha agotado su cuota por ahora. Puedes seguir practicando y corregirte tú."),
+    not_configured: t("La corrección con IA aún no está configurada. Compárala tú con la referencia.")
+  };
+  return messages[code] || t("La IA no pudo corregir la respuesta. Compárala tú con la referencia.");
+}
+
+/* La llamada a la función de Supabase, aparte para poder imitarla en las pruebas */
+function invokeGrade(body) {
+  return sb.functions.invoke("grade-translation", { body });
+}
+
+/* Pide la corrección. A la función solo van la frase, sus unidades, la
+   traducción de referencia, la respuesta y el idioma. Lanza un Error con el
+   mensaje para el estudiante si no hay corrección. */
+async function requestGrade(sentence, answer) {
+  const seen = new Set();
+  const units = sentence.tokens.map((token) => {
+    // Cada palabra con contenido se valora una vez, en su primera aparición
+    const content = trIsContent(token) && !!token.key && !seen.has(token.key);
+    if (content) seen.add(token.key);
+    return { surface: token.surface, lemma: token.lemma, reading: token.reading || "", content };
+  });
+  const requestId = newId();
+  const { data, error } = await invokeGrade({
+    sentenceId: sentence.id, ja: sentencePlain(sentence), units,
+    reference: { en: sentence.en || "", es: sentence.es || "" }, answer, lang, requestId
+  });
+  if (error) {
+    // Sin red, o la función no está desplegada todavía
+    if (!error.context?.json) throw new Error(navigator.onLine ? gradingMessage("not_configured") : aiUnavailable());
+    const info = await error.context.json().catch(() => ({}));
+    throw new Error(gradingMessage(error.context.status === 404 ? "not_configured" : info.error, info.limit));
+  }
+  const result = data?.result;
+  if (!result || !Array.isArray(result.words)) throw new Error(gradingMessage("invalid"));
+  return {
+    source: "ai", verdict: result.verdict, score: result.score, feedback: result.feedback || "",
+    better: result.better || "", grammar_note: result.grammar_note || "",
+    // Cada palabra valorada vuelve con su índice: de ahí sale su clave
+    words: result.words.filter((word) => sentence.tokens[word.i]?.key).map((word) => ({
+      lemma: sentence.tokens[word.i].lemma, key: sentence.tokens[word.i].key,
+      understood: word.understood === true ? true : word.understood === false ? false : null, note: word.note || ""
+    })),
+    requestId: data.requestId || requestId, model: data.model || "", promptVersion: data.promptVersion || ""
+  };
 }
 
 /* Sin IA: la traducción de referencia y tres botones para corregirse */
@@ -252,9 +325,11 @@ function renderTranslateResult() {
         <p class="tr-verdict tr-${cls}"><span aria-hidden="true">${icon}</span> ${label}${
           result.source === "ai" ? ` · ${result.score} / 100` : ""}</p>
         ${origin ? `<p class="helper tr-origin">${origin}</p>` : ""}
+        ${result.feedback ? `<p class="tr-feedback">${escapeHTML(result.feedback)}</p>` : ""}
         <dl class="tr-compare">
           ${answer ? `<dt>${t("Tu traducción")}</dt><dd>${escapeHTML(answer)}</dd>` : ""}
           <dt>${t("Traducción de referencia")}</dt><dd>${escapeHTML(referenceOf(sentence))}</dd>
+          ${result.better ? `<dt>${t("Una traducción natural")}</dt><dd>${escapeHTML(result.better)}</dd>` : ""}
         </dl>
       </div>
       <div class="row-actions">

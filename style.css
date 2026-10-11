@@ -2593,3 +2593,8 @@ body[data-view="dict"] .intro {
 .tr-origin {
   text-align: center;
 }
+
+.tr-feedback {
+  text-align: center;
+  margin: 8px 0;
+}

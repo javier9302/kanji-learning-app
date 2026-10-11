@@ -10,6 +10,16 @@ const LANGS = ["es", "en"];
 
 const EN = {
   /* ---------- Traducir ---------- */
+  "Corrigiendo…": "Grading…",
+  "Una traducción natural": "A natural translation",
+  "Inicia sesión para que la IA corrija tus traducciones. Mientras tanto, compárala tú con la referencia.": "Sign in to have the AI grade your translations. Meanwhile, compare it with the reference yourself.",
+  "Sin conexión: compárala tú con la traducción de referencia.": "Offline: compare it with the reference translation yourself.",
+  "Has llegado al límite de hoy ({n} correcciones de la IA). Puedes seguir practicando y corregirte tú.": "You have reached today's limit ({n} AI grades). You can keep practising and grade yourself.",
+  "Hoy ha habido demasiados intentos fallidos con la IA. Puedes seguir practicando y corregirte tú.": "There have been too many failed AI attempts today. You can keep practising and grade yourself.",
+  "La IA no consiguió corregir esta respuesta. No se ha descontado de tu límite; compárala tú con la referencia.": "The AI could not grade this answer. It has not been counted against your limit; compare it with the reference yourself.",
+  "La IA ha agotado su cuota por ahora. Puedes seguir practicando y corregirte tú.": "The AI has run out of quota for now. You can keep practising and grade yourself.",
+  "La corrección con IA aún no está configurada. Compárala tú con la referencia.": "AI grading is not set up yet. Compare it with the reference yourself.",
+  "La IA no pudo corregir la respuesta. Compárala tú con la referencia.": "The AI could not grade the answer. Compare it with the reference yourself.",
   "Traducir": "Translate",
   "COMPRENSIÓN": "COMPREHENSION",
   "Traduce la frase": "Translate the sentence",

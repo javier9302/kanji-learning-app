@@ -207,6 +207,63 @@ export default async function extra({ page, step, check }) {
     await page.evaluate(() => $("trNextBtn").click());
   });
 
+  await step("traducir: como invitado se explica por qué no corrige la IA", async () => {
+    await page.waitForSelector("#trInput", { timeout: 5000 });
+    await typeAnswer("Yo tomo un café por las mañanas");
+    await page.evaluate(() => $("trCheckBtn").click());
+    await page.waitForSelector('[data-tr-self="partial"]', { timeout: 5000 });
+    check(await page.evaluate(() => translating.notice === aiUnavailable() && translating.notice.length > 20 &&
+      document.querySelector(".translate-card").textContent.includes(translating.notice)), "falta el aviso");
+    await page.evaluate(() => document.querySelector('[data-tr-self="partial"]').click());
+    await page.waitForSelector("#trNextBtn", { timeout: 5000 });
+    await page.evaluate(() => $("trNextBtn").click());
+  });
+
+  await step("traducir: con la IA (imitada), su corrección se enseña y se guarda; si falla, se corrige el estudiante", async () => {
+    // La función de Supabase se imita: aquí no se llama a ninguna IA
+    await page.evaluate(() => {
+      window.realUnavailable = window.aiUnavailable;
+      window.aiUnavailable = () => "";
+      window.sentBodies = [];
+      window.fakeGrade = { data: { requestId: "req-smoke-1", model: "falso", promptVersion: "v", result: {
+        verdict: "mostly", score: 78, feedback: "Casi: te faltó «cada mañana».", better: "Bebo café todas las mañanas.", grammar_note: "",
+        words: [{ i: 0, lemma: "私", understood: null, note: "" }, { i: 2, lemma: "毎朝", understood: false, note: "todas las mañanas" },
+          { i: 3, lemma: "コーヒー", understood: true, note: "" }, { i: 5, lemma: "飲む", understood: true, note: "" }] } }, error: null };
+      window.invokeGrade = async (body) => { sentBodies.push(["grade-translation", body]); return fakeGrade; };
+    });
+    await page.waitForSelector("#trInput", { timeout: 5000 });
+    await typeAnswer("Bebo café");
+    await page.evaluate(() => $("trCheckBtn").click());
+    await page.waitForSelector("#trNextBtn", { timeout: 5000 });
+    const state = await page.evaluate(() => ({ sent: sentBodies[0], last: translationLog[translationLog.length - 1], text: $("trResult").textContent }));
+    check(state.sent[0] === "grade-translation" && state.sent[1].answer === "Bebo café" && state.sent[1].ja === "私は毎朝コーヒーを飲みます。", JSON.stringify(state.sent));
+    check(JSON.stringify(Object.keys(state.sent[1]).sort()) === '["answer","ja","lang","reference","requestId","sentenceId","units"]', "campos de más en la petición");
+    check(state.sent[1].units.filter((u) => u.content).length === 4, "palabras con contenido");
+    check(state.last.source === "ai" && state.last.verdict === "mostly" && state.last.result.words[1].key === "毎朝|まいあさ" &&
+      state.last.result.words[1].understood === false, JSON.stringify(state.last.result));
+    check(state.text.includes("78") && state.text.includes("Casi: te faltó") && state.text.includes("Bebo café todas las mañanas."), state.text);
+    await shot(page, "traducir-ia");
+    await page.evaluate(() => $("trNextBtn").click());
+
+    // La función responde con un error de cuota: no se bloquea, se corrige él mismo
+    await page.evaluate(() => { fakeGrade = { data: null, error: { context: { status: 503, json: async () => ({ error: "quota" }) } } }; });
+    await page.waitForSelector("#trInput", { timeout: 5000 });
+    await typeAnswer("Por la mañana tomo café");
+    await page.evaluate(() => $("trCheckBtn").click());
+    await page.waitForSelector('[data-tr-self="correct"]', { timeout: 5000 });
+    check(await page.evaluate(() => translating.notice === gradingMessage("quota")), "mensaje de cuota");
+    // Sin desplegar (404): mensaje de "no configurada"
+    await page.evaluate(() => document.querySelector('[data-tr-self="correct"]').click());
+    await page.waitForSelector("#trNextBtn", { timeout: 5000 });
+    await page.evaluate(() => { $("trNextBtn").click(); fakeGrade = { data: null, error: { context: { status: 404, json: async () => ({}) } } }; });
+    await page.waitForSelector("#trInput", { timeout: 5000 });
+    await typeAnswer("Cada mañana me tomo un café");
+    await page.evaluate(() => $("trCheckBtn").click());
+    await page.waitForSelector('[data-tr-self="correct"]', { timeout: 5000 });
+    check(await page.evaluate(() => translating.notice === gradingMessage("not_configured")), "mensaje de no configurada");
+    await page.evaluate(() => { window.aiUnavailable = window.realUnavailable; translating = null; switchView("read"); });
+  });
+
   await step("diccionario: buscar en romaji abre la vista con resultados", async () => {
     await page.type("#dictInput", "mizu");
     await page.waitForSelector(".dict-row", { timeout: 5000 });
