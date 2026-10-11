@@ -510,7 +510,8 @@ function setSyncState(state, message = "") {
 }
 
 const whole = (value) => Math.max(0, Math.round(Number(value) || 0));
-const dayPrint = (day) => `${day.r || 0},${day.c || 0},${day.n || 0}`;
+// t y tc (frases traducidas y cuántas bien) solo se añaden si existen: la huella de los días anteriores no cambia
+const dayPrint = (day) => `${day.r || 0},${day.c || 0},${day.n || 0}${day.t || day.tc ? `,${day.t || 0},${day.tc || 0}` : ""}`;
 
 /* Filas del usuario cambiadas desde `cursor`, de página en página */
 async function fetchChanged(table, key, userId, cursor, ownOnly = true) {
@@ -534,7 +535,8 @@ async function pullDays(userId) {
 
   let changed = false;
   for (const row of rows) {
-    const theirs = { r: row.reviews, c: row.correct, n: row.new_items };
+    const theirs = { r: row.reviews, c: row.correct, n: row.new_items,
+      ...(row.translations || row.translations_correct ? { t: row.translations || 0, tc: row.translations_correct || 0 } : {}) };
     sync.pushed.days[row.day] = dayPrint(theirs);
     const mine = meta.days[row.day] || {};
     const merged = {
@@ -542,6 +544,10 @@ async function pullDays(userId) {
       c: Math.max(mine.c || 0, theirs.c || 0),
       n: Math.max(mine.n || 0, theirs.n || 0)
     };
+    if (mine.t || theirs.t) {
+      merged.t = Math.max(mine.t || 0, theirs.t || 0);
+      merged.tc = Math.max(mine.tc || 0, theirs.tc || 0);
+    }
     if (dayPrint(merged) !== dayPrint(mine)) { meta.days[row.day] = merged; changed = true; }
   }
   if (changed) {
@@ -567,11 +573,22 @@ async function pushDays(userId) {
     if (sync.pushed.days[day] === print || !/^\d{4}-\d{2}-\d{2}$/.test(day)) continue;
     rows.push({
       user_id: userId, day,
-      reviews: whole(counts.r), correct: whole(counts.c), new_items: whole(counts.n)
+      reviews: whole(counts.r), correct: whole(counts.c), new_items: whole(counts.n),
+      translations: whole(counts.t), translations_correct: whole(counts.tc)
     });
     marks.push([day, print]);
   }
-  await pushRows("days", "user_id,day", rows, marks, sync.pushed.days);
+  try {
+    await pushRows("days", "user_id,day", rows, marks, sync.pushed.days);
+  } catch (error) {
+    // Faltan las columnas de Traducir (no se ha vuelto a ejecutar schema.sql): se sube
+    // sin ellas y sin marcar los días que las llevan, para enviarlos completos después
+    if (error?.code !== "PGRST204") throw error;
+    console.warn("Faltan columnas en days: ejecuta supabase/schema.sql.");
+    const plain = rows.map(({ translations, translations_correct, ...row }) => row);
+    const kept = marks.map(([day, print]) => [day, meta.days[day].t || meta.days[day].tc ? "" : print]);
+    await pushRows("days", "user_id,day", plain, kept, sync.pushed.days);
+  }
 }
 
 // supabase-js devuelve los fallos de red como un error con este texto; un TypeError

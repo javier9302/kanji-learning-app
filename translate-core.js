@@ -5,6 +5,7 @@
 
    1. Qué frases se pueden proponer y cuál sale (chooseTranslationSentence).
    2. La respuesta: cómo se limpia y cuándo no merece corregirse.
+   3. El progreso: qué cambia en las palabras y kanjis (applyTranslationResult).
    Los números (pesos, límites) vienen siempre de STUDY_CONFIG.translate.
    ========================================= */
 
@@ -159,10 +160,102 @@ function localResult(sentence, source, verdict) {
   };
 }
 
+/* =========================================
+   3. EL PROGRESO
+   -----------------------------------------
+   Traducir una frase demuestra que se entiende su SIGNIFICADO, no que se sepa
+   leer cada palabra. Por eso aquí nunca se toca el repaso espaciado de la
+   lectura (fsrs, nextReview, interval, repetitions…): solo se apunta, aparte,
+   lo que se sabe del significado:
+     meaningCorrect  puntos seguidos de "la entendió" (un fallo lo pone a 0)
+     meaningWrong    veces que no la entendió
+     lastMeaningAt   última vez que hubo una cosa o la otra
+   ========================================= */
+
+const trKanji = (text) => [...new Set([...text].filter((c) => c !== "々" && /\p{Script=Han}/u.test(c)))];
+
+/* Todas las reglas, en una sola función sin efectos: no guarda nada, devuelve
+   los registros ya cambiados para que la pantalla los guarde.
+     result    { source, verdict, words: [{ key, lemma, understood: true | false | null }] }
+     sentence  la frase (se usan su id y sus unidades)
+     state     { wordOf(key)     registro del usuario de esa palabra, o null
+                 kanjiOf(c)      registro del usuario de ese kanji, o null
+                 readingOf(key)  lectura de la palabra (para crear su registro)
+                 wordsWith(c)    registros del usuario de las palabras que llevan ese kanji
+                 credited(key)   ¿esta frase ya le sumó a esa palabra otra vez?
+                 lookups         Set de claves que tocó mientras respondía
+                 now, today      ms y día "AAAA-MM-DD" }
+     config    STUDY_CONFIG.translate
+   Devuelve { words, kanji, day: { t, tc }, summary: { understood, failed, promoted, looked } } */
+function applyTranslationResult(result, sentence, state, config) {
+  const credit = config.credit[result.source] ?? 0;
+  const changed = new Map(), summary = { understood: [], failed: [], promoted: [], looked: [] };
+  const promoted = (rec) => (rec.meaningCorrect || 0) >= config.promoteAt;
+
+  for (const word of result.words || []) {
+    if (!word.key || changed.has(word.key)) continue;
+    const before = state.wordOf(word.key);
+    const [lemma] = word.key.split("|");
+    // Una palabra que aún no tenía registro queda como vista, igual que al terminar una lectura
+    const rec = before ? { ...before } : {
+      id: word.key, lemma, reading: state.readingOf(word.key) || word.key.split("|")[1] || "",
+      status: "pre_known", canReadKanji: false, knowsMeaning: false, canWrite: false,
+      seen: 1, lookups: 0, evalCorrect: 0, evalWrong: 0, origin: "traducir", firstSeen: state.now
+    };
+    const looked = state.lookups.has(word.key);
+    if (looked) { rec.lookups = (rec.lookups || 0) + 1; summary.looked.push(word.key); }
+
+    if (word.understood === false) {
+      rec.meaningWrong = (rec.meaningWrong || 0) + 1;
+      rec.meaningCorrect = 0;          // la cuenta de aciertos seguidos vuelve a empezar
+      rec.knowsMeaning = false;
+      rec.status = "learning";
+      rec.lastMeaningAt = state.now;
+      summary.failed.push(word.key);
+    } else if (word.understood === true && !looked) {
+      // Cada frase suma una sola vez por palabra: hacen falta frases distintas
+      if (!state.credited(word.key)) rec.meaningCorrect = (rec.meaningCorrect || 0) + credit;
+      rec.lastMeaningAt = state.now;
+      summary.understood.push(word.key);
+      if (promoted(rec) && !rec.knowsMeaning) {
+        rec.knowsMeaning = true;
+        if (rec.status === "pre_known") rec.status = "mastered";
+        summary.promoted.push(word.key);
+      }
+    } else if (!before && !looked) {
+      // Ni entendida ni fallada y sin registro previo: solo queda como vista
+    } else if (before && !looked) {
+      continue; // null y sin consultar: no cambia nada
+    }
+    rec.lastSeen = state.now;
+    changed.set(word.key, rec);
+  }
+
+  // Kanjis: su significado se da por sabido cuando VARIAS palabras distintas que
+  // lo llevan se entienden (según la regla de arriba). Una sola no basta.
+  const kanji = [];
+  const touched = new Set([...changed.keys()].flatMap((key) => trKanji(key.split("|")[0])));
+  for (const c of touched) {
+    const records = new Map(state.wordsWith(c).map((rec) => [rec.id, rec]));
+    for (const [key, rec] of changed) if (key.split("|")[0].includes(c)) records.set(key, rec);
+    const support = [...records.values()].filter((rec) => rec.knowsMeaning && promoted(rec)).length;
+    const before = state.kanjiOf(c);
+    if ((before?.meaningCorrect || 0) === support && (support < config.kanjiWords || before?.knowsMeaning)) continue;
+    const rec = before ? { ...before } : { id: c, status: "unknown", knowsMeaning: false, canWrite: false, writes: 0, firstSeen: state.now };
+    rec.meaningCorrect = support;      // en un kanji: cuántas palabras lo respaldan
+    if (support >= config.kanjiWords) rec.knowsMeaning = true;
+    rec.lastMeaningAt = rec.lastSeen = state.now;
+    kanji.push(rec);
+  }
+
+  const good = result.verdict === "correct" || result.verdict === "mostly";
+  return { words: [...changed.values()], kanji, day: { t: 1, tc: good ? 1 : 0 }, summary };
+}
+
 /* Para las pruebas (Node); en el navegador son globales */
 if (typeof module !== "undefined") {
   module.exports = {
     isTranslatable, chooseTranslationSentence, trContentKeys, trLength, normalizeAnswer, answerProblem, localResult,
-    answerWords, compareWithReference, matchesReference, answerKey
+    answerWords, compareWithReference, matchesReference, answerKey, applyTranslationResult
   };
 }

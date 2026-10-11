@@ -31,6 +31,39 @@ export default async function extra({ page, step, check }) {
     check(JSON.stringify(result.pushed) === '{"b":"1","c":"1"}', `marcadas: ${JSON.stringify(result.pushed)}`);
   });
 
+  await step("sincronización: sin las columnas de Traducir se sigue subiendo el resto del progreso", async () => {
+    const result = await page.evaluate(async () => {
+      const real = window.pushRows, sent = [];
+      // La base de datos no tiene meaning_*; la segunda vez tampoco tiene las de la fase 2
+      const server = (missing) => async (table, conflict, rows, marks, pushed) => {
+        if (rows.some((row) => missing.some((column) => column in row))) throw { code: "PGRST204" };
+        sent.push(rows.map((row) => Object.keys(row).sort().join(",")));
+        for (const [key, print] of marks) pushed[key] = print;
+      };
+      const rows = [{ id: "a", status: "learning", fsrs: { due: "x" }, origin: "lectura", meaning_correct: 1, meaning_wrong: 0, last_meaning_at: null }];
+      const pushed = {};
+      try {
+        window.pushRows = server(["meaning_correct"]);
+        await pushProgress("user_words", rows, [["a", "1"]], pushed);
+        window.pushRows = server(["meaning_correct", "fsrs"]);
+        await pushProgress("user_words", rows, [["a", "1"]], pushed);
+        // Historial del día sin las columnas de traducciones
+        const days = meta.days, pushedDays = sync.pushed.days;
+        meta.days = { "2026-01-01": { r: 3, c: 2, n: 1 }, "2026-01-02": { r: 1, c: 1, n: 0, t: 2, tc: 1 } };
+        sync.pushed.days = {};
+        window.pushRows = server(["translations"]);
+        await pushDays("u");
+        const marks = { ...sync.pushed.days };
+        meta.days = days; sync.pushed.days = pushedDays;
+        return { sent, pushed, marks };
+      } finally { window.pushRows = real; }
+    });
+    check(result.sent[0][0] === "fsrs,id,origin,status" && result.sent[1][0] === "id,status", JSON.stringify(result.sent));
+    check(JSON.stringify(result.pushed) === "{}", "se marcó como subido sin estar completo");
+    check(result.sent[2].every((keys) => !keys.includes("translations")), "se enviaron columnas que no existen");
+    check(result.marks["2026-01-01"] === "3,2,1" && !result.marks["2026-01-02"], JSON.stringify(result.marks));
+  });
+
   const STUDY_CONFIG_DAYS = await page.evaluate(() => STUDY_CONFIG.masteredIntervalDays);
   await step("frases: el texto guardado deja sus frases, con palabras que preguntar", async () => {
     await page.waitForFunction(() => userSentences.size > 0 && prefs.sentenceIndex === SENTENCE_INDEX_VERSION, { timeout: 60000 });
@@ -178,16 +211,19 @@ export default async function extra({ page, step, check }) {
     let last = await page.evaluate(() => translationLog[translationLog.length - 1]);
     check(last.source === "self" && last.verdict === "correct" && last.lookups.length === 1, JSON.stringify(last));
     await shot(page, "traducir-resultado");
-    await page.evaluate(() => $("trNextBtn").click());
-    await page.waitForSelector("#trUnknownBtn", { timeout: 5000 });
-    await page.evaluate(() => $("trUnknownBtn").click());
-    await page.waitForSelector("#trNextBtn", { timeout: 5000 });
-    last = await page.evaluate(() => translationLog[translationLog.length - 1]);
-    check(last.source === "unknown" && last.verdict === "incorrect", JSON.stringify(last));
+    // Progreso: medio punto por corregirse uno mismo; la palabra consultada no suma; el día cuenta
+    const progress = await page.evaluate(() => ({
+      looked: userWords.get("私|わたし"), word: userWords.get("毎朝|まいあさ"), verb: userWords.get("飲む|のむ"), day: meta.days[today()]
+    }));
+    check(progress.word.meaningCorrect === 0.5 && !progress.word.knowsMeaning, JSON.stringify(progress.word));
+    check(!progress.looked.meaningCorrect && progress.looked.lookups >= 1, JSON.stringify(progress.looked));
+    check(progress.day.t === 1 && progress.day.tc === 1, JSON.stringify(progress.day));
+    check(!progress.verb.studied && !progress.verb.fsrs, "se creó una tarjeta de repaso");
     await page.evaluate(() => $("trNextBtn").click());
     await page.waitForSelector("#trSkipBtn", { timeout: 5000 });
     await page.evaluate(() => $("trSkipBtn").click());
-    await page.waitForFunction(() => translationLog.length === 3 && translationLog[2].source === "skip", { timeout: 5000 });
+    await page.waitForFunction(() => translationLog.length === 2 && translationLog[1].source === "skip", { timeout: 5000 });
+    check(await page.evaluate(() => meta.days[today()].t === 1), "saltar contó en el historial");
   });
 
   await step("traducir: igual que la referencia se acepta sin IA, y una respuesta repetida reutiliza su corrección", async () => {
@@ -261,7 +297,36 @@ export default async function extra({ page, step, check }) {
     await page.evaluate(() => $("trCheckBtn").click());
     await page.waitForSelector('[data-tr-self="correct"]', { timeout: 5000 });
     check(await page.evaluate(() => translating.notice === gradingMessage("not_configured")), "mensaje de no configurada");
-    await page.evaluate(() => { window.aiUnavailable = window.realUnavailable; translating = null; switchView("read"); });
+    await page.evaluate(() => document.querySelector('[data-tr-self="correct"]').click());
+    await page.waitForSelector("#trNextBtn", { timeout: 5000 });
+    await page.evaluate(() => { window.aiUnavailable = window.realUnavailable; $("trNextBtn").click(); });
+  });
+
+  await step("traducir: No lo sé cuenta como fallo, no toca el repaso y la frase deja de proponerse", async () => {
+    await page.waitForSelector("#trUnknownBtn", { timeout: 5000 });
+    // Una palabra de la frase ya tiene su tarjeta de repaso: tiene que quedar igual
+    const before = await page.evaluate(async () => {
+      const rec = userWords.get("毎朝|まいあさ");
+      applyCard(rec, masteredCard(30));
+      await saveUserWord(rec);
+      return JSON.stringify([rec.fsrs, rec.nextReview, rec.interval, rec.repetitions]);
+    });
+    await page.evaluate(() => $("trUnknownBtn").click());
+    await page.waitForSelector("#trNextBtn", { timeout: 5000 });
+    const state = await page.evaluate(() => {
+      const rec = userWords.get("毎朝|まいあさ");
+      return { last: translationLog[translationLog.length - 1], rec, cards: JSON.stringify([rec.fsrs, rec.nextReview, rec.interval, rec.repetitions]),
+        failed: $("failedList") ? null : null, score: scoreWord(BANK.words.get("飲む|のむ"), userWords.get("飲む|のむ"), new Set(), new Set()) };
+    });
+    check(state.last.source === "unknown" && state.last.verdict === "incorrect", JSON.stringify(state.last));
+    check(state.rec.status === "learning" && state.rec.meaningWrong >= 1 && state.rec.meaningCorrect === 0 && state.rec.knowsMeaning === false, JSON.stringify(state.rec));
+    check(state.cards === before, "cambió la tarjeta de repaso");
+    check(state.score.meaningFail === true, "sin prioridad entre las palabras nuevas");
+    await page.evaluate(() => $("trNextBtn").click());
+    await page.waitForSelector("#translateArea .empty-state", { timeout: 5000 }); // demasiadas palabras sin conocer
+    await page.evaluate(() => switchView("progress"));
+    await page.waitForFunction(() => $("failedList").textContent.includes("毎朝"), { timeout: 5000 }); // "Las que más fallas"
+    await page.evaluate(() => { translating = null; switchView("read"); });
   });
 
   await step("diccionario: buscar en romaji abre la vista con resultados", async () => {

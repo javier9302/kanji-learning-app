@@ -678,3 +678,28 @@ grant select on public.translation_grades to authenticated;
 drop policy if exists "translation_grades_admin_select" on public.translation_grades;
 create policy "translation_grades_admin_select" on public.translation_grades
   for select to authenticated using ((select public.is_admin()));
+
+-- =========================================
+-- TRADUCIR: PROGRESO DEL SIGNIFICADO
+-- =========================================
+
+-- Lo que se sabe del SIGNIFICADO de cada palabra y kanji por la sección
+-- Traducir. Va aparte del repaso espaciado de la lectura, que no se toca.
+--   meaning_correct  puntos seguidos de "la entendió" (un fallo lo pone a 0);
+--                    en un kanji, cuántas palabras distintas lo respaldan
+--   meaning_wrong    veces que no la entendió
+alter table public.user_words add column if not exists meaning_correct double precision not null default 0;
+alter table public.user_words add column if not exists meaning_wrong integer not null default 0;
+alter table public.user_words add column if not exists last_meaning_at timestamptz;
+alter table public.user_kanji add column if not exists meaning_correct double precision not null default 0;
+alter table public.user_kanji add column if not exists meaning_wrong integer not null default 0;
+alter table public.user_kanji add column if not exists last_meaning_at timestamptz;
+
+-- Una palabra que se ve por primera vez en Traducir tiene el origen "traducir"
+alter table public.user_words drop constraint if exists user_words_origin_check;
+alter table public.user_words add constraint user_words_origin_check
+  check (origin in ('manual', 'lectura', 'frecuencia', 'diccionario', 'traducir'));
+
+-- Historial diario: frases traducidas y cuántas bien. No cambian reviews/correct/new_items.
+alter table public.days add column if not exists translations integer not null default 0;
+alter table public.days add column if not exists translations_correct integer not null default 0;

@@ -10,6 +10,8 @@ const LANGS = ["es", "en"];
 
 const EN = {
   /* ---------- Traducir ---------- */
+  "fallada al traducir": "missed when translating",
+  "Puntuación = a mano × {manual} + diccionario × {dictionary} + consulta reciente × {lookup} + fallada al traducir × {meaningFail} + lectura × {reading} + kanjis conocidos × {kanji} + frecuencia × {frequency}. Los pesos están en study-config.js.": "Score = added by hand × {manual} + dictionary × {dictionary} + recent lookup × {lookup} + missed when translating × {meaningFail} + reading × {reading} + known kanji × {kanji} + frequency × {frequency}. The weights are in study-config.js.",
   "Corrigiendo…": "Grading…",
   "Una traducción natural": "A natural translation",
   "Inicia sesión para que la IA corrija tus traducciones. Mientras tanto, compárala tú con la referencia.": "Sign in to have the AI grade your translations. Meanwhile, compare it with the reference yourself.",
@@ -72,7 +74,6 @@ const EN = {
   "buscada en el diccionario": "looked up in the dictionary",
   "consulta reciente × {value}": "recent lookup × {value}",
   "diccionario": "dictionary",
-  "Puntuación = a mano × {manual} + diccionario × {dictionary} + consulta reciente × {lookup} + lectura × {reading} + kanjis conocidos × {kanji} + frecuencia × {frequency}. Los pesos están en study-config.js.": "Score = added by hand × {manual} + dictionary × {dictionary} + recent lookup × {lookup} + reading × {reading} + known kanji × {kanji} + frequency × {frequency}. The weights are in study-config.js.",
   "(CC BY-SA 4.0). Las lecturas de cada kanji dentro de una palabra son de": "(CC BY-SA 4.0). The reading of each kanji inside a word comes from",
   "(CC BY-SA, como JMdict). Los trazos de los kanjis son de": "(CC BY-SA, like JMdict). Kanji strokes are from",
   "Texto en japonés, o el JSON de un texto": "Japanese text, or the JSON of a text",

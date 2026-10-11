@@ -243,6 +243,8 @@ function scoreWord(entry, rec, known, seen) {
   const dictionary = rec?.origin === "diccionario";
   const lookup = dictionary ? lookupRecency(rec.lastSeen, Date.now(), STUDY_CONFIG.lookupDecayDays) : 0;
   const reading = !!rec && (rec.seen > 0 || rec.origin === "lectura" || rec.lookups > 0 && !dictionary);
+  // Falló su significado en Traducir y todavía no lo ha demostrado
+  const meaningFail = !!rec && rec.meaningWrong > 0 && !rec.knowsMeaning;
   const kanjiKnown = entry.kanji.filter((c) => known.has(c)).length;
   const coverage = entry.kanji.length ? kanjiKnown / entry.kanji.length : 0;
   const rank = BANK.frequency[entry.id] || 0;
@@ -254,9 +256,9 @@ function scoreWord(entry, rec, known, seen) {
     : [];
 
   return {
-    score: manual * W.manual + dictionary * W.dictionary + lookup * W.lookup + reading * W.reading +
-      coverage * W.kanji + frequency * W.frequency,
-    manual, dictionary, lookup, reading, kanjiKnown, kanjiTotal: entry.kanji.length, rank, blocked
+    score: manual * W.manual + dictionary * W.dictionary + lookup * W.lookup + meaningFail * W.meaningFail +
+      reading * W.reading + coverage * W.kanji + frequency * W.frequency,
+    manual, dictionary, lookup, meaningFail, reading, kanjiKnown, kanjiTotal: entry.kanji.length, rank, blocked
   };
 }
 
@@ -351,6 +353,7 @@ function debugHTML(fresh, excluded) {
         info.manual ? t("agregada a mano") : "",
         info.dictionary ? t("buscada en el diccionario") : "",
         info.lookup ? t("consulta reciente × {value}", { value: info.lookup.toFixed(2) }) : "",
+        info.meaningFail ? t("fallada al traducir") : "",
         info.reading ? t("vista en lecturas") : "",
         t("kanjis conocidos {known}/{total}", { known: info.kanjiKnown, total: info.kanjiTotal }),
         info.rank ? t("frecuencia n.º {rank}", { rank: info.rank }) : t("sin puesto de frecuencia"),
@@ -361,7 +364,7 @@ function debugHTML(fresh, excluded) {
   return `
     <details class="debug-panel" open>
       <summary>${t("Depuración: próximas palabras nuevas")}</summary>
-      <p class="helper">${t("Puntuación = a mano × {manual} + diccionario × {dictionary} + consulta reciente × {lookup} + lectura × {reading} + kanjis conocidos × {kanji} + frecuencia × {frequency}. Los pesos están en study-config.js.", STUDY_CONFIG.weights)}</p>
+      <p class="helper">${t("Puntuación = a mano × {manual} + diccionario × {dictionary} + consulta reciente × {lookup} + fallada al traducir × {meaningFail} + lectura × {reading} + kanjis conocidos × {kanji} + frecuencia × {frequency}. Los pesos están en study-config.js.", STUDY_CONFIG.weights)}</p>
       <div class="table-scroll"><table class="debug-table">
         <thead><tr><th>${t("Palabra")}</th><th>${t("Puntos")}</th><th>${t("Por qué")}</th></tr></thead>
         <tbody>${words.slice(0, 20).map(row).join("")}</tbody>
@@ -1004,7 +1007,7 @@ async function nextDraw() {
    ========================================= */
 
 const isKanaText = (text) => /^[\p{Script=Hiragana}\p{Script=Katakana}ー・]+$/u.test(text);
-const ORIGIN_LABEL = () => ({ manual: t("a mano"), diccionario: t("diccionario"), lectura: t("lectura"), frecuencia: t("lista de frecuencia") });
+const ORIGIN_LABEL = () => ({ manual: t("a mano"), diccionario: t("diccionario"), traducir: t("Traducir"), lectura: t("lectura"), frecuencia: t("lista de frecuencia") });
 
 /* La entrada del banco para lo escrito: por escritura y, si hay varias, por lectura */
 function bankMatch(writing, reading) {

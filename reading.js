@@ -2148,7 +2148,9 @@ async function renderReadingStats() {
   };
   $("lookedList").innerHTML = top("lookups", "consulta", "consultas",
     "Aquí aparecerán las palabras que más consultes al leer.");
-  $("failedList").innerHTML = top("evalWrong", "fallo", "fallos",
+  // Fallos en las evaluaciones de lectura y en Traducir (no entendió su significado)
+  for (const word of mine) word.failures = (word.evalWrong || 0) + (word.meaningWrong || 0);
+  $("failedList").innerHTML = top("failures", "fallo", "fallos",
     "Aquí aparecerán las palabras que más falles en las evaluaciones.");
 
   renderWordList();
@@ -2238,38 +2240,52 @@ const srsToRow = (record) => ({
   last_reviewed: record.lastReviewed ? isoOf(Date.parse(record.lastReviewed)) : null,
   correct_count: whole(record.correctCount), incorrect_count: whole(record.incorrectCount),
   streak_days: whole(record.streakDays), last_correct_day: record.lastCorrectDay || null,
-  fsrs: record.fsrs || null
+  fsrs: record.fsrs || null,
+  // Traducir: lo que se sabe del significado (aparte del repaso de la lectura)
+  meaning_correct: Math.max(0, Number(record.meaningCorrect) || 0), meaning_wrong: whole(record.meaningWrong),
+  last_meaning_at: isoOf(record.lastMeaningAt)
 });
 const srsFromRow = (row) => ({
   studied: !!row.studied, repetitions: row.repetitions || 0, interval: row.interval_days || 0,
   ease: row.ease || 2.5, nextReview: row.next_review || today(), lastReviewed: row.last_reviewed || null,
   correctCount: row.correct_count || 0, incorrectCount: row.incorrect_count || 0,
   streakDays: row.streak_days || 0, lastCorrectDay: row.last_correct_day || "",
-  ...(row.fsrs ? { fsrs: row.fsrs } : {})
+  ...(row.fsrs ? { fsrs: row.fsrs } : {}),
+  ...(row.meaning_correct ? { meaningCorrect: row.meaning_correct } : {}),
+  ...(row.meaning_wrong ? { meaningWrong: row.meaning_wrong } : {}),
+  ...(row.last_meaning_at ? { lastMeaningAt: msOf(row.last_meaning_at) } : {})
 });
 
 /* Sube el progreso. Si la base de datos aún no tiene las columnas de la fase 2
    (falta ejecutar supabase/schema.sql) se sube sin ellas y no se marca como
    subido, para volver a enviarlo completo cuando existan. */
 const PHASE2_COLUMNS = ["fsrs", "origin", "meaning", "seen_at"];
-async function pushProgress(table, rows, marks, pushed) {
+/* Columnas de Traducir (significado). Si faltan solo se quitan estas: el resto
+   del progreso, también el de la fase 2, se sigue subiendo. */
+const MEANING_COLUMNS = ["meaning_correct", "meaning_wrong", "last_meaning_at"];
+const NEWER_ORIGINS = ["diccionario", "traducir"]; // orígenes que una base de datos sin actualizar no admite
+const without = (rows, columns) => rows.map((row) => Object.fromEntries(Object.entries(row).filter(([key]) => !columns.includes(key))));
+
+async function pushProgress(table, rows, marks, pushed, level = 0) {
   try {
     await pushRows(table, "user_id,id", rows, marks, pushed);
   } catch (error) {
-    // La base de datos aún no admite el origen "diccionario" (falta volver a ejecutar
+    // La base de datos aún no admite un origen nuevo (falta volver a ejecutar
     // supabase/schema.sql): esas palabras se suben como "lectura" y no se marcan
     // como subidas, para enviarlas bien cuando lo admita. El resto se sube normal.
-    const searched = (row) => row.origin === "diccionario";
+    const searched = (row) => NEWER_ORIGINS.includes(row.origin);
     if (error?.code === "23514" && rows.some(searched)) {
-      console.warn(`${table} no admite el origen "diccionario": ejecuta supabase/schema.sql.`);
+      console.warn(`${table} no admite el origen "${rows.find(searched).origin}": ejecuta supabase/schema.sql.`);
       const keep = rows.map((row) => !searched(row));
-      await pushProgress(table, rows.filter((_, i) => keep[i]), marks.filter((_, i) => keep[i]), pushed);
-      return pushProgress(table, rows.filter(searched).map((row) => ({ ...row, origin: "lectura" })), [], pushed);
+      await pushProgress(table, rows.filter((_, i) => keep[i]), marks.filter((_, i) => keep[i]), pushed, level);
+      return pushProgress(table, rows.filter(searched).map((row) => ({ ...row, origin: "lectura" })), [], pushed, level);
     }
-    if (error?.code !== "PGRST204") throw error;
+    if (error?.code !== "PGRST204" || level >= 2) throw error;
     console.warn(`Faltan columnas en ${table}: ejecuta supabase/schema.sql.`);
-    const plain = rows.map((row) => Object.fromEntries(Object.entries(row).filter(([key]) => !PHASE2_COLUMNS.includes(key))));
-    await pushRows(table, "user_id,id", plain, [], pushed);
+    // Primero se prueba sin las columnas de Traducir; si aún faltan, también sin las de la fase 2.
+    // Sin marcar nada como subido: se enviará completo cuando existan.
+    const columns = level === 0 ? MEANING_COLUMNS : [...MEANING_COLUMNS, ...PHASE2_COLUMNS];
+    await pushProgress(table, without(rows, columns), [], pushed, level + 1);
   }
 }
 

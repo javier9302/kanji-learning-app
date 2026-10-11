@@ -71,3 +71,20 @@ test("user_words admite el origen diccionario y sigue rechazando uno inventado",
   await db.exec(SCHEMA);
   await insert("水|みず", "diccionario");
 });
+
+test("Traducir: columnas del significado, origen traducir e historial del día", async () => {
+  const db = await database();
+  await db.exec(`insert into auth.users (id) values ('00000000-0000-0000-0000-000000000001') on conflict do nothing;
+    delete from public.user_words;`);
+  await db.exec(`
+    insert into public.user_words (user_id, id, lemma, reading, origin, meaning_correct, meaning_wrong, last_meaning_at)
+      values ('00000000-0000-0000-0000-000000000001', '学校|がっこう', '学校', 'がっこう', 'traducir', 1.5, 2, now());
+    insert into public.user_kanji (user_id, id, meaning_correct) values ('00000000-0000-0000-0000-000000000001', '学', 3);
+    insert into public.days (user_id, day, translations, translations_correct) values ('00000000-0000-0000-0000-000000000001', '2026-10-12', 4, 3);
+    insert into public.translation_grades (user_id, request_id, ok, result, verdict, score) values ('00000000-0000-0000-0000-000000000001', 'r1', true, 'ok', 'correct', 95);`);
+  const { rows } = await db.query("select meaning_correct, meaning_wrong from public.user_words");
+  assert.deepEqual(rows, [{ meaning_correct: 1.5, meaning_wrong: 2 }]);
+  // Las filas que ya existían reciben los valores por defecto
+  const { rows: defaults } = await db.query("select reviews, translations from public.days");
+  assert.deepEqual(defaults, [{ reviews: 0, translations: 4 }]);
+});

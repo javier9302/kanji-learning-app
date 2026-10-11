@@ -17,10 +17,11 @@ const STUDY_CONFIG = {
        dictionary la buscó en el diccionario: es una palabra que no conoce
        lookup     hace poco que la buscó: vale 1 el día de la consulta y baja
                   hasta 0 en lookupDecayDays días
+       meaningFail falló su significado en Traducir y aún no lo ha demostrado
        reading    apareció en una lectura del usuario
        kanji      proporción de sus kanjis que el usuario ya conoce
        frequency  puesto en la lista de frecuencia (1 = la más frecuente) */
-  weights: { manual: 1000, dictionary: 300, lookup: 200, reading: 100, kanji: 10, frequency: 1 },
+  weights: { manual: 1000, dictionary: 300, lookup: 200, meaningFail: 150, reading: 100, kanji: 10, frequency: 1 },
 
   /* Días que tarda en apagarse la ventaja de una consulta reciente al diccionario */
   lookupDecayDays: 14,
@@ -65,6 +66,24 @@ const STUDY_CONFIG = {
        localMinWords: con una referencia más corta que esto nunca se acepta sin IA. */
     localMatch: 0.9,
     localMinWords: 2,
+
+    /* PROGRESO. Traducir demuestra que se entiende el significado; nunca cambia
+       el calendario de repaso de la lectura.
+       credit: cuánto suma una palabra entendida según quién lo dice:
+         ai         la corrigió la IA
+         local      coincidía con la traducción de referencia (sin IA)
+         self       se corrigió el propio estudiante
+         contested  el estudiante no estuvo de acuerdo con la IA
+       Una palabra que tocó para ver su significado no suma nada.
+       promoteAt: puntos seguidos (sin fallar entre medias, y cada frase cuenta
+         una sola vez por palabra) para dar su significado por sabido. Con el
+         crédito 1 de la IA son 2 frases distintas. Entonces una palabra "por
+         confirmar" pasa a dominada. Un fallo pone la cuenta a cero.
+       kanjiWords: palabras distintas con ese kanji cuyo significado se sabe así
+         para dar por sabido el significado del kanji. Una sola no basta. */
+    credit: { ai: 1, local: 0.5, self: 0.5, contested: 0.5 },
+    promoteAt: 2,
+    kanjiWords: 3,
 
     /* Qué frase sale primero: gana la suma más alta.
          known      proporción de sus palabras que el usuario conoce (0 a 1)

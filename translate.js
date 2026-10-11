@@ -342,9 +342,47 @@ function renderTranslateResult() {
   $("trNextBtn").focus();
 }
 
+/* Aplica al progreso lo que devuelve applyTranslationResult. Solo guarda: las
+   reglas están todas en esa función. Devuelve el resumen de lo que cambió. */
+async function saveTranslationProgress(result, sentence, lookups, countDay = true) {
+  const change = applyTranslationResult(result, sentence, {
+    wordOf: (key) => userWords.get(key) || null,
+    kanjiOf: (c) => userKanji.get(c) || null,
+    readingOf: (key) => wordEntry(key)?.r || "",
+    wordsWith: (c) => [...userWords.values()].filter((rec) => rec.lemma.includes(c)),
+    // ¿Esta frase ya le sumó a esa palabra? (hacen falta frases distintas)
+    credited: (key) => translationLog.some((entry) => entry.sentenceId === sentence.id &&
+      entry.result?.words?.some((word) => word.key === key && word.understood === true) && !entry.lookups?.includes(key)),
+    lookups, now: Date.now(), today: today()
+  }, STUDY_CONFIG.translate);
+
+  const now = Date.now();
+  for (const rec of change.words) { rec.updatedAt = now; userWords.set(rec.id, rec); }
+  for (const rec of change.kanji) { rec.updatedAt = now; userKanji.set(rec.id, rec); }
+  await putRecords("userWords", change.words);
+  await putRecords("userKanji", change.kanji);
+  if (countDay) {
+    const day = meta.days[today()] ??= { r: 0, c: 0, n: 0 };
+    day.t = (day.t || 0) + change.day.t;
+    day.tc = (day.tc || 0) + change.day.tc;
+    await saveMeta();
+  }
+  scheduleSync();
+  return change.summary;
+}
+
 /* Guarda la frase respondida y enseña la corrección */
 async function finishTranslation(result) {
   const { sentence, answer, session } = translating;
+  // Por si el estudiante no está de acuerdo: cómo estaba su progreso antes de esta corrección
+  translating.before = {
+    words: result.words.map((word) => [word.key, userWords.get(word.key) ? { ...userWords.get(word.key) } : null]),
+    kanji: [...new Set(result.words.flatMap((word) => kanjiOf(word.key.split("|")[0])))]
+      .map((c) => [c, userKanji.get(c) ? { ...userKanji.get(c) } : null])
+  };
+  translating.summary = await saveTranslationProgress(result, sentence, translating.lookups);
+  for (const key of translating.summary.promoted) session.understood.add(key);
+  for (const key of translating.summary.failed) session.review.add(key);
   translating.result = result;
   translating.phase = "result";
   session.done++;
