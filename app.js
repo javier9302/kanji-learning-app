@@ -165,7 +165,8 @@ const NAV = {
   study: ["read", "study", "draw"],
   library: ["library"],
   words: ["progress", "add"],
-  settings: ["data"]
+  settings: ["data"],
+  dict: ["dict"] // sin pestaña: se abre desde el buscador de la cabecera
 };
 // Vista que se abre al pulsar cada sección: la última usada
 const lastView = {};
@@ -191,6 +192,7 @@ function switchView(name) {
   if (name === "progress") renderStats();
   if (name === "add") renderAddWord();
   if (name === "data") renderDataView();
+  if (name === "dict") renderDictionary();
 }
 
 function bindNavigation() {
@@ -1018,6 +1020,7 @@ async function init() {
   bindShortcuts();
   bindSettings();
   bindLibrary();
+  bindDictionary();
   bindReader();
   bindReadingStats();
   bindSync();

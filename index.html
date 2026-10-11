@@ -24,6 +24,7 @@
   <script src="ja-core.js" defer></script>
   <script src="reading.js" defer></script>
   <script src="study.js" defer></script>
+  <script src="dictionary.js" defer></script>
   <script src="app.js" defer></script>
 </head>
 <body>
@@ -35,6 +36,11 @@
         <span class="brand-sub">Tu espacio de estudio japonés</span>
       </span>
     </a>
+    <form id="dictForm" class="dict-form" role="search" autocomplete="off">
+      <input id="dictInput" class="search dict-input" type="search" lang="ja"
+        placeholder="Buscar en el diccionario…" aria-label="Buscar en el diccionario"
+        autocapitalize="off" autocomplete="off" spellcheck="false">
+    </form>
     <div class="topbar-actions">
       <select id="langSelect" class="lang-select" aria-label="Idioma">
         <option value="es">Español</option>
@@ -101,6 +107,19 @@
       </div>
 
       <div id="readArea" class="read-area"></div>
+    </section>
+
+    <!-- DICCIONARIO -->
+    <section id="view-dict" class="view hidden">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">DICCIONARIO</p>
+          <h2>Buscar una palabra</h2>
+        </div>
+        <span id="dictCount" class="pill hidden"></span>
+      </div>
+      <p id="dictNote" class="helper dict-note"></p>
+      <div id="dictResults" class="items-list"></div>
     </section>
 
     <!-- BIBLIOTECA -->

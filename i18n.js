@@ -9,6 +9,16 @@
 const LANGS = ["es", "en"];
 
 const EN = {
+  /* ---------- Diccionario ---------- */
+  "Buscar en el diccionario…": "Search the dictionary…",
+  "Buscar en el diccionario": "Search the dictionary",
+  "DICCIONARIO": "DICTIONARY",
+  "Buscar una palabra": "Look up a word",
+  "Busca una palabra": "Look up a word",
+  "Escribe en japonés (漢字, かな), en romaji (kado) o su significado en español o inglés.": "Type in Japanese (漢字, かな), in romaji (kado) or its meaning in English or Spanish.",
+  "No se encontró nada para “{text}”.": "Nothing found for “{text}”.",
+  "resultado": "result",
+  "resultados": "results",
   /* ---------- Instalar como app ---------- */
   "Instalar la app": "Install the app",
   "Instalar app": "Install app",

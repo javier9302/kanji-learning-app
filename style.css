@@ -2325,3 +2325,55 @@ div.hard-item {
   font-size: 11px;
   text-align: center;
 }
+
+/* =========================================
+   DICCIONARIO
+   ========================================= */
+
+.dict-form {
+  flex: 1;
+  display: flex;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+.dict-input {
+  max-width: 300px;
+}
+
+body.studying .dict-form {
+  display: none; /* en mitad de un repaso no se busca */
+}
+
+.dict-note {
+  margin: -6px 0 14px;
+}
+
+.dict-row {
+  cursor: pointer;
+}
+
+.dict-row:hover,
+.dict-row:focus-visible {
+  border-color: var(--focus);
+  outline: none;
+}
+
+@media (max-width: 760px) {
+  .topbar {
+    height: auto;
+    min-height: 65px;
+    flex-wrap: wrap;
+    padding-top: 10px;
+    padding-bottom: 10px;
+  }
+
+  .dict-form {
+    order: 3;
+    flex-basis: 100%;
+  }
+
+  .dict-input {
+    max-width: none;
+  }
+}
