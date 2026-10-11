@@ -1033,6 +1033,9 @@ async function init() {
   renderAll();
   switchView("read"); // la lectura es la pantalla principal
 
+  // Frases de ejemplo de los textos que ya había (solo la primera vez o si cambian las reglas)
+  rebuildSentencesIfNeeded().catch((error) => console.error("No se pudieron preparar las frases:", error));
+
   if ("serviceWorker" in navigator && location.protocol === "https:") {
     navigator.serviceWorker.register("sw.js").catch(() => {});
   }

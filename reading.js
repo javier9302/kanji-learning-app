@@ -631,6 +631,8 @@ async function saveText(data, source = "manual", origin = {}) {
     requestId: origin.requestId || "", promptVersion: origin.promptVersion || PROMPT_VERSION, model: origin.model || "",
     owner: "",         // se rellena al subirlo con la sesión iniciada
     status: "private", // al subirlo pasa a "pending"; un administrador lo aprueba
+    // Un texto pegado tal cual (un artículo) se queda en este dispositivo: nunca se sube
+    ...(origin.local ? { local: true } : {}),
     createdAt: now, updatedAt: now, readAt: null,
     ...countLemmas(data),
     data
@@ -639,6 +641,7 @@ async function saveText(data, source = "manual", origin = {}) {
   await putRecords("words", wordsFromText(data));
   texts.push(record);
   scheduleSync();
+  await indexTextsQuietly([record]); // sus frases, para repasar palabras dentro de una frase
   return record;
 }
 
@@ -655,6 +658,7 @@ async function deleteText(id) {
     text.hiddenAt = Date.now();
     await putRecords("texts", [text]);
   }
+  await dropTextSentences(id);
   scheduleSync();
 }
 
@@ -693,7 +697,8 @@ function renderLibrary() {
   const visible = texts.filter((text) => !text.hiddenAt);
   $("textCount").textContent = plural(visible.length, "texto", "textos");
   $("libraryEmpty").classList.toggle("hidden", visible.length > 0);
-  const shareTag = (text) => !isOwnText(text) ? t("De la comunidad")
+  const shareTag = (text) => text.local ? t("Solo en este dispositivo")
+    : !isOwnText(text) ? t("De la comunidad")
     : text.status === "approved" ? t("Compartido")
     : text.status === "rejected" ? t("No aprobado")
     : text.status === "pending" ? t("Pendiente de aprobación") : "";
@@ -766,11 +771,64 @@ function showTextErrors(errors, target = $("textMessage")) {
     </ul>`;
 }
 
+/* ¿Lo pegado es japonés tal cual (un artículo) y no el JSON de un texto? */
+const isPlainJapanese = (raw) => !/^\s*(```|[{[])/.test(raw) && /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u.test(raw);
+const ARTICLE_MAX = 20000; // caracteres
+
+/* Guarda un texto japonés pegado tal cual. No interviene ninguna IA: kuromoji
+   lo divide en unidades y el banco y el diccionario ponen los significados, por
+   el mismo camino que un texto segmentado. No trae traducción. Es privado: se
+   queda en este dispositivo, no se sube ni se propone a la comunidad, y no se
+   anotan sus palabras ni sus arreglos en el servidor. */
+async function addArticle(raw) {
+  const clean = String(raw).normalize("NFC").trim();
+  if (clean.length > ARTICLE_MAX) throw [t("El texto es demasiado largo ({n} caracteres; el máximo es {max}). Pégalo en partes.", { n: clean.length, max: ARTICLE_MAX })];
+  let tokenizer;
+  try {
+    tokenizer = await loadTokenizer();
+  } catch {
+    throw [t("No se pudo cargar el analizador de japonés (unos 18 MB la primera vez). Comprueba la conexión y vuelve a intentarlo.")];
+  }
+  let parts = splitSentences(clean);
+  // Una primera línea corta y sin punto final es el título
+  let title = "";
+  if (parts.length > 1 && parts[0].p !== parts[1].p && [...parts[0].text].length <= 40 && !/[。！？!?]$/.test(parts[0].text)) {
+    title = parts.shift().text;
+  }
+  parts = parts.filter((part) => /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u.test(part.text));
+  if (!parts.length) throw [t("No se encontró ninguna oración en japonés.")];
+  const data = {
+    title: title || [...parts[0].text].slice(0, 20).join(""),
+    sentences: parts.map((part) => ({ p: part.p, ja: segmentSentence(tokenizer, part.text), en: "", es: "" }))
+  };
+  const { errors, text } = await validateText(JSON.stringify(data));
+  if (errors.length) throw errors;
+  text.title_en = text.title_es = t("Texto pegado");
+  text.topic = "article";
+  for (const sentence of text.sentences) sentence.en = sentence.es = ""; // sin traducción
+  return saveText(text, "paste", { local: true });
+}
+
 async function addTextFromInput() {
   const raw = $("textInput").value;
   if (!raw.trim()) {
     $("textMessage").className = "message";
-    $("textMessage").textContent = t("Pega primero el JSON del texto.");
+    $("textMessage").textContent = t("Pega primero el texto.");
+    return;
+  }
+  if (isPlainJapanese(raw)) {
+    $("textMessage").className = "message";
+    $("textMessage").textContent = t("Analizando el texto… la primera vez se descarga el analizador de japonés (18 MB).");
+    try {
+      const record = await addArticle(raw);
+      $("textInput").value = "";
+      $("textMessage").className = "message correct";
+      $("textMessage").textContent = t("Texto guardado: {title} ({n}). Se queda solo en este dispositivo: no se sube ni se comparte.", {
+        title: record.title, n: plural(record.data.sentences.length, "oración", "oraciones") });
+      renderLibrary();
+    } catch (error) {
+      showTextErrors([].concat(Array.isArray(error) ? error : error.message || String(error)));
+    }
     return;
   }
 
@@ -806,7 +864,7 @@ function bindLibrary() {
     const text = texts.find((x) => x.id === button.dataset.deleteText);
     if (!text) return;
     // Quitar un texto propio sin leer es saltarlo: cuenta para el máximo
-    const skipping = isOwnText(text) && !text.readAt;
+    const skipping = isOwnText(text) && !text.local && !text.readAt;
     if (skipping && await skipsUsed() >= MAX_SKIPS) {
       return alert(t("Ya saltaste {n} textos seguidos: termina este para poder crear otro.", { n: MAX_SKIPS }));
     }
@@ -1052,7 +1110,7 @@ const MAX_SKIPS = 3; // textos que se pueden saltar seguidos antes de tener que 
 /* Texto que el usuario tiene a medias: uno suyo sin leer. Mientras exista no
    puede crear otro; así nunca hay más de un texto incompleto. */
 const pendingOwnText = () => texts.find((text) =>
-  isOwnText(text) && !text.readAt && !text.discardedAt && !text.hiddenAt);
+  isOwnText(text) && !text.local && !text.readAt && !text.discardedAt && !text.hiddenAt);
 
 /* Saltos seguidos: textos descartados desde la última lectura terminada */
 async function skipsUsed() {
@@ -1518,6 +1576,8 @@ function sentenceHTML(sentence, index, known) {
       data-s="${index}" data-t="${tokenIndex}">${
         furigana ? rubyHTML(token.surface, token.reading) : escapeHTML(token.surface)}</span>`;
   }).join("");
+  // Un texto pegado no trae traducción: sin ella no hay botón 訳
+  if (!(sentence.es || sentence.en)) return `<span class="sent${open?.s === index ? " active" : ""}" data-sent="${index}">${words}</span>`;
   // El botón 訳 enseña la traducción de la frase entera sin tener que tocar una palabra
   return `<span class="sent${open?.s === index ? " active" : ""}" data-sent="${index}">${words}</span><button
     class="sent-btn${open?.kind === "sentence" && open.s === index ? " on" : ""}" type="button" data-translate="${index}"
@@ -1559,7 +1619,7 @@ function panelHTML() {
         <button class="button pop-${cls}${current === cls ? " chosen" : ""}" type="button"
           data-class="${cls}">${t(label)}</button>`).join("")}
     </div>
-    <button class="link-btn panel-more" type="button" data-translate="${open.s}">${t("Ver la traducción de la frase")}</button>`;
+    ${translation ? `<button class="link-btn panel-more" type="button" data-translate="${open.s}">${t("Ver la traducción de la frase")}</button>` : ""}`;
 }
 
 function renderReader() {
@@ -2258,6 +2318,8 @@ async function pullReading(userId) {
   if (saved.length || removed.length) {
     await putRecords("texts", saved, removed);
     await putRecords("words", freshWords);
+    for (const id of removed) await dropTextSentences(id);
+    await indexTextsQuietly(saved.filter((text) => !text.hiddenAt));
     changed = true;
   }
   last(rows, "texts");
@@ -2361,7 +2423,7 @@ async function pushReading(userId) {
   }
 
   // Textos propios aún no subidos: quedan pendientes de aprobación
-  const mineToPush = texts.filter((text) => isOwnText(text) && !pushed.texts[text.id]);
+  const mineToPush = texts.filter((text) => isOwnText(text) && !text.local && !pushed.texts[text.id]);
   for (const text of mineToPush) {
     text.owner = userId;
     if (text.status !== "approved") text.status = "pending";
@@ -2387,7 +2449,7 @@ async function pushReading(userId) {
   }
 
   // Estado de los textos
-  const states = texts.filter((text) =>
+  const states = texts.filter((text) => !text.local &&
     (text.readAt || text.discardedAt || text.hiddenAt) && pushed.states[text.id] !== statePrint(text));
   await pushRows("text_states", "user_id,text_id", states.map((text) => ({
     user_id: userId, text_id: text.id,

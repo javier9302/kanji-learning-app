@@ -1,7 +1,7 @@
 /* Fija el análisis de unidades que hacía reading.js antes de moverlo a ja-core.js */
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { analyseUnits, unitOf, isKana } = require("../ja-core.js");
+const { analyseUnits, unitOf, isKana, splitSentences, segmentSentence } = require("../ja-core.js");
 const { loadTokenizer } = require("../tools/lib/tokenizer.js");
 
 const brief = (units) => units.map((u) => [u.surface, u.basic, u.reading, u.pos]);
@@ -47,4 +47,35 @@ test("unitOf: puntuación y katakana", async () => {
   assert.equal(unitOf(tokenizer.tokenize("テレビ")).reading, "テレビ");
   assert.ok(isKana("ひらがなカタカナー"));
   assert.ok(!isKana("漢字"));
+});
+
+test("splitSentences: 。！？, comillas de cierre y párrafos", () => {
+  const texts = (input) => splitSentences(input).map((part) => part.text);
+  assert.deepEqual(texts("私は毎朝コーヒーを飲みます。今日は雨です！本当？"),
+    ["私は毎朝コーヒーを飲みます。", "今日は雨です！", "本当？"]);
+  // Dentro de unas comillas no se corta; la cita con su punto sigue hasta el final de la oración
+  assert.deepEqual(texts("「行きます。」と言った。それから帰った。"), ["「行きます。」と言った。", "それから帰った。"]);
+  // Dos citas seguidas son dos oraciones
+  assert.deepEqual(texts("「おはよう。」「元気ですか。」"), ["「おはよう。」", "「元気ですか。」"]);
+  assert.deepEqual(texts("え！？本当ですか。"), ["え！？", "本当ですか。"]);
+  assert.deepEqual(texts("最後に点がない"), ["最後に点がない"]);
+  assert.deepEqual(texts("  \n\n "), []);
+  // Cada línea es un párrafo
+  assert.deepEqual(splitSentences("題\n一つ目。二つ目。\n\n三つ目。").map((part) => part.p), [1, 2, 2, 3]);
+});
+
+test("segmentSentence: las mismas unidades que se le piden a la IA", async () => {
+  const tokenizer = await loadTokenizer();
+  const seg = (text) => segmentSentence(tokenizer, text);
+  assert.equal(seg("私は毎朝コーヒーを飲みます。"), "私|は|毎朝|コーヒー|を|飲みます|。");
+  assert.equal(seg("あまりおいしくなかったです。"), "あまり|おいしくなかった|です|。");
+  assert.equal(seg("図書館で勉強しています。"), "図書館|で|勉強|しています|。");
+  assert.equal(seg("昨日は何も食べませんでした。"), "昨日|は|何|も|食べませんでした|。");
+  assert.equal(seg("とても静かでした。"), "とても|静か|でした|。");
+  assert.equal(seg("お茶を三杯飲んでしまいました。"), "お茶|を|三杯|飲んでしまいました|。");
+  // Nada se pierde ni se añade, tampoco con espacios o con una barra en el texto
+  for (const text of ["「明日も一緒に行きませんか」と友達に聞かれました。", "東京 に 行った。", "A|Bです。"]) {
+    assert.equal(seg(text).split("|").join(""), text.replace(/\s/g, "").replace(/\|/g, "｜"));
+    assert.ok(!seg(text).split("|").includes(""));
+  }
 });

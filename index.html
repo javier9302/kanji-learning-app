@@ -137,7 +137,7 @@
       <div class="panel">
         <h3>Agregar un texto</h3>
         <label class="field">
-          <span>JSON del texto</span>
+          <span>Texto en japonés, o el JSON de un texto</span>
           <textarea id="textInput" rows="6" spellcheck="false" autocomplete="off"
             autocapitalize="off" autocorrect="off"
             placeholder='{ "title": "…", "level": "N5", "sentences": [ … ] }'></textarea>
@@ -148,8 +148,10 @@
         </div>
         <div class="form-footer">
           <p class="helper">
-            Pega el JSON que te devolvió la IA. Se comprueba antes de guardarlo
-            y, si algo falla, verás exactamente qué corregir.
+            Pega cualquier texto en japonés (un artículo, una noticia): la app lo
+            divide en palabras sin usar IA y lo guarda solo en este dispositivo, sin
+            traducción. O pega el JSON que te devolvió la IA: se comprueba antes de
+            guardarlo y, si algo falla, verás exactamente qué corregir.
           </p>
           <div class="import-actions">
             <button id="sampleTextBtn" class="button button-quiet" type="button">

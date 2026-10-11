@@ -32,6 +32,38 @@ export default async function extra({ page, step, check }) {
   });
 
   const STUDY_CONFIG_DAYS = await page.evaluate(() => STUDY_CONFIG.masteredIntervalDays);
+  await step("frases: el texto guardado deja sus frases, con palabras que preguntar", async () => {
+    await page.waitForFunction(() => userSentences.size > 0 && prefs.sentenceIndex === SENTENCE_INDEX_VERSION, { timeout: 60000 });
+    const sentence = await page.evaluate(() => [...userSentences.values()][0]);
+    check(sentence.ja === "私|は|毎朝|コーヒー|を|飲みます|。" && sentence.source === "text", JSON.stringify(sentence.ja));
+    check(sentence.targets.includes("毎朝|まいあさ") && sentence.targets.includes("飲む|のむ"), `targets: ${sentence.targets}`);
+    check(sentence.kanjiReadings.includes("飲|の") && sentence.level === "N5", `${sentence.kanjiReadings} ${sentence.level}`);
+  });
+
+  await step("texto pegado: se analiza sin IA, queda solo en el dispositivo y deja frases", async () => {
+    await page.evaluate(() => switchView("library"));
+    await page.evaluate((value) => { $("textInput").value = value; },
+      "学校の一日\n私は毎朝七時に起きて、学校へ行きます。学校で友達と日本語を勉強します。\n「今日は楽しかったです。」と母に言いました。");
+    await page.evaluate(() => $("addTextBtn").click());
+    await page.waitForFunction(() => texts.some((text) => text.source === "paste"), { timeout: 120000 });
+    const state = await page.evaluate(() => {
+      const text = texts.find((x) => x.source === "paste");
+      const mine = [...userSentences.values()].filter((s) => s.sourceId === text.id);
+      return {
+        title: text.title, local: text.local, n: text.data.sentences.length,
+        jp: text.data.sentences.map((s) => s.jp), translated: text.data.sentences.some((s) => s.en || s.es),
+        sentences: mine.map((s) => [s.ja, s.source, s.local, s.targets]),
+        wouldUpload: texts.filter((x) => isOwnText(x) && !x.local).some((x) => x.id === text.id),
+        pending: pendingOwnText()?.id === text.id
+      };
+    });
+    check(state.title === "学校の一日" && state.local === true && state.n === 3, JSON.stringify(state));
+    check(state.jp[2] === "「今日は楽しかったです。」と母に言いました。", state.jp[2]);
+    check(!state.translated && !state.wouldUpload && !state.pending, "traducción, subida o pendiente indebidos");
+    check(state.sentences.length >= 2 && state.sentences.every((s) => s[1] === "article" && s[2] === true), JSON.stringify(state.sentences));
+    check(state.sentences.some((s) => s[3].includes("学校|がっこう")), "学校 no es target");
+  });
+
   await step("diccionario: buscar en romaji abre la vista con resultados", async () => {
     await page.type("#dictInput", "mizu");
     await page.waitForSelector(".dict-row", { timeout: 5000 });

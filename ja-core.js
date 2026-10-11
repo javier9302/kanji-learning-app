@@ -71,10 +71,79 @@ function analyseUnits(tokenizer, ja) {
   return units.map((text, i) => unitOf(clean[i] && grouped[i].length ? grouped[i] : tokenizer.tokenize(text)));
 }
 
+/* =========================================
+   TEXTO SIN SEGMENTAR (un artículo pegado tal cual)
+   ========================================= */
+
+const SENTENCE_END = "。！？!?";
+const QUOTE_OPEN = "「『（(", QUOTE_CLOSE = "」』）)";
+
+/* Divide un texto en oraciones: [{ p: párrafo, text }]. Una oración acaba en
+   。！？ (y las comillas de cierre que la sigan). Dentro de unas comillas no
+   se corta: 「行きます。」と言った。 es una sola oración; dos citas seguidas,
+   「おはよう。」「元気？」, son dos. Cada línea es un párrafo. */
+function splitSentences(text) {
+  const list = [];
+  String(text).normalize("NFC").split(/\r?\n/).forEach((line) => {
+    const chars = [...line.trim()];
+    if (!chars.length) return;
+    const p = (list[list.length - 1]?.p || 0) + (list.length && list[list.length - 1].line === line ? 0 : 1);
+    let current = "", depth = 0;
+    const push = () => {
+      if (current.trim()) list.push({ p, text: current.trim(), line });
+      current = "";
+    };
+    for (let i = 0; i < chars.length; i++) {
+      const c = chars[i], next = chars[i + 1];
+      current += c;
+      if (QUOTE_OPEN.includes(c)) depth++;
+      else if (QUOTE_CLOSE.includes(c)) {
+        depth = Math.max(0, depth - 1);
+        // La cita terminó con su propio punto y detrás empieza otra (o nada): fin de oración
+        if (!depth && SENTENCE_END.includes(chars[i - 1]) && (next === undefined || QUOTE_OPEN.includes(next))) push();
+      } else if (SENTENCE_END.includes(c) && !depth && !SENTENCE_END.includes(next) && !QUOTE_CLOSE.includes(next)) push();
+    }
+    push();
+  });
+  return list.map(({ p, text: sentence }) => ({ p, text: sentence }));
+}
+
+/* Agrupa las piezas de kuromoji en las unidades que usa la app, con las mismas
+   reglas que se le piden a la IA: un verbo o adjetivo conjugado va entero con
+   sus terminaciones (食べています, 高くなかった), las partículas van sueltas y
+   です / だ tras un nombre o adjetivo también. Devuelve listas de piezas. */
+function groupPieces(pieces) {
+  const units = [];
+  const isInflected = (piece) => piece.pos === "動詞" || piece.pos === "形容詞";
+  for (const piece of pieces) {
+    if (!piece.surface_form.trim()) continue; // espacios
+    const unit = units[units.length - 1], last = unit?.[unit.length - 1];
+    const copula = piece.pos === "助動詞" && ["です", "だ"].includes(pieceBase(piece));
+    // La unidad es un verbo o adjetivo con sus terminaciones, o un です / だ conjugado (でし+た)
+    const chain = unit && (isInflected(unit[0]) || unit[0].pos === "助動詞");
+    let join = false;
+    if (last && PUNCTUATION.test(last.surface_form) || PUNCTUATION.test(piece.surface_form)) join = false;
+    // です / だ van sueltos (高い|です, おいしくなかった|です) salvo tras ません: 食べません+でした
+    else if (chain && piece.pos === "助動詞") join = !copula || last.surface_form === "ん";
+    else if (chain && piece.pos === "助詞" && piece.pos_detail_1 === "接続助詞" && ["て", "で", "ちゃ", "じゃ"].includes(piece.surface_form)) join = true;
+    else if (chain && isInflected(piece) && ["非自立", "接尾"].includes(piece.pos_detail_1)) join = true; // ている, られる, やすい
+    else if (last?.pos === "接頭詞") join = true;                                                          // お|茶 -> お茶
+    else if (last?.pos === "名詞" && last.pos_detail_1 === "数" && piece.pos === "名詞" &&
+      (piece.pos_detail_1 === "数" || piece.pos_detail_1 === "接尾" && piece.pos_detail_2 === "助数詞")) join = true; // 三|人 -> 三人
+    if (join) unit.push(piece);
+    else units.push([piece]);
+  }
+  return units;
+}
+
+/* Una oración sin segmentar -> la misma con "|" entre unidades */
+const segmentSentence = (tokenizer, text) =>
+  groupPieces(tokenizer.tokenize(String(text).replace(/\|/g, "｜"))).map((unit) => unit.map((piece) => piece.surface_form).join("")).join("|");
+
 /* Para tools/ y las pruebas (Node); en el navegador son globales */
 if (typeof module !== "undefined") {
   module.exports = {
     isKana, PUNCTUATION, KUROMOJI_POS, PARTICLES, piecePos, isContentPiece, pieceBase, pieceReading,
-    unitOf, analyseUnits
+    unitOf, analyseUnits, splitSentences, groupPieces, segmentSentence
   };
 }

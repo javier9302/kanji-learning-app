@@ -37,6 +37,115 @@ async function markSentenceShown(id) {
 }
 
 /* =========================================
+   2. FRASES DE LOS TEXTOS DEL USUARIO
+   -----------------------------------------
+   Cada texto guardado (escrito por la IA, de la comunidad o pegado) deja sus
+   frases aquí. Ya vienen analizadas en text.data.sentences, así que no hace
+   falta kuromoji. Vale una frase de 4 a 20 unidades con todas sus palabras
+   resueltas y al menos una que se pueda preguntar.
+   Al guardar un texto solo se procesa ese texto; se rehace todo únicamente
+   cuando cambia SENTENCE_INDEX_VERSION.
+   ========================================= */
+
+const SENTENCE_INDEX_VERSION = 1; // súbela si cambian las reglas: rehace las frases de todos los textos
+const USER_SENTENCE_UNITS = [4, 20];
+
+/* Lo que se sabe de una palabra por su clave: del banco o del diccionario del usuario */
+const sentenceWordOf = (key) => {
+  const word = BANK.words.get(key);
+  return word ? { level: word.level, kana: word.kana } : words.has(key) ? { level: null, kana: false } : null;
+};
+/* Lecturas de kanji que ejercita una palabra: las del banco o, fuera de él, repartidas con sus kanjis */
+const sentenceTagsOf = (key) => {
+  if (BANK.readings[key]) return unpackTags(BANK.readings[key]);
+  const [lemma, reading] = key.split("|");
+  return alignReading(lemma, reading, (c) => BANK.kanji.get(c)) || [];
+};
+
+/* Frases válidas de un texto (sin guardar nada) */
+function sentencesOfText(text) {
+  const dictionary = {};
+  for (const sentence of text.data.sentences) Object.assign(dictionary, sentence.dictionary);
+  const list = [];
+  text.data.sentences.forEach((sentence, index) => {
+    const tokens = sentence.tokens.map((token) => {
+      if (UNCOUNTED_POS.has(token.pos)) return { ...token, key: "" };
+      // La palabra que anotó el texto; si la escritura tiene varias lecturas, la que suena en la frase
+      const entry = dictionary[token.lemma];
+      const noted = entry && isKana(entry.reading || "") ? wordKey(token.lemma, entry.reading) : "";
+      return { ...token, key: resolveKey(token, (form) => BANK.byWriting.get(form), noted) };
+    });
+    const built = buildSentence({
+      id: `${text.id}:${sentence.id ?? index + 1}`, tokens, en: sentence.en || "", es: sentence.es || "",
+      source: text.source === "paste" ? "article" : "text", sourceId: text.id, attribution: "",
+      wordOf: sentenceWordOf, tagsOf: sentenceTagsOf, fallbackLevel: text.level || "N5"
+    });
+    const [minUnits, maxUnits] = USER_SENTENCE_UNITS;
+    if (validateSentence(built, { minUnits, maxUnits, wordOf: sentenceWordOf }).ok) list.push(built);
+  });
+  return list;
+}
+
+/* Hace falta el banco entero (para el nivel de cada palabra) y sus lecturas de kanji */
+const ensureSentenceData = () => Promise.all([BANK.loadUpTo("N1"), BANK.loadReadings()]);
+
+/* Guarda las frases de unos textos, sustituyendo las que tuvieran. Una frase
+   que no ha cambiado conserva su fecha, para no volver a subirla. */
+async function indexTexts(list) {
+  if (!list.length) return;
+  await ensureSentenceData();
+  const saved = [], removed = [];
+  for (const text of list) {
+    const fresh = new Map(sentencesOfText(text).map((sentence) => [sentence.id, sentence]));
+    for (const old of userSentences.values()) {
+      if (old.sourceId === text.id && !fresh.has(old.id)) { userSentences.delete(old.id); removed.push(old.id); }
+    }
+    for (const sentence of fresh.values()) {
+      const old = userSentences.get(sentence.id);
+      const { updatedAt, local, ...before } = old || {};
+      if (old && !!local === !!text.local && JSON.stringify(before) === JSON.stringify(sentence)) continue;
+      const record = { ...sentence, updatedAt: Date.now(), ...(text.local ? { local: true } : {}) };
+      userSentences.set(record.id, record);
+      saved.push(record);
+    }
+  }
+  if (!saved.length && !removed.length) return;
+  await putRecords("sentences", saved, removed);
+  forgetSentenceIndex();
+  scheduleSync();
+}
+
+/* Nunca debe impedir que un texto se guarde o se lea */
+const indexTextsQuietly = (list) => indexTexts(list)
+  .catch((error) => console.error("No se pudieron sacar las frases del texto:", error));
+
+/* Al borrar u ocultar un texto, sus frases se van con él */
+async function dropTextSentences(textId) {
+  const ids = [...userSentences.values()].filter((sentence) => sentence.sourceId === textId).map((sentence) => sentence.id);
+  if (!ids.length) return;
+  ids.forEach((id) => userSentences.delete(id));
+  await putRecords("sentences", [], ids);
+  forgetSentenceIndex();
+}
+
+/* Al abrir la app: si cambiaron las reglas (o es la primera vez), se rehacen
+   las frases de todos los textos. Va en segundo plano. */
+async function rebuildSentencesIfNeeded() {
+  if (prefs.sentenceIndex === SENTENCE_INDEX_VERSION) return;
+  const visible = texts.filter((text) => !text.hiddenAt);
+  if (visible.length) {
+    await indexTexts(visible);
+    // Frases de textos que ya no están
+    const alive = new Set(visible.map((text) => text.id));
+    for (const id of new Set([...userSentences.values()].map((sentence) => sentence.sourceId))) {
+      if (!alive.has(id)) await dropTextSentences(id);
+    }
+  }
+  prefs.sentenceIndex = SENTENCE_INDEX_VERSION;
+  saveLocal("kanji-prefs", prefs);
+}
+
+/* =========================================
    5. SINCRONIZACIÓN (tabla user_sentences de Supabase)
    -----------------------------------------
    Se suben las frases de los textos que también se suben y el contador de
