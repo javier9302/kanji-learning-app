@@ -1,0 +1,13 @@
+{
+  "name": "kanji-learning-app",
+  "private": true,
+  "description": "Herramientas y pruebas. La app no usa nada de aquí al ejecutarse: se publica tal cual, sin compilar.",
+  "scripts": {
+    "test": "node --test",
+    "smoke": "node tools/smoke.mjs"
+  },
+  "devDependencies": {
+    "kuromoji": "0.1.2",
+    "puppeteer-core": "^25.13.0"
+  }
+}

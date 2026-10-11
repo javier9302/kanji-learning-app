@@ -11,3 +11,6 @@ supabase/.temp/
 
 # Lista de frecuencia original: solo se usa para generar los rangos, no se publica
 data/
+
+# Herramientas (tools/): descargas, respuestas de la IA sin procesar y cachés
+tools/cache/
