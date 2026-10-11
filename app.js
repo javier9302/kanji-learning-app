@@ -8,7 +8,8 @@ const LEVELS = ["N5", "N4", "N3", "N2", "N1"];
 const PAGE_SIZE = 150;
 
 let db;
-let meta = { days: {}, deleted: {}, reading: {} }; // historial diario, borrados y perfil de lectura
+// Historial diario, borrados, perfil de lectura y lecturas de kanji practicadas en frases
+let meta = { days: {}, deleted: {}, reading: {}, practice: {} };
 let emptyStudyHTML = ""; // mensaje inicial de la pantalla de estudio
 
 const $ = (id) => document.getElementById(id);
@@ -264,6 +265,7 @@ function renderStats() {
   renderHeatmap();
   renderLevels(items);
   renderHardest(items);
+  renderKanjiReadings();
   renderReadingStats();
 }
 
@@ -652,6 +654,7 @@ async function clearLocalData() {
   meta.days = {};
   meta.deleted = {};
   meta.reading = {};
+  meta.practice = {};
   reader = placement = evaluation = null;
   await saveMeta();
   await clearReadingData();

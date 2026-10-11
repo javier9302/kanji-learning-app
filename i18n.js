@@ -49,6 +49,11 @@ const EN = {
   "¿Cómo se lee la palabra marcada?": "How is the highlighted word read?",
   "Vale su lectura aquí o la de su forma de diccionario ({word}).": "Its reading here or that of its dictionary form ({word}) are both accepted.",
   "Escuchar la frase": "Listen to the sentence",
+  "Lecturas de kanji practicadas": "Kanji readings practiced",
+  "Lecturas de kanji que has acertado dentro de una frase (en este dispositivo), las más recientes primero.": "Kanji readings you got right inside a sentence (on this device), most recent first.",
+  "Aquí verás las lecturas de kanji que aciertes al repasar con frases.": "The kanji readings you get right when reviewing with sentences will appear here.",
+  "acierto": "correct answer",
+  "aciertos": "correct answers",
   "resultado": "result",
   "resultados": "results",
   /* ---------- Instalar como app ---------- */

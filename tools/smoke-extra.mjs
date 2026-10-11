@@ -113,6 +113,11 @@ export default async function extra({ page, step, check }) {
     check(await page.evaluate(() => $("feedback").classList.contains("correct")), "いきます no se aceptó");
     await page.evaluate(() => document.querySelector('[data-rate="good"]').click());
     await page.waitForFunction(() => !document.querySelector('[data-rate]') || !session, { timeout: 5000 });
+    // Estadísticas: las lecturas de kanji acertadas en una frase (el fallo de abajo no cuenta)
+    const practice = await page.evaluate(() => { switchView("progress"); return { meta: meta.practice, n: $("statKanjiReadings").textContent,
+      list: $("kanjiReadingList").textContent }; });
+    check(practice.meta["学|がく"]?.n === 1 && practice.meta["校|こう"]?.n === 1 && practice.meta["行|い"]?.n === 1, JSON.stringify(practice.meta));
+    check(practice.n === "3" && practice.list.includes("がく"), `tarjeta: ${practice.n}`);
     await studyOne("友達|ともだち");
     check(await page.evaluate(() => document.querySelector(".sent-target")?.textContent === "友達"), "no salió 友達 en una frase");
     await answer("ともたち");
@@ -124,6 +129,7 @@ export default async function extra({ page, step, check }) {
       meta.reading.assumed = "";
       await saveMeta();
     });
+    check(await page.evaluate(() => !Object.keys(meta.practice).some((tag) => tag.startsWith("友"))), "un fallo contó como practicado");
   });
 
   await step("diccionario: buscar en romaji abre la vista con resultados", async () => {

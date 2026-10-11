@@ -692,6 +692,14 @@ function showCard() {
 /* Una palabra se ha preguntado dentro de una frase: la frase cuenta como vista */
 function sentencePracticed(pick, card, correct) {
   markSentenceShown(pick.sentence.id).catch((error) => console.error("No se pudo anotar la frase:", error));
+  // Acertada a la primera: sus lecturas de kanji cuentan como practicadas en contexto
+  if (!correct || card.attempts) return;
+  for (const tag of wordTags(pick.sentence, card.entry.w)) {
+    const entry = meta.practice[tag] ??= { n: 0, last: "" };
+    entry.n++;
+    entry.last = today();
+  }
+  saveMeta();
 }
 
 /* Pasa a la siguiente tarjeta. Las falladas vuelven a salir un poco después y

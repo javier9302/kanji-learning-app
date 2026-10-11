@@ -2522,3 +2522,14 @@ body[data-view="dict"] .intro {
 .dict-sentences .sent-credit {
   text-align: left;
 }
+
+.reading-list {
+  justify-content: flex-start;
+  max-width: none;
+  margin-bottom: 0;
+}
+
+.chart-panel h3 .pill {
+  margin-left: 6px;
+  vertical-align: middle;
+}

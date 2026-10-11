@@ -238,6 +238,26 @@ function tokenGlossHTML(token) {
   return `<span lang="ja">${escapeHTML(token.lemma)}（${escapeHTML(entry?.r || token.reading)}）</span>${meaning ? ` ${escapeHTML(meaning)}` : ""}`;
 }
 
+/* Etiquetas "kanji|lectura" de la frase que son de una palabra (por su escritura) */
+const wordTags = (sentence, writing) =>
+  (sentence.kanjiReadings || []).filter((tag) => [...tag.split("|")[0]].every((c) => writing.includes(c)));
+
+/* Estadísticas: lecturas de kanji acertadas dentro de una frase.
+   meta.practice = { "学|がく": { n: veces, last: día } }. Se guarda en este
+   dispositivo, como las preferencias. */
+function renderKanjiReadings() {
+  const list = Object.entries(meta.practice || {}).sort((a, b) => b[1].last.localeCompare(a[1].last) || b[1].n - a[1].n);
+  $("statKanjiReadings").textContent = list.length;
+  $("kanjiReadingList").innerHTML = list.length
+    ? list.slice(0, 60).map(([tag, entry]) => {
+        const [kanji, reading] = tag.split("|");
+        const tip = `${kanji} ${reading}: ${plural(entry.n, "acierto", "aciertos")}`;
+        return `<li title="${escapeHTML(tip)}"><strong lang="ja">${escapeHTML(kanji)}</strong>
+          <span lang="ja">${escapeHTML(reading)}</span>${entry.n > 1 ? `<span>×${entry.n}</span>` : ""}</li>`;
+      }).join("")
+    : `<li><span>${t("Aquí verás las lecturas de kanji que aciertes al repasar con frases.")}</span></li>`;
+}
+
 /* De dónde es la frase: las de Tatoeba llevan su autor y su licencia */
 function sentenceCreditHTML(sentence) {
   return sentence.attribution ? `<p class="helper sent-credit">${escapeHTML(sentence.attribution)}</p>` : "";
