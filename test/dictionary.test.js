@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { parseDictQuery, rankResults, dictBankEntry, dictGloss } = require("../dictionary.js");
+const { parseDictQuery, rankResults, dictBankEntry, dictGloss, lookupRecency, promptLearning } = require("../dictionary.js");
 const { loadBank } = require("../tools/lib/bank.js");
 
 // Conversión mínima de romaji para las pruebas (en la app es WanaKana)
@@ -65,4 +65,31 @@ test("un romaji que también es una palabra inglesa busca las dos cosas", () => 
 test("sin coincidencia no hay resultados, y el límite se respeta", () => {
   assert.deepEqual(search("zzzzqqq"), []);
   assert.ok(search("か").length <= 50);
+});
+
+test("lookupRecency: 1 el día de la consulta, baja de forma lineal y no pasa de 0", () => {
+  const DAY = 86400000, now = 100 * DAY;
+  assert.equal(lookupRecency(now, now, 14), 1);
+  assert.equal(lookupRecency(now - 7 * DAY, now, 14), 0.5);
+  assert.equal(lookupRecency(now - 14 * DAY, now, 14), 0);
+  assert.equal(lookupRecency(now - 30 * DAY, now, 14), 0);
+  assert.equal(lookupRecency(now + DAY, now, 14), 1);   // reloj adelantado en otro dispositivo
+  assert.equal(lookupRecency(0, now, 14), 0);
+  assert.equal(lookupRecency(now, now, 0), 0);          // con 0 días la ventaja está apagada
+});
+
+test("promptLearning: las buscadas primero (la más reciente antes), nunca una conocida", () => {
+  const records = [
+    { lemma: "a", status: "learning", lastSeen: 5 },
+    { lemma: "b", status: "unknown", origin: "diccionario", lastSeen: 10 },
+    { lemma: "c", status: "unknown", origin: "diccionario", lastSeen: 20 },
+    { lemma: "d", status: "mastered", origin: "diccionario", lastSeen: 30 },
+    { lemma: "e", status: "unknown", origin: "lectura", lastSeen: 40 },
+    { lemma: "f", status: "learning", origin: "diccionario", lastSeen: 1 },
+    { lemma: "g", status: "learning", origin: "diccionario", studied: true, canReadKanji: true, lastSeen: 50 },
+    { lemma: "h", status: "pre_known", origin: "diccionario", lastSeen: 60 }
+  ];
+  // "g" ya la lee bien: no va con las buscadas, pero sigue en "aprendiendo" como hasta ahora
+  assert.deepEqual(promptLearning(records).map((w) => w.lemma), ["c", "b", "f", "a", "g"]);
+  assert.deepEqual(promptLearning(records, 2).map((w) => w.lemma), ["c", "b"]);
 });

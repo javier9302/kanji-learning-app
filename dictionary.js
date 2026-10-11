@@ -103,6 +103,25 @@ const dictBankEntry = (word, frequency = {}) => ({
   level: word.level, rank: frequency[word.id] || 0, kana: !!word.kana, source: "bank"
 });
 
+/* Ventaja de una consulta reciente: 1 el día que se buscó, 0 pasados `days` días */
+function lookupRecency(lastSeen, now, days) {
+  if (!lastSeen || !(days > 0)) return 0;
+  return Math.min(1, Math.max(0, 1 - (now - lastSeen) / (days * 86400000)));
+}
+
+/* Palabras que se le piden a la IA para sus textos: las que el usuario está
+   aprendiendo. Primero las que buscó en el diccionario y aún no sabe (la más
+   reciente antes) y después el resto, en su orden. Nunca una ya conocida. */
+function promptLearning(records, limit = 60) {
+  const KNOWN = new Set(["mastered", "pre_known"]);
+  const searched = records
+    .filter((w) => w.origin === "diccionario" && !KNOWN.has(w.status) && !(w.studied && w.canReadKanji))
+    .sort((a, b) => (b.lastSeen || 0) - (a.lastSeen || 0));
+  const taken = new Set(searched);
+  const learning = records.filter((w) => w.status === "learning" && !taken.has(w));
+  return [...searched, ...learning].slice(0, limit);
+}
+
 /* ---------- 2. Vista ---------- */
 
 let dictState = { text: "", results: [], open: "", remote: "" }; // open: id del resultado desplegado
@@ -183,6 +202,7 @@ function dictStatusHTML(entry) {
 
 /* Ficha de un resultado: todo lo que se sabe de la palabra */
 function dictCardHTML(entry) {
+  const rec = userWords.get(entry.id);
   const mine = BANK.meaning(entry, lang);
   const other = lang === "es" ? entry.en : entry.es;
   const parts = kanjiOf(entry.w).map((c) => {
@@ -213,6 +233,13 @@ function dictCardHTML(entry) {
       ${other?.length && other !== mine ? `<p class="helper">${escapeHTML(other.join("; "))}</p>` : ""}
       ${parts ? `<ul class="missed-list dict-kanji">${parts}</ul>` : ""}
       <p class="dict-status">${dictStatusHTML(entry)}</p>
+      <div class="inline-form dict-actions">
+        <button class="button button-primary" type="button" data-dict-mark="learn"
+          ${rec?.studied || rec?.status === "mastered" ? "disabled" : ""}>${t("Estudiar esta palabra")}</button>
+        <button class="button button-outline" type="button" data-dict-mark="mastered"
+          ${rec?.status === "mastered" ? "disabled" : ""}>${t("Ya la domino")}</button>
+      </div>
+      <p class="message ${dictState.messageClass || ""}" role="status">${escapeHTML(dictState.message || "")}</p>
     </article>`;
 }
 
@@ -269,11 +296,65 @@ async function runDictSearch(text) {
   if (found.entries.length || !bankLoaded) show(found.entries); else renderDictionary();
 }
 
+/* Una palabra de fuera del banco necesita su entrada en el diccionario propio
+   del usuario (almacén words) para poder mostrarla y estudiarla */
+async function dictOwnEntry(entry) {
+  if (BANK.words.has(entry.id) || words.has(entry.id)) return;
+  const own = { id: entry.id, lemma: entry.w, reading: entry.r, meanings: entry.en, meaningsEs: entry.es,
+    pos: "", source: "jmdict", updatedAt: Date.now() };
+  words.set(own.id, own);
+  await putRecords("words", [own]);
+}
+/* Su significado viaja con el progreso, para reconstruirla en otro dispositivo */
+const dictOwnMeaning = (entry) => BANK.words.has(entry.id) ? "" : BANK.meaning(entry, lang).slice(0, 3).join(", ").slice(0, 120);
+
+/* Abrir una ficha es consultar la palabra: queda anotada como algo que el
+   usuario NO conoce todavía (nunca dominada ni "por confirmar"), y tendrá
+   prioridad entre las palabras nuevas. No toca el repaso de una ya estudiada. */
+async function recordLookup(entry) {
+  await dictOwnEntry(entry);
+  const rec = userWords.get(entry.id) || blankUserWord(entry.w, entry.r);
+  rec.lookups = (rec.lookups || 0) + 1;
+  rec.firstSeen ||= Date.now();
+  rec.lastSeen = Date.now();
+  // Lo que el usuario pidió a mano manda; lo demás pasa a ser "del diccionario"
+  if (rec.origin !== "manual") rec.origin = "diccionario";
+  // "Por confirmar" era una suposición; buscarla la desmiente. Lo ya demostrado
+  // (dominada en una evaluación o en el repaso) no se toca.
+  if (rec.status === "pre_known") rec.status = "unknown";
+  if (!rec.meaning && dictOwnMeaning(entry)) rec.meaning = dictOwnMeaning(entry);
+  await saveUserWord(rec);
+  return rec;
+}
+
 /* Abre la ficha de un resultado (o la cierra si ya estaba abierta) */
-function openDictEntry(id) {
+async function openDictEntry(id) {
   dictState.open = dictState.open === id ? "" : id;
+  dictState.message = dictState.messageClass = "";
+  const entry = dictState.results.find((result) => result.id === dictState.open);
+  // Cada palabra cuenta una vez por búsqueda, aunque se abra y se cierre
+  if (entry && !dictState.counted?.has(id)) {
+    (dictState.counted ??= new Set()).add(id);
+    await recordLookup(entry);
+  }
   renderDictionary();
   document.querySelector("[data-dict-card]")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+
+/* Botones de la ficha: "Estudiar esta palabra" y "Ya la domino" (los mismos
+   caminos que en "Agregar palabra") */
+async function markDictEntry(mode) {
+  const entry = dictState.results.find((result) => result.id === dictState.open);
+  if (!entry) return;
+  await dictOwnEntry(entry);
+  const rec = await markWord(entry.id, entry.w, entry.r, mode, dictOwnMeaning(entry));
+  dictState.messageClass = "correct";
+  dictState.message = mode === "mastered" ? t("{word} guardada como dominada.", { word: rec.lemma })
+    : rec.studied ? t("{word} ya está en tus repasos.", { word: rec.lemma })
+    : !hasKanjiChar(rec.lemma) || entry.kana ? t("{word} guardada. Al ir solo en kana no se repasa, pero se usará en tus textos.", { word: rec.lemma })
+    : t("{word} agregada: será de las primeras palabras nuevas del repaso.", { word: rec.lemma });
+  renderDictionary();
+  updateCounts();
 }
 
 function bindDictionary() {
@@ -283,6 +364,7 @@ function bindDictionary() {
     const pick = (selector) => event.target.closest(selector);
     if (pick("[data-dict-speak]")) return speak(pick("[data-dict-speak]").dataset.dictSpeak);
     if (pick("[data-dict-close]")) return openDictEntry(dictState.open);
+    if (pick("[data-dict-mark]")) return markDictEntry(pick("[data-dict-mark]").dataset.dictMark);
     if (pick("[data-dict]")) openDictEntry(pick("[data-dict]").dataset.dict);
   });
   list.addEventListener("keydown", (event) => {
@@ -304,5 +386,7 @@ function bindDictionary() {
 
 /* Para las pruebas (Node); en el navegador son globales */
 if (typeof module !== "undefined") {
-  module.exports = { parseDictQuery, dictMatch, rankResults, dictBankEntry, dictGloss, dictHiragana };
+  module.exports = {
+    parseDictQuery, dictMatch, rankResults, dictBankEntry, dictGloss, dictHiragana, lookupRecency, promptLearning
+  };
 }

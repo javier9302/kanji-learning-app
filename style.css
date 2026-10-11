@@ -2440,3 +2440,7 @@ body[data-view="dict"] .intro {
   font-size: 12px;
   color: var(--muted);
 }
+
+.dict-actions {
+  margin-top: 14px;
+}

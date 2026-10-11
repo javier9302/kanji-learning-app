@@ -1104,8 +1104,8 @@ function promptParams({ type, topic, length }) {
   const params = {
     level: meta.reading.level, type, topic, length, prefer,
     known: all, assumedLevels: [],
-    learning: [...userWords.values()].filter((w) => w.status === "learning")
-      .map((w) => label(w.lemma, w.reading)).slice(0, 60)
+    // Las que está aprendiendo; primero las que buscó en el diccionario, para que salgan en sus textos
+    learning: promptLearning([...userWords.values()], 60).map((w) => label(w.lemma, w.reading))
   };
   if (all.length > PROMPT_WORD_LIMIT) {
     params.known = [...userWords.values()].filter((w) => KNOWN_STATUS.has(w.status))
@@ -2152,8 +2152,10 @@ const profilePrint = (profile) => `${profile.level}|${profile.assumed}|${profile
 function ensureWordEntry(mine) {
   if (words.has(mine.id)) return null;
   const word = BANK.words.get(mine.id);
-  // Fuera del banco solo se puede reconstruir lo que el usuario agregó a mano
-  if (!word && mine.origin !== "manual") return null;
+  // Fuera del banco solo se puede reconstruir lo que el usuario agregó a mano o
+  // buscó en el diccionario: su significado viaja con el progreso
+  if (!word && !["manual", "diccionario"].includes(mine.origin)) return null;
+  if (!word && !mine.meaning) return null;
   const own = mine.meaning ? [mine.meaning] : [];
   const entry = { id: mine.id, lemma: mine.lemma, reading: mine.reading, meanings: word?.en || own,
     meaningsEs: word?.es || own, pos: "", source: word ? "jmdict" : "manual", updatedAt: Date.now() };

@@ -12,11 +12,18 @@ const STUDY_CONFIG = {
   /* Qué palabra nueva sale primero. Cada criterio vale entre 0 y 1 y se
      multiplica por su peso; gana la suma más alta. Con pesos tan separados
      el orden es estricto: un criterio solo desempata al anterior.
-       manual     la agregó el usuario a mano ("Quiero aprenderla")
+       manual     la agregó el usuario a mano ("Quiero aprenderla" o, en el
+                  diccionario, "Estudiar esta palabra")
+       dictionary la buscó en el diccionario: es una palabra que no conoce
+       lookup     hace poco que la buscó: vale 1 el día de la consulta y baja
+                  hasta 0 en lookupDecayDays días
        reading    apareció en una lectura del usuario
        kanji      proporción de sus kanjis que el usuario ya conoce
        frequency  puesto en la lista de frecuencia (1 = la más frecuente) */
-  weights: { manual: 1000, reading: 100, kanji: 10, frequency: 1 },
+  weights: { manual: 1000, dictionary: 300, lookup: 200, reading: 100, kanji: 10, frequency: 1 },
+
+  /* Días que tarda en apagarse la ventaja de una consulta reciente al diccionario */
+  lookupDecayDays: 14,
 
   /* Puesto a partir del cual la frecuencia ya no suma nada */
   frequencyMaxRank: 6000,
