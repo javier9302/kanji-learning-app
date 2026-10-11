@@ -132,6 +132,15 @@ export default async function extra({ page, step, check }) {
     check(await page.evaluate(() => !Object.keys(meta.practice).some((tag) => tag.startsWith("友"))), "un fallo contó como practicado");
   });
 
+  await step("traducir: se propone una frase con traducción, nunca una de un texto pegado", async () => {
+    const state = await page.evaluate(() => ({
+      all: userSentences.size, candidates: translationCandidates().map((s) => [s.ja, s.source]),
+      next: nextTranslationSentence()?.ja
+    }));
+    check(state.candidates.length === 1 && state.candidates[0][1] === "text" && state.all > 1, JSON.stringify(state));
+    check(state.next === "私|は|毎朝|コーヒー|を|飲みます|。", `siguiente: ${state.next}`);
+  });
+
   await step("diccionario: buscar en romaji abre la vista con resultados", async () => {
     await page.type("#dictInput", "mizu");
     await page.waitForSelector(".dict-row", { timeout: 5000 });

@@ -44,6 +44,32 @@ const STUDY_CONFIG = {
   /* Palabras solo en kana que se le piden a la IA como vocabulario preferente */
   kanaWordsInPrompt: 40,
 
+  /* Sección "Traducir": el estudiante escribe la traducción de una frase y una
+     IA la corrige. Demuestra que entiende el SIGNIFICADO; no mueve el calendario
+     de repaso de la lectura. */
+  translate: {
+    /* Frases que se pueden proponer: caracteres japoneses (sin contar la puntuación) */
+    minChars: 4,
+    maxChars: 40,
+    /* Con más palabras desconocidas que estas la frase no se propone */
+    maxUnknown: 2,
+
+    /* Qué frase sale primero: gana la suma más alta.
+         known      proporción de sus palabras que el usuario conoce (0 a 1)
+         unknown    puntos según cuántas NO conoce: [ninguna, una, dos]
+         learning   por cada palabra en "aprendiendo" o "por confirmar"
+         lookups    por cada palabra que ha consultado alguna vez
+         failed     por cada palabra que ha fallado (evaluación, repaso o traducción)
+         perWordMax tope de palabras que suman en cada uno de los tres anteriores
+         recent     se RESTA si la frase salió hace poco: entera el mismo día,
+                    hasta 0 pasados recentDays días
+         sameText   se RESTA si es del mismo texto que la frase anterior */
+    choose: {
+      known: 10, unknown: [0, 4, 2], learning: 3, lookups: 2, failed: 3, perWordMax: 3,
+      recent: 30, recentDays: 5, sameText: 4
+    }
+  },
+
   /* FSRS (https://github.com/open-spaced-repetition/ts-fsrs)
        request_retention  probabilidad de recordar que se busca (0.9 = 90 %);
                           más alta = repasos más seguidos

@@ -3,7 +3,7 @@
    ========================================= */
 
 const DB_NAME = "kanji-learning-app";
-const DB_VERSION = 5; // 5: almacenes sentences y sentenceStats (frases de ejemplo)
+const DB_VERSION = 6; // 5: almacenes sentences y sentenceStats (frases de ejemplo); 6: translations (Traducir)
 const LEVELS = ["N5", "N4", "N3", "N2", "N1"];
 const PAGE_SIZE = 150;
 
@@ -1013,6 +1013,7 @@ async function init() {
     await loadReadingData();
     await loadStudyData();
     await loadSentenceData();
+    await loadTranslateData();
   } catch (error) {
     console.error("Error al iniciar la aplicación:", error);
     $("readArea").innerHTML = `
