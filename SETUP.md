@@ -205,6 +205,26 @@ El buscador de la cabecera busca por escritura, lectura (en kana o en romaji) o 
 - «Estudiar esta palabra» y «Ya la domino» hacen lo mismo que los botones de **Agregar palabra**.
 - El máximo de palabras nuevas por sesión no cambia: buscar muchas palabras no llena el repaso.
 
+## Frases de ejemplo y «Repasar con frases»
+
+Con **Ajustes → Repaso → Repasar con frases** (desactivado por defecto), el modo «Escribir la lectura»
+pregunta cada palabra dentro de una frase en la que el resto ya se conoce. Si no hay ninguna frase
+que valga, sale la tarjeta de siempre. La corrección y el calendario de repasos no cambian.
+
+- Las frases salen de tus textos: al guardar uno (escrito por la IA, de la comunidad o pegado) se
+  quedan sus frases de 4 a 20 unidades con todas las palabras resueltas. No se usa ninguna IA.
+- En **Biblioteca** se puede pegar cualquier texto en japonés tal cual. Se analiza en el
+  dispositivo con kuromoji, **no se sube ni se propone a la comunidad** y no tiene traducción.
+- **Vuelve a ejecutar `supabase/schema.sql`**: crea la tabla `user_sentences`, donde se guardan las
+  frases de los textos que sí se suben y cuántas veces se ha enseñado cada una. Sin la tabla, todo
+  sigue funcionando y las frases se quedan en el dispositivo (cada uno las saca de sus textos).
+- `bank/readings.js` dice qué lectura de cada kanji ejercita cada palabra del banco. Se genera con
+  `node tools/build-readings.mjs` a partir de JmdictFurigana (CC BY-SA, como JMdict); solo hay que
+  repetirlo si cambia el banco.
+- `node tools/coverage.mjs` informa de cuántas frases comunes hay por cada pareja (kanji, lectura)
+  y `node tools/size-report.mjs`, del tamaño de los archivos.
+- «Lecturas de kanji practicadas», en Estadísticas, se guarda en cada dispositivo y no se sincroniza.
+
 ## Pruebas
 
 Hace falta Node 20 o posterior. La app no usa nada de esto al ejecutarse.
