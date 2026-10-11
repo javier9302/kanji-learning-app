@@ -169,7 +169,55 @@ function dictNoteText() {
   return notes[dictState.remote] || "";
 }
 
+/* Estado de la palabra para el usuario: lo que dice su progreso, o que aún no la tiene */
+function dictStatusHTML(entry) {
+  const rec = userWords.get(entry.id);
+  if (!rec) return `<span class="state-tag">${t("No está en tus palabras")}</span>`;
+  const status = `<span class="state-tag state-${rec.status}">${t(WORD_STATUS_ONE[rec.status] || "Desconocida")}</span>`;
+  const review = rec.studied
+    ? t("En repaso: próximo el {date}", { date: formatDate(rec.nextReview) })
+    : rec.origin === "manual" && rec.status !== "mastered" ? t("En cola para estudiar") : "";
+  const lookups = rec.lookups ? plural(rec.lookups, "consulta", "consultas") : "";
+  return [status, review, lookups].filter(Boolean).join(" · ");
+}
+
+/* Ficha de un resultado: todo lo que se sabe de la palabra */
+function dictCardHTML(entry) {
+  const mine = BANK.meaning(entry, lang);
+  const other = lang === "es" ? entry.en : entry.es;
+  const parts = kanjiOf(entry.w).map((c) => {
+    const kanji = BANK.kanji.get(c);
+    return `<li><strong lang="ja">${escapeHTML(c)}</strong>
+      <span>${kanji && meaningOf(kanji).length ? escapeHTML(gloss(kanji, 3)) : t("fuera del banco")}${
+        BANK.kanjiLevel(c) ? ` · ${BANK.kanjiLevel(c)}` : ""}</span></li>`;
+  }).join("");
+  return `
+    <article class="panel dict-card" data-dict-card="${escapeHTML(entry.id)}">
+      <button class="icon-btn pop-close" type="button" data-dict-close
+        title="${t("Cerrar")}" aria-label="${t("Cerrar")}">×</button>
+      <div class="dict-head">
+        <div class="dict-word" lang="ja">${escapeHTML(entry.w)}</div>
+        <div>
+          <div class="dict-reading" lang="ja">${escapeHTML(entry.r)}${
+            entry.alt?.length ? ` <small>（${entry.alt.map(escapeHTML).join("、")}）</small>` : ""}</div>
+          <div class="dict-tags">
+            <span class="pill">${entry.level || t("Fuera del banco")}</span>
+            <span class="helper">${entry.rank ? t("frecuencia n.º {rank}", { rank: entry.rank }) : t("sin puesto de frecuencia")}</span>
+            ${entry.kana ? `<span class="helper">${t("suele escribirse en kana")}</span>` : ""}
+            ${"speechSynthesis" in window
+              ? `<button class="link-btn" type="button" data-dict-speak="${escapeHTML(entry.w)}">🔊 ${t("Escuchar")}</button>` : ""}
+          </div>
+        </div>
+      </div>
+      <p class="meaning">${escapeHTML(mine.join("; "))}</p>
+      ${other?.length && other !== mine ? `<p class="helper">${escapeHTML(other.join("; "))}</p>` : ""}
+      ${parts ? `<ul class="missed-list dict-kanji">${parts}</ul>` : ""}
+      <p class="dict-status">${dictStatusHTML(entry)}</p>
+    </article>`;
+}
+
 function dictRowHTML(entry) {
+  if (entry.id === dictState.open) return dictCardHTML(entry);
   const meaning = BANK.meaning(entry, lang).slice(0, 3).join(", ");
   return `
     <article class="item-row dict-row" role="button" tabindex="0" data-dict="${escapeHTML(entry.id)}">
@@ -221,8 +269,28 @@ async function runDictSearch(text) {
   if (found.entries.length || !bankLoaded) show(found.entries); else renderDictionary();
 }
 
+/* Abre la ficha de un resultado (o la cierra si ya estaba abierta) */
+function openDictEntry(id) {
+  dictState.open = dictState.open === id ? "" : id;
+  renderDictionary();
+  document.querySelector("[data-dict-card]")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+
 function bindDictionary() {
   const input = $("dictInput");
+  const list = $("dictResults");
+  list.addEventListener("click", (event) => {
+    const pick = (selector) => event.target.closest(selector);
+    if (pick("[data-dict-speak]")) return speak(pick("[data-dict-speak]").dataset.dictSpeak);
+    if (pick("[data-dict-close]")) return openDictEntry(dictState.open);
+    if (pick("[data-dict]")) openDictEntry(pick("[data-dict]").dataset.dict);
+  });
+  list.addEventListener("keydown", (event) => {
+    if ((event.key === "Enter" || event.key === " ") && event.target.matches("[data-dict]")) {
+      event.preventDefault();
+      event.target.click();
+    }
+  });
   input.addEventListener("input", () => {
     clearTimeout(dictTimer);
     dictTimer = setTimeout(() => runDictSearch(input.value), 200);

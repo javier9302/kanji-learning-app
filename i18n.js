@@ -23,6 +23,12 @@ const EN = {
   "Solo se busca en el banco de la app (unas 6.700 palabras).": "Only the app's bank is searched (about 6,700 words).",
   "Sin conexión: solo se busca en el banco de la app.": "Offline: only the app's bank is searched.",
   "No se pudo consultar el diccionario general: solo se muestran las palabras del banco.": "The general dictionary could not be reached: only words from the bank are shown.",
+  "No está en tus palabras": "Not in your words",
+  "En repaso: próximo el {date}": "In review: next on {date}",
+  "En cola para estudiar": "Queued to study",
+  "fuera del banco": "not in the bank",
+  "Fuera del banco": "Not in the bank",
+  "suele escribirse en kana": "usually written in kana",
   "resultado": "result",
   "resultados": "results",
   /* ---------- Instalar como app ---------- */
