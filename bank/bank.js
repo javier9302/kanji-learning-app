@@ -94,6 +94,25 @@ const BANK = {
     return this.kanji.get(c)?.level || this.kanjiLevels[c] || null;
   },
 
+  /* Lecturas de kanji de cada palabra (bank/readings.js): id -> "学がく,校こう".
+     Solo hacen falta para las frases; se descargan con loadReadings(). */
+  readings: {},
+  setReadings(readings) {
+    this.readings = readings;
+  },
+  loadReadings() {
+    return this.loading.readings ??= new Promise((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src = "bank/readings.js";
+      script.onload = () => resolve();
+      script.onerror = () => {
+        delete this.loading.readings;
+        reject(new Error("No se pudieron cargar las lecturas de kanji"));
+      };
+      document.head.appendChild(script);
+    });
+  },
+
   loaded(level) {
     return [...this.words.values()].some((word) => word.level === level);
   },

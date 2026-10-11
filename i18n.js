@@ -34,6 +34,8 @@ const EN = {
   "consulta reciente × {value}": "recent lookup × {value}",
   "diccionario": "dictionary",
   "Puntuación = a mano × {manual} + diccionario × {dictionary} + consulta reciente × {lookup} + lectura × {reading} + kanjis conocidos × {kanji} + frecuencia × {frequency}. Los pesos están en study-config.js.": "Score = added by hand × {manual} + dictionary × {dictionary} + recent lookup × {lookup} + reading × {reading} + known kanji × {kanji} + frequency × {frequency}. The weights are in study-config.js.",
+  "(CC BY-SA 4.0). Las lecturas de cada kanji dentro de una palabra son de": "(CC BY-SA 4.0). The reading of each kanji inside a word comes from",
+  "(CC BY-SA, como JMdict). Los trazos de los kanjis son de": "(CC BY-SA, like JMdict). Kanji strokes are from",
   "resultado": "result",
   "resultados": "results",
   /* ---------- Instalar como app ---------- */
