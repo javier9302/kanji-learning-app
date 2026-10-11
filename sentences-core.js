@@ -290,10 +290,60 @@ function validateSentence(sentence, options = {}) {
   return { ok: reasons.size === 0, reasons: [...reasons] };
 }
 
+/* =========================================
+   3. QUÉ FRASE SE ENSEÑA AL REPASAR UNA PALABRA
+   -----------------------------------------
+   La regla "i+1": la palabra de la tarjeta dentro de una frase en la que todo
+   lo demás ya se conoce. Como mucho se admite UNA palabra más sin conocer (se
+   enseña con furigana y se puede tocar); con dos o más la frase se descarta.
+   ========================================= */
+
+const SOURCE_ORDER = { text: 0, article: 0, tatoeba: 1, ai: 2 };
+
+/* card       { id: "escritura|lectura" }
+   state      { candidates  frases posibles (cualquiera; aquí se filtran)
+                isKnown     key -> ¿el usuario conoce esa palabra?
+                statsOf     id de frase -> { shown, lastShown } | undefined }
+   Devuelve { sentence, target, extra } (índices de la unidad preguntada y de
+   la palabra desconocida de más, -1 si no hay) o null: entonces se enseña la
+   palabra sola, como siempre. */
+function chooseSentence(card, state) {
+  const [lemma, reading] = scKeyParts(card.id);
+  const usable = [];
+  for (const sentence of state.candidates || []) {
+    if (!(sentence.targets || []).includes(card.id)) continue;
+    // La unidad tiene que leerse como espera la tarjeta: se comprueba otra vez aquí
+    const target = sentence.tokens.findIndex((token) => token.key === card.id && readingMatches(token, lemma, reading));
+    if (target < 0) continue;
+    const unknown = new Map(); // clave -> índice de su primera unidad
+    sentence.tokens.forEach((token, index) => {
+      if (!scIsContent(token) || token.key === card.id) return;
+      const key = token.key || `?${token.surface}`; // sin resolver: no se puede saber si la conoce
+      if (!unknown.has(key) && !(token.key && state.isKnown(token.key))) unknown.set(key, index);
+    });
+    if (unknown.size > 1) continue;
+    const stats = state.statsOf?.(sentence.id) || {};
+    usable.push({ sentence, target, extra: unknown.size ? [...unknown.values()][0] : -1,
+      shown: stats.shown || 0, lastShown: stats.lastShown || 0 });
+  }
+  if (!usable.length) return null;
+
+  // La última que se enseñó para esta palabra se evita si hay otra
+  const latest = Math.max(...usable.map((item) => item.lastShown));
+  const score = (item) =>
+    (item.extra >= 0 ? 1000 : 0) +
+    (usable.length > 1 && latest > 0 && item.lastShown === latest ? 500 : 0) +
+    (SOURCE_ORDER[item.sentence.source] ?? 3) * 20 +   // primero las de sus textos, luego Tatoeba, luego IA
+    Math.min(item.shown, 20) * 8;                      // …salvo que ya la haya visto muchas veces
+  usable.sort((a, b) => score(a) - score(b) || a.lastShown - b.lastShown || (a.sentence.id < b.sentence.id ? -1 : 1));
+  const { sentence, target, extra } = usable[0];
+  return { sentence, target, extra };
+}
+
 /* Para tools/ y las pruebas (Node); en el navegador son globales */
 if (typeof module !== "undefined") {
   module.exports = {
     kanjiVariants, canonicalReading, alignReading, tagsFromFurigana, packTags, unpackTags,
-    readingMatches, resolveKey, buildSentence, validateSentence, sentenceFingerprint
+    readingMatches, resolveKey, buildSentence, validateSentence, sentenceFingerprint, chooseSentence
   };
 }
