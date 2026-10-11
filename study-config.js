@@ -58,6 +58,14 @@ const STUDY_CONFIG = {
     answerMax: 100,
     answerMinLetters: 3,
 
+    /* Ahorro de llamadas a la IA: si la respuesta coincide casi palabra por
+       palabra con la traducción de referencia se da por buena sin preguntar.
+       localMatch: parecido mínimo (0 a 1; 1 = idéntica salvo mayúsculas, acentos,
+       puntuación y artículos). Súbelo a más de 1 para desactivarlo.
+       localMinWords: con una referencia más corta que esto nunca se acepta sin IA. */
+    localMatch: 0.9,
+    localMinWords: 2,
+
     /* Qué frase sale primero: gana la suma más alta.
          known      proporción de sus palabras que el usuario conoce (0 a 1)
          unknown    puntos según cuántas NO conoce: [ninguna, una, dos]

@@ -192,6 +192,12 @@ async function checkTranslation() {
    uno mismo. translating.notice explica por qué no hubo IA. */
 async function gradeTranslation(sentence, answer) {
   translating.notice = "";
+  // 1. La misma respuesta a la misma frase ya se corrigió: vale aquella corrección
+  const key = answerKey(sentence.id, answer);
+  const before = translationLog.findLast((entry) => entry.answerKey === key && ["ai", "local"].includes(entry.source));
+  if (before) return { ...before.result, cached: true };
+  // 2. Coincide con la traducción de referencia: no hace falta preguntar a la IA
+  if (matchesReference(answer, sentence, STUDY_CONFIG.translate)) return localResult(sentence, "local", "correct");
   return null;
 }
 
@@ -270,7 +276,8 @@ async function finishTranslation(result) {
   session.scores.push(result.score);
   const entry = {
     id: newId(), sentenceId: sentence.id, textId: sentence.sourceId || "", at: Date.now(),
-    answer, source: result.source, verdict: result.verdict, score: result.score, result,
+    answer, answerKey: answer ? answerKey(sentence.id, answer) : "",
+    source: result.source, verdict: result.verdict, score: result.score, result: { ...result, cached: undefined },
     lookups: [...translating.lookups]
   };
   translationLog.push(entry);

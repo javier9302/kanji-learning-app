@@ -169,10 +169,10 @@ export default async function extra({ page, step, check }) {
   });
 
   await step("traducir: sin IA, el estudiante se corrige con la referencia; No lo sé y Saltar", async () => {
-    await typeAnswer("Bebo   café\ntodas las mañanas");
+    await typeAnswer("Tomo   café\ncada mañana"); // una paráfrasis: no coincide con la referencia
     await page.keyboard.down("Control"); await page.focus("#trInput"); await page.keyboard.press("Enter"); await page.keyboard.up("Control");
     await page.waitForSelector('[data-tr-self="correct"]', { timeout: 5000 });
-    check(await page.evaluate(() => translating.answer === "Bebo café todas las mañanas"), "la respuesta no se normalizó");
+    check(await page.evaluate(() => translating.answer === "Tomo café cada mañana"), "la respuesta no se normalizó");
     await page.evaluate(() => document.querySelector('[data-tr-self="correct"]').click());
     await page.waitForSelector("#trNextBtn", { timeout: 5000 });
     let last = await page.evaluate(() => translationLog[translationLog.length - 1]);
@@ -188,6 +188,23 @@ export default async function extra({ page, step, check }) {
     await page.waitForSelector("#trSkipBtn", { timeout: 5000 });
     await page.evaluate(() => $("trSkipBtn").click());
     await page.waitForFunction(() => translationLog.length === 3 && translationLog[2].source === "skip", { timeout: 5000 });
+  });
+
+  await step("traducir: igual que la referencia se acepta sin IA, y una respuesta repetida reutiliza su corrección", async () => {
+    await page.waitForSelector("#trInput", { timeout: 5000 });
+    await typeAnswer("i drink coffee every morning");
+    await page.evaluate(() => $("trCheckBtn").click());
+    await page.waitForSelector("#trNextBtn", { timeout: 5000 });
+    let last = await page.evaluate(() => translationLog[translationLog.length - 1]);
+    check(last.source === "local" && last.verdict === "correct" && last.result.words.every((w) => w.understood === true), JSON.stringify(last));
+    check(await page.evaluate(() => $("trResult").textContent.includes(t("Coincide con la traducción de referencia."))), "falta el aviso");
+    await page.evaluate(() => $("trNextBtn").click());
+    await page.waitForSelector("#trInput", { timeout: 5000 });
+    await typeAnswer("I drink COFFEE every morning!!");
+    await page.evaluate(() => $("trCheckBtn").click());
+    await page.waitForSelector("#trNextBtn", { timeout: 5000 });
+    check(await page.evaluate(() => translating.result.cached === true && translationLog[translationLog.length - 1].result.cached === undefined), "no se reutilizó");
+    await page.evaluate(() => $("trNextBtn").click());
   });
 
   await step("diccionario: buscar en romaji abre la vista con resultados", async () => {

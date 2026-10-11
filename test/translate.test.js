@@ -104,3 +104,45 @@ test("localResult: todas las palabras con contenido, una vez cada una", () => {
   assert.deepEqual(core.localResult(s, "unknown", "incorrect").words.map((w) => w.understood), [false, false]);
   assert.deepEqual(core.localResult(s, "self", "partial").words.map((w) => w.understood), [null, null]); // no se sabe cuáles
 });
+
+test("compareWithReference: idéntica salvo mayúsculas, acentos, puntuación y artículos", () => {
+  const same = (a, b) => core.compareWithReference(a, b);
+  assert.equal(same("Bebo café todas las mañanas.", "bebo cafe todas mañanas"), 1);
+  assert.equal(same("I drink coffee every morning", "I drink the coffee every morning!"), 1);
+  assert.equal(same("I don't drink coffee", "I do not drink coffee."), 1);
+  assert.equal(same("", "algo"), 0);
+  assert.equal(same("el la los", "el perro"), 0);            // solo artículos: nada que comparar
+});
+
+test("compareWithReference no da por buena una respuesta que cambia el significado", () => {
+  const ratio = (a, b) => core.compareWithReference(a, b);
+  const LIMIT = CONFIG.localMatch;
+  // negación
+  assert.ok(ratio("I drink coffee every morning", "I do not drink coffee every morning") < LIMIT);
+  assert.ok(ratio("No bebo café por la mañana", "Bebo café por la mañana") < LIMIT);
+  // otro número, otra persona, otro tiempo
+  assert.ok(ratio("Compré tres libros ayer", "Compré dos libros ayer") < LIMIT);
+  assert.ok(ratio("He goes to school every day", "I go to school every day") < LIMIT);
+  assert.ok(ratio("Fui a la escuela con mi amigo", "Voy a la escuela con mi amigo") < LIMIT);
+  // mismas palabras en otro orden
+  assert.ok(ratio("el perro mordió al hombre", "el hombre mordió al perro") < LIMIT);
+  // sobra o falta información
+  assert.ok(ratio("Bebo café", "Bebo café todas las mañanas") < LIMIT);
+  assert.ok(ratio("Bebo café todas las mañanas con mi madre en casa", "Bebo café todas las mañanas") < LIMIT);
+});
+
+test("matchesReference: vale la referencia en cualquiera de los dos idiomas", () => {
+  const s = { es: "Bebo café todas las mañanas.", en: "I drink coffee every morning." };
+  assert.ok(core.matchesReference("bebo cafe todas las mañanas", s, CONFIG));
+  assert.ok(core.matchesReference("I drink coffee every morning", s, CONFIG));
+  assert.ok(!core.matchesReference("Tomo café cada mañana", s, CONFIG));     // buena, pero eso lo decide la IA
+  assert.ok(!core.matchesReference("yes", { es: "", en: "Yes." }, CONFIG));  // referencia demasiado corta
+  assert.ok(!core.matchesReference("hola", { es: "", en: "" }, CONFIG));
+});
+
+test("answerKey: la misma respuesta escrita de otra forma es la misma", () => {
+  assert.equal(core.answerKey("s1", "Bebo café."), core.answerKey("s1", "  bebo   CAFE "));
+  assert.notEqual(core.answerKey("s1", "Bebo café"), core.answerKey("s2", "Bebo café"));
+  assert.notEqual(core.answerKey("s1", "Bebo café"), core.answerKey("s1", "No bebo café"));
+  assert.notEqual(core.answerKey("s1", "Bebo el café"), core.answerKey("s1", "Bebo café"));
+});

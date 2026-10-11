@@ -94,6 +94,52 @@ function answerProblem(answer, config) {
   return (answer.match(/\p{L}/gu) || []).length < config.answerMinLetters ? "short" : "";
 }
 
+/* ---------- Comparación con la traducción de referencia (sin IA) ---------- */
+
+/* Palabras que casi no cambian el significado. Es una lista corta a propósito:
+   negaciones, números, pronombres y verbos auxiliares NO están, porque quitarlos
+   daría por buena una respuesta que dice lo contrario, otro número, otra
+   persona u otro tiempo. */
+const TR_STOPWORDS = new Set(("el la los las un una unos unas de del al a que y " +
+  "the an of to and that").split(" "));
+
+/* Texto -> lista de palabras comparables: minúsculas, sin acentos ni puntuación,
+   con las contracciones inglesas deshechas (don't -> do not) */
+function answerWords(text) {
+  return String(text ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
+    .replace(/\bcan't\b/g, "can not").replace(/\bwon't\b/g, "will not").replace(/n't\b/g, " not")
+    .replace(/[’']s\b/g, " is").replace(/[’']m\b/g, " am").replace(/[’']re\b/g, " are")
+    .replace(/[^\p{L}\p{N}]+/gu, " ").trim().split(" ").filter(Boolean);
+}
+
+/* Parecido entre la respuesta y una referencia, de 0 a 1. Cuenta las palabras
+   que coinciden EN EL MISMO ORDEN (subsecuencia común más larga) sobre la más
+   larga de las dos, así que ni sobrar ni faltar palabras sale gratis y
+   "el perro mordió al hombre" no vale por "el hombre mordió al perro". */
+function compareWithReference(answer, reference) {
+  const a = answerWords(answer).filter((word) => !TR_STOPWORDS.has(word));
+  const b = answerWords(reference).filter((word) => !TR_STOPWORDS.has(word));
+  if (!a.length || !b.length) return 0;
+  let row = new Array(b.length + 1).fill(0);
+  for (let i = 1; i <= a.length; i++) {
+    const next = [0];
+    for (let j = 1; j <= b.length; j++) next[j] = a[i - 1] === b[j - 1] ? row[j - 1] + 1 : Math.max(row[j], next[j - 1]);
+    row = next;
+  }
+  return row[b.length] / Math.max(a.length, b.length);
+}
+
+/* ¿Se puede dar por buena sin IA? Compara con la referencia en los dos idiomas */
+function matchesReference(answer, sentence, config) {
+  return [sentence.es, sentence.en].some((reference) => !!reference &&
+    answerWords(reference).filter((word) => !TR_STOPWORDS.has(word)).length >= config.localMinWords &&
+    compareWithReference(answer, reference) >= config.localMatch);
+}
+
+/* Clave para reconocer una respuesta ya corregida: la frase y la respuesta sin
+   mayúsculas, acentos ni puntuación (aquí no se quita ninguna palabra) */
+const answerKey = (sentenceId, answer) => `${sentenceId}\n${answerWords(answer).join(" ")}`;
+
 /* Resultado hecho en el dispositivo (sin IA), con la misma forma que el de la IA:
      source   "self" (el estudiante se corrige), "unknown" (No lo sé), "local" (coincide con la referencia)
      verdict  "correct" | "mostly" | "partial" | "incorrect"
@@ -116,6 +162,7 @@ function localResult(sentence, source, verdict) {
 /* Para las pruebas (Node); en el navegador son globales */
 if (typeof module !== "undefined") {
   module.exports = {
-    isTranslatable, chooseTranslationSentence, trContentKeys, trLength, normalizeAnswer, answerProblem, localResult
+    isTranslatable, chooseTranslationSentence, trContentKeys, trLength, normalizeAnswer, answerProblem, localResult,
+    answerWords, compareWithReference, matchesReference, answerKey
   };
 }
