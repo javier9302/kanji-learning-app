@@ -11,6 +11,26 @@ async function shot(page, name) {
 }
 
 export default async function extra({ page, step, check }) {
+  await step("sincronización: una base de datos sin migrar no bloquea las palabras buscadas", async () => {
+    // Se imita a Supabase: rechaza el origen "diccionario" como haría la comprobación antigua
+    const result = await page.evaluate(async () => {
+      const real = window.pushRows, sent = [];
+      window.pushRows = async (table, conflict, rows, marks, pushed) => {
+        if (rows.some((row) => row.origin === "diccionario")) throw { code: "23514" };
+        sent.push(...rows.map((row) => `${row.id}:${row.origin}`));
+        for (const [key, print] of marks) pushed[key] = print;
+      };
+      const pushed = {};
+      const rows = [{ id: "a", origin: "diccionario" }, { id: "b", origin: "manual" }, { id: "c", origin: null }];
+      try {
+        await pushProgress("user_words", rows, rows.map((row) => [row.id, "1"]), pushed);
+      } finally { window.pushRows = real; }
+      return { sent, pushed };
+    });
+    check(JSON.stringify(result.sent) === '["b:manual","c:null","a:lectura"]', JSON.stringify(result.sent));
+    check(JSON.stringify(result.pushed) === '{"b":"1","c":"1"}', `marcadas: ${JSON.stringify(result.pushed)}`);
+  });
+
   const STUDY_CONFIG_DAYS = await page.evaluate(() => STUDY_CONFIG.masteredIntervalDays);
   await step("diccionario: buscar en romaji abre la vista con resultados", async () => {
     await page.type("#dictInput", "mizu");

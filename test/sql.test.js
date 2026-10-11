@@ -53,3 +53,21 @@ test("search_dictionary: exacta, empieza por, lectura en katakana y significado"
   assert.deepEqual(await search("%"), []);                                   // los comodines se buscan tal cual
   assert.deepEqual(await search("100%"), ["100%"]);
 });
+
+test("user_words admite el origen diccionario y sigue rechazando uno inventado", async () => {
+  const db = await database();
+  await db.exec(`insert into auth.users (id) values ('00000000-0000-0000-0000-000000000001') on conflict do nothing`);
+  const insert = (id, origin) => db.query(
+    "insert into public.user_words (user_id, id, lemma, reading, origin) values ('00000000-0000-0000-0000-000000000001', $1, '水', 'みず', $2)",
+    [id, origin]);
+  await insert("水|みず", "diccionario");
+  await assert.rejects(insert("水|x", "inventado"), /user_words_origin_check/);
+  // Una base de datos con la comprobación antigua la recibe al volver a ejecutar el archivo
+  await db.exec(`
+    delete from public.user_words;
+    alter table public.user_words drop constraint user_words_origin_check;
+    alter table public.user_words add constraint user_words_origin_check check (origin in ('manual', 'lectura', 'frecuencia'));`);
+  await assert.rejects(insert("水|みず", "diccionario"), { code: "23514" });
+  await db.exec(SCHEMA);
+  await insert("水|みず", "diccionario");
+});

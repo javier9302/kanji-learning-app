@@ -189,6 +189,34 @@ Cámbialo, recarga la página y listo.
 - En **Ajustes → Repaso** se cambia el máximo de palabras nuevas y se activa la vista de
   depuración, que muestra en **Repasar** la puntuación de cada palabra nueva y su porqué.
 
+## Diccionario
+
+El buscador de la cabecera busca por escritura, lectura (en kana o en romaji) o significado.
+
+- **Vuelve a ejecutar `supabase/schema.sql`.** Añade la función `search_dictionary` (búsqueda en la
+  tabla `dictionary`) y permite el origen `diccionario` en `user_words`. Mientras no lo hagas la app
+  sigue funcionando: busca en el diccionario general solo por escritura y lectura, y las palabras
+  buscadas se suben como si vinieran de una lectura hasta que la base de datos las admita.
+- Sin sesión iniciada solo se busca en el banco de la app; la vista lo dice.
+- Abrir la ficha de un resultado anota la consulta. La palabra queda como **no conocida** (no cuenta
+  en el porcentaje conocido de los textos ni en la lista de palabras conocidas del prompt) y gana
+  prioridad entre las palabras nuevas del repaso. Los pesos están en `study-config.js`:
+  `weights.dictionary`, `weights.lookup` y `lookupDecayDays`.
+- «Estudiar esta palabra» y «Ya la domino» hacen lo mismo que los botones de **Agregar palabra**.
+- El máximo de palabras nuevas por sesión no cambia: buscar muchas palabras no llena el repaso.
+
+## Pruebas
+
+Hace falta Node 20 o posterior. La app no usa nada de esto al ejecutarse.
+
+```sh
+npm install        # una vez
+npm test           # funciones sueltas y supabase/schema.sql en un Postgres en memoria
+npm run smoke      # la app en Chrome sin ventana: un repaso, una lectura y el diccionario
+```
+
+`npm run smoke` no inicia sesión: la cuenta y la sincronización con Supabase se prueban a mano.
+
 ## Avisos al administrador por correo (opcional)
 
 Para recibir un correo cada vez que alguien sube un texto que espera aprobación:

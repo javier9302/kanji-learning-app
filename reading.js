@@ -2189,6 +2189,16 @@ async function pushProgress(table, rows, marks, pushed) {
   try {
     await pushRows(table, "user_id,id", rows, marks, pushed);
   } catch (error) {
+    // La base de datos aún no admite el origen "diccionario" (falta volver a ejecutar
+    // supabase/schema.sql): esas palabras se suben como "lectura" y no se marcan
+    // como subidas, para enviarlas bien cuando lo admita. El resto se sube normal.
+    const searched = (row) => row.origin === "diccionario";
+    if (error?.code === "23514" && rows.some(searched)) {
+      console.warn(`${table} no admite el origen "diccionario": ejecuta supabase/schema.sql.`);
+      const keep = rows.map((row) => !searched(row));
+      await pushProgress(table, rows.filter((_, i) => keep[i]), marks.filter((_, i) => keep[i]), pushed);
+      return pushProgress(table, rows.filter(searched).map((row) => ({ ...row, origin: "lectura" })), [], pushed);
+    }
     if (error?.code !== "PGRST204") throw error;
     console.warn(`Faltan columnas en ${table}: ejecuta supabase/schema.sql.`);
     const plain = rows.map((row) => Object.fromEntries(Object.entries(row).filter(([key]) => !PHASE2_COLUMNS.includes(key))));

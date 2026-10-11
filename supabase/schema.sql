@@ -189,6 +189,12 @@ alter table public.user_words add column if not exists fsrs jsonb;
 alter table public.user_words add column if not exists origin text check (origin in ('manual', 'lectura', 'frecuencia'));
 alter table public.user_words add column if not exists meaning text;
 
+-- Diccionario: una palabra buscada tiene el origen "diccionario". La comprobación
+-- anterior no lo admitía, así que se sustituye (se puede repetir sin problema).
+alter table public.user_words drop constraint if exists user_words_origin_check;
+alter table public.user_words add constraint user_words_origin_check
+  check (origin in ('manual', 'lectura', 'frecuencia', 'diccionario'));
+
 create index if not exists user_words_user_updated_idx on public.user_words (user_id, updated_at);
 
 -- Progreso del usuario por kanji: significado (Estudio) y escritura (Escribir).
