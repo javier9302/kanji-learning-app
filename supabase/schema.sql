@@ -581,3 +581,53 @@ create policy "words_to_review_admin_update" on public.words_to_review
 drop policy if exists "words_to_review_admin_delete" on public.words_to_review;
 create policy "words_to_review_admin_delete" on public.words_to_review
   for delete to authenticated using ((select public.is_admin()));
+
+-- =========================================
+-- FRASES DE EJEMPLO DEL USUARIO
+-- =========================================
+
+-- Frases sacadas de los textos del usuario (para repasar una palabra dentro de
+-- una frase) y cuántas veces se le ha enseñado cada una. Las frases comunes de
+-- la app (bank/sentences) no se guardan aquí: de esas solo va el contador, con
+-- data vacío. Los textos pegados que se quedan en el dispositivo no se suben,
+-- y sus frases tampoco.
+create table if not exists public.user_sentences (
+  user_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  id text not null,                           -- "idDelTexto:n", o el id de una frase común
+  text_id text,                               -- texto del que salió (null en las comunes)
+  data jsonb,                                 -- la frase completa (null en las comunes)
+  shown integer not null default 0,           -- veces que se ha enseñado en un repaso
+  last_shown timestamptz,
+  client_updated_at bigint not null default 0,
+  deleted_at timestamptz,                     -- su texto se borró
+  updated_at timestamptz not null default now(),
+  primary key (user_id, id)
+);
+
+create index if not exists user_sentences_user_updated_idx on public.user_sentences (user_id, updated_at);
+
+drop trigger if exists user_sentences_set_updated_at on public.user_sentences;
+create trigger user_sentences_set_updated_at
+  before insert or update on public.user_sentences
+  for each row execute function public.set_updated_at();
+
+alter table public.user_sentences enable row level security;
+revoke all on public.user_sentences from anon;
+grant select, insert, update, delete on public.user_sentences to authenticated;
+
+drop policy if exists "user_sentences_select_own" on public.user_sentences;
+create policy "user_sentences_select_own" on public.user_sentences
+  for select to authenticated using ((select auth.uid()) = user_id);
+
+drop policy if exists "user_sentences_insert_own" on public.user_sentences;
+create policy "user_sentences_insert_own" on public.user_sentences
+  for insert to authenticated with check ((select auth.uid()) = user_id);
+
+drop policy if exists "user_sentences_update_own" on public.user_sentences;
+create policy "user_sentences_update_own" on public.user_sentences
+  for update to authenticated
+  using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);
+
+drop policy if exists "user_sentences_delete_own" on public.user_sentences;
+create policy "user_sentences_delete_own" on public.user_sentences
+  for delete to authenticated using ((select auth.uid()) = user_id);

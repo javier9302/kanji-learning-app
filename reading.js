@@ -11,9 +11,10 @@
                   pos, source: "ai" | "jmdict" | "user", updatedAt }
      userWords  progreso del usuario por palabra (se rellena al leer)
      sessions   sesiones de lectura (se rellenan al leer)
+     sentences, sentenceStats   frases de ejemplo (sentences.js)
    ========================================= */
 
-const READING_STORES = ["texts", "words", "userWords", "userKanji", "sessions"];
+const READING_STORES = ["texts", "words", "userWords", "userKanji", "sessions", "sentences", "sentenceStats"];
 const MAX_SHOWN_ERRORS = 12;
 
 /* Tipos de palabra admitidos en los tokens */
@@ -76,6 +77,9 @@ async function clearReadingData() {
   words = new Map();
   userWords = new Map();
   userKanji = new Map();
+  userSentences = new Map();
+  sentenceStats = new Map();
+  forgetSentenceIndex();
 }
 
 /* =========================================

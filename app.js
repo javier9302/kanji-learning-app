@@ -3,7 +3,7 @@
    ========================================= */
 
 const DB_NAME = "kanji-learning-app";
-const DB_VERSION = 4;
+const DB_VERSION = 5; // 5: almacenes sentences y sentenceStats (frases de ejemplo)
 const LEVELS = ["N5", "N4", "N3", "N2", "N1"];
 const PAGE_SIZE = 150;
 
@@ -459,7 +459,7 @@ const SYNC_BATCH = 500;  // filas por subida
 const SYNC_DEFAULT = { userId: "", cursor: "", daysCursor: "", cursors: {}, lastSync: 0 };
 // Huellas de lo que ya está en el servidor (las de lectura las usa reading.js)
 const blankPushed = () =>
-  ({ days: {}, texts: {}, states: {}, words: {}, kanji: {}, sessions: {}, profile: "" });
+  ({ days: {}, texts: {}, states: {}, words: {}, kanji: {}, sessions: {}, sentences: {}, profile: "" });
 
 const accountsReady = typeof SUPABASE_CONFIG === "object" &&
   /^https:\/\/.+/.test(SUPABASE_CONFIG.url) &&
@@ -600,6 +600,9 @@ async function syncNow() {
       await pushDays(userId);
       await pullReading(userId);
       if (sync.user?.id === userId) await pushReading(userId);
+      // Frases de ejemplo: después de los textos, de los que salen
+      if (sync.user?.id === userId) await pullSentences(userId);
+      if (sync.user?.id === userId) await pushSentences(userId);
     }
 
     sync.config.lastSync = Date.now();
@@ -1000,6 +1003,7 @@ async function init() {
     await loadMeta();
     await loadReadingData();
     await loadStudyData();
+    await loadSentenceData();
   } catch (error) {
     console.error("Error al iniciar la aplicación:", error);
     $("readArea").innerHTML = `

@@ -7,6 +7,9 @@
    1. Lecturas de kanji: qué lectura de cada kanji ejercita una palabra
       (学校 がっこう -> 学 がく + 校 こう). De ahí salen las etiquetas
       "kanji|lectura" de cada frase.
+   2. La frase: su forma, cómo se monta y la comprobación única que decide si
+      vale (validateSentence).
+   3. Qué frase se enseña al repasar una palabra (chooseSentence).
    ========================================= */
 
 /* =========================================
@@ -133,7 +136,164 @@ const unpackTags = (packed) => packed ? packed.split(",").map((part) => {
   return `${[...part].slice(0, cut).join("")}|${[...part].slice(cut).join("")}`;
 }) : [];
 
+/* =========================================
+   2. LA FRASE
+   -----------------------------------------
+   Todas las frases, vengan de donde vengan, tienen la misma forma:
+     { id, ja, tokens, en, es, source, sourceId, level, targets, kanjiReadings, attribution }
+     ja             las unidades unidas con "|" (como los textos segmentados)
+     tokens         [{ surface, lemma, reading, pos, key }]
+                    reading: lectura de la unidad tal como está escrita
+                    key: id de la palabra ("escritura|lectura"), "" si no se resolvió
+     source         "text" (textos del usuario) | "article" (texto pegado) |
+                    "tatoeba" | "ai"
+     level          el nivel más alto de sus palabras
+     targets        ids de las palabras que la frase sirve para preguntar. Es una
+                    lista: hoy se pregunta una por tarjeta, pero una misma frase
+                    puede servir a varias.
+     kanjiReadings  ["学|がく", …] lecturas de kanji que ejercitan sus targets
+   ========================================= */
+
+const SC_LEVELS = ["N5", "N4", "N3", "N2", "N1"];
+/* Unidades que no son vocabulario: no hace falta conocerlas ni resolverlas */
+const SC_UNCOUNTED = new Set(["particle", "auxiliary", "punctuation", "symbol", "number", "proper_noun"]);
+const scIsContent = (token) => !SC_UNCOUNTED.has(token.pos);
+const scIsPunct = (token) => token.pos === "punctuation" || token.pos === "symbol";
+const scHasKanji = (text) => /\p{Script=Han}/u.test(text);
+const scReading = (text) => scHiragana(text).replace(/[.\-\s・]/g, "");
+const scKeyParts = (key) => { const cut = key.lastIndexOf("|"); return [key.slice(0, cut), key.slice(cut + 1)]; };
+
+/* 来る cambia la lectura de su kanji al conjugarse (きます, こない) */
+const SC_IRREGULAR = { "来る": ["く", "き", "こ"] };
+
+/* ¿La unidad se lee como espera la tarjeta? La tarjeta guarda la lectura de la
+   forma de diccionario (行く いく) y la unidad viene conjugada (行った いった),
+   así que se compara la parte que lleva los kanjis: 行った leído おこなった no vale.
+   Así se descartan las lecturas equivocadas de kuromoji (今日 こんにち, 角 かく). */
+function readingMatches(token, lemma, expected) {
+  const reading = scReading(token.reading || ""), want = scReading(expected);
+  if (!reading || !want) return false;
+  if (token.surface === lemma) return reading === want;
+  const chars = [...lemma];
+  let last = -1;
+  chars.forEach((c, i) => { if (scIsKanji(c) || c === "々") last = i; });
+  const head = chars.slice(0, last + 1).join(""), tail = scReading(chars.slice(last + 1).join(""));
+  if (!token.surface.startsWith(head)) return false;
+  // Sin terminación que conjugar (勉強 + する en una unidad): la lectura empieza igual
+  if (!tail) return reading.startsWith(want);
+  if (!want.endsWith(tail)) return false;
+  const stems = SC_IRREGULAR[lemma] || [want.slice(0, want.length - tail.length)];
+  return stems.some((stem) => reading.startsWith(stem));
+}
+
+/* A qué palabra corresponde una unidad. Si la escritura tiene varias lecturas
+   (角 かど / かく / つの) se elige la que coincide con cómo se lee en la frase.
+     sensesOf  escritura -> [{ id, r }] (las palabras del banco con esa escritura)
+     fallback  clave a usar si ninguna lectura coincide ("" = sin resolver) */
+function resolveKey(token, sensesOf, fallback = "") {
+  for (const form of new Set([token.lemma, token.surface])) {
+    const hit = (sensesOf(form) || []).find((word) => readingMatches(token, form, word.r));
+    if (hit) return hit.id;
+  }
+  return fallback;
+}
+
+/* Monta la frase a partir de sus unidades ya analizadas.
+     tokens     [{ surface, lemma, reading, pos, key }]
+     wordOf     key -> { level, kana, studyable } | null: lo que se sabe de una palabra
+                (del banco o del diccionario del usuario)
+     tagsOf     key -> ["学|がく", …]
+     fallbackLevel  nivel para las palabras que no están en el banco */
+function buildSentence({ id, tokens, en = "", es = "", source, sourceId = "", attribution = "", wordOf, tagsOf, fallbackLevel = "N5" }) {
+  const clean = tokens.map((token) => ({
+    surface: token.surface, lemma: token.lemma, reading: token.reading || "", pos: token.pos, key: token.key || ""
+  }));
+  let level = 0;
+  const targets = [], kanjiReadings = [];
+  for (const token of clean) {
+    if (!scIsContent(token) || !token.key) continue;
+    const word = wordOf(token.key);
+    level = Math.max(level, SC_LEVELS.indexOf(word?.level || fallbackLevel));
+    const [lemma, reading] = scKeyParts(token.key);
+    // Se puede preguntar: lleva kanji, no es de las que casi siempre van en kana
+    // y la unidad se lee como dice la palabra
+    if (!scHasKanji(lemma) || word?.kana || targets.includes(token.key)) continue;
+    if (!readingMatches(token, lemma, reading)) continue;
+    targets.push(token.key);
+    for (const tag of tagsOf(token.key) || []) if (!kanjiReadings.includes(tag)) kanjiReadings.push(tag);
+  }
+  return {
+    id, ja: clean.map((token) => token.surface).join("|"), tokens: clean, en, es,
+    source, sourceId, level: SC_LEVELS[level], targets, kanjiReadings, attribution
+  };
+}
+
+/* Para detectar frases repetidas o casi iguales: sin puntuación ni espacios */
+const sentenceFingerprint = (sentence) => sentence.tokens.filter((token) => !scIsPunct(token))
+  .map((token) => token.surface).join("").replace(/\s+/g, "");
+
+/* Comprueba una frase. Es la ÚNICA comprobación: la usan la app al sacar frases
+   de los textos del usuario y las herramientas con Tatoeba y con la IA; solo
+   cambian las opciones.
+     text       la frase original sin "|" (si se da, las unidades deben reproducirla)
+     minUnits, maxUnits   unidades que no son puntuación
+     targets    ids que la frase DEBE servir para preguntar (cada uno con su lectura)
+     maxLevel   nivel máximo de las demás palabras (null = cualquiera)
+     wordOf     key -> { level } | null
+     allowUnresolved  admite palabras con contenido sin resolver
+     seen       Set de huellas ya aceptadas: detecta duplicadas (y la añade si es válida)
+   Devuelve { ok, reasons }: reasons son códigos, para contar por motivo. */
+function validateSentence(sentence, options = {}) {
+  const { text, minUnits = 5, maxUnits = 12, targets = [], maxLevel = null, wordOf = () => null,
+    allowUnresolved = false, seen = null } = options;
+  const reasons = new Set();
+  const tokens = sentence.tokens || [];
+  if (!tokens.length || tokens.some((token) => !token.surface)) return { ok: false, reasons: ["tokenize"] };
+
+  if (sentence.ja !== tokens.map((token) => token.surface).join("|")) reasons.add("units_mismatch");
+  if (text !== undefined && tokens.map((token) => token.surface).join("") !== text) reasons.add("units_mismatch");
+
+  const units = tokens.filter((token) => !scIsPunct(token)).length;
+  if (units < minUnits || units > maxUnits) reasons.add("length");
+
+  const joined = tokens.map((token) => token.surface).join("");
+  if (/[A-Za-zＡ-Ｚａ-ｚ]/.test(joined)) reasons.add("latin");
+  if (/[()（）\[\]［］{}｛｝<>＜＞【】]/.test(joined)) reasons.add("brackets"); // restos de 角(かど) o de etiquetas
+  // Comillas japonesas: valen si están emparejadas
+  if ((joined.match(/[「『]/g) || []).length !== (joined.match(/[」』]/g) || []).length) reasons.add("brackets");
+
+  for (const token of tokens) {
+    if (!scIsContent(token)) continue;
+    if (!token.key) { if (!allowUnresolved) reasons.add("unresolved"); continue; }
+    if (targets.includes(token.key)) continue;
+    const level = wordOf(token.key)?.level;
+    // Una palabra de fuera del banco no tiene nivel: con límite de nivel no se admite
+    if (maxLevel && (!level ? scHasKanji(scKeyParts(token.key)[0]) : SC_LEVELS.indexOf(level) > SC_LEVELS.indexOf(maxLevel))) {
+      reasons.add("level");
+    }
+  }
+
+  // Cada palabra pedida tiene que estar y leerse como se espera
+  for (const target of targets) {
+    const [lemma, reading] = scKeyParts(target);
+    const found = tokens.filter((token) => token.lemma === lemma || token.key === target);
+    if (!found.length) reasons.add("target_missing");
+    else if (!found.some((token) => readingMatches(token, lemma, reading))) reasons.add("reading_mismatch");
+  }
+  if (!targets.length && !(sentence.targets || []).length) reasons.add("no_target");
+
+  if (seen) {
+    const print = sentenceFingerprint(sentence);
+    if (seen.has(print)) reasons.add("duplicate");
+    else if (!reasons.size) seen.add(print);
+  }
+  return { ok: reasons.size === 0, reasons: [...reasons] };
+}
+
 /* Para tools/ y las pruebas (Node); en el navegador son globales */
 if (typeof module !== "undefined") {
-  module.exports = { kanjiVariants, canonicalReading, alignReading, tagsFromFurigana, packTags, unpackTags };
+  module.exports = {
+    kanjiVariants, canonicalReading, alignReading, tagsFromFurigana, packTags, unpackTags,
+    readingMatches, resolveKey, buildSentence, validateSentence, sentenceFingerprint
+  };
 }
