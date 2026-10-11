@@ -480,6 +480,55 @@ drop policy if exists "dictionary_admin_delete" on public.dictionary;
 create policy "dictionary_admin_delete" on public.dictionary
   for delete to authenticated using ((select public.is_admin()));
 
+-- Buscador del diccionario (dictionary.js): por escritura, por lectura o por
+-- significado. Los dos índices sirven para "empieza por"; el significado se
+-- busca recorriendo la tabla, que con unas 29.000 filas tarda milisegundos.
+create index if not exists dictionary_lemma_prefix_idx on public.dictionary (lemma text_pattern_ops);
+create index if not exists dictionary_reading_prefix_idx on public.dictionary (reading text_pattern_ops);
+
+--   q        lo escrito en japonés ('' si no lo es)
+--   kana     su lectura en hiragana y kata, la misma en katakana ('' si no hay)
+--   meaning  texto para buscar en los significados ('' si se escribió en japonés)
+-- Devuelve primero lo exacto, después lo que empieza así y al final lo que
+-- coincide por significado; la app vuelve a ordenarlo junto con su banco.
+create or replace function public.search_dictionary(
+  q text, kana text default '', kata text default '', meaning text default '', lim integer default 60)
+returns table (lemma text, reading text, meanings jsonb, meanings_es jsonb, uk boolean, source text)
+language sql
+stable
+security invoker
+set search_path = ''
+as $$
+  with p as (
+    select
+      replace(replace(replace(coalesce(q, ''), '\', '\\'), '%', '\%'), '_', '\_') as w,
+      replace(replace(replace(coalesce(kana, ''), '\', '\\'), '%', '\%'), '_', '\_') as k,
+      replace(replace(replace(coalesce(kata, ''), '\', '\\'), '%', '\%'), '_', '\_') as kt,
+      replace(replace(replace(lower(coalesce(meaning, '')), '\', '\\'), '%', '\%'), '_', '\_') as m
+  ),
+  found as (
+    select d.*,
+      case
+        when q <> '' and d.lemma = q then 0
+        when kana <> '' and d.reading in (kana, kata) then 0
+        when q <> '' and d.lemma like p.w || '%' then 1
+        when kana <> '' and (d.reading like p.k || '%' or d.reading like p.kt || '%') then 1
+        when length(p.m) > 1 and (d.meanings ? lower(meaning) or d.meanings_es ? lower(meaning)) then 2
+        when length(p.m) > 1 and (lower(d.meanings::text) like '%' || p.m || '%'
+          or lower(d.meanings_es::text) like '%' || p.m || '%') then 3
+      end as tier
+    from public.dictionary d, p
+  )
+  select f.lemma, f.reading, f.meanings, f.meanings_es, f.uk, f.source
+  from found f
+  where f.tier is not null
+  order by f.tier, (f.source = 'approved') desc, length(f.lemma), f.lemma
+  limit least(greatest(coalesce(lim, 60), 1), 200);
+$$;
+
+revoke all on function public.search_dictionary(text, text, text, text, integer) from public, anon;
+grant execute on function public.search_dictionary(text, text, text, text, integer) to authenticated;
+
 -- =========================================
 -- PALABRAS POR REVISAR
 -- =========================================

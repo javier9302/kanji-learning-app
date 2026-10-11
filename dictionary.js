@@ -105,14 +105,68 @@ const dictBankEntry = (word, frequency = {}) => ({
 
 /* ---------- 2. Vista ---------- */
 
-let dictState = { text: "", results: [], open: "" }; // open: id del resultado desplegado
+let dictState = { text: "", results: [], open: "", remote: "" }; // open: id del resultado desplegado
+// remote: cómo fue la consulta al diccionario general: "" | "loading" | "ok" | "guest" | "offline" | "error"
 let dictTimer = null;
+let dictSearchId = 0; // para descartar la respuesta de una búsqueda anterior
 
 const dictToHiragana = (text) => window.wanakana?.toHiragana ? window.wanakana.toHiragana(text) : text;
 
-/* Palabras del banco ya cargadas que coinciden */
-function searchBank(query) {
-  return [...BANK.words.values()].map((word) => dictBankEntry(word, BANK.frequency));
+/* Las palabras del banco ya cargadas, con la forma común */
+const searchBank = () => [...BANK.words.values()].map((word) => dictBankEntry(word, BANK.frequency));
+
+const dictKatakana = (text) => text.replace(/[ぁ-ゖ]/g, (c) => String.fromCharCode(c.charCodeAt(0) + 0x60));
+const dictRemoteEntry = (row) => ({
+  id: wordKey(row.lemma, row.reading || row.lemma), w: row.lemma, r: row.reading || row.lemma,
+  en: row.meanings || [], es: row.meanings_es || [], alt: [], level: null, rank: 0, kana: !!row.uk, source: "dict"
+});
+
+/* Diccionario general (tabla dictionary de Supabase, unas 29.000 palabras de
+   JMdict que no están en el banco). Solo con sesión y con conexión.
+   Devuelve { entries, state }. */
+async function searchRemote(query) {
+  if (!sb || !sync.user) return { entries: [], state: "guest" };
+  if (!navigator.onLine) return { entries: [], state: "offline" };
+  const fields = "lemma, reading, meanings, meanings_es, uk, source";
+  try {
+    let { data, error } = await sb.rpc("search_dictionary", {
+      q: query.writing, kana: query.kana, kata: dictKatakana(query.kana), meaning: query.meaning, lim: 60
+    });
+    // Falta la función (no se ha vuelto a ejecutar supabase/schema.sql): se busca
+    // sin ella, solo por escritura y lectura
+    if (error && ["PGRST202", "42883"].includes(error.code)) {
+      const like = (value) => value.replace(/[\\%_]/g, "\\$&") + "%";
+      const parts = [];
+      if (query.writing) parts.push(sb.from("dictionary").select(fields).like("lemma", like(query.writing)).limit(40));
+      for (const kana of query.kana ? [query.kana, dictKatakana(query.kana)] : []) {
+        parts.push(sb.from("dictionary").select(fields).like("reading", like(kana)).limit(40));
+      }
+      const answers = await Promise.all(parts);
+      error = answers.find((answer) => answer.error)?.error || null;
+      data = answers.flatMap((answer) => answer.data || []);
+    }
+    if (error) throw error;
+    // Lo aprobado por un administrador manda sobre la entrada de JMdict
+    const rows = [...data].sort((a, b) => (b.source === "approved") - (a.source === "approved"));
+    return { entries: rows.map(dictRemoteEntry), state: "ok" };
+  } catch (error) {
+    console.error("No se pudo consultar el diccionario:", error);
+    return { entries: [], state: isNetworkError(error) ? "offline" : "error" };
+  }
+}
+
+/* De dónde salen los resultados: sin sesión hay que decir claro que solo es el banco */
+function dictNoteText() {
+  const notes = {
+    loading: t("Buscando también en el diccionario general…"),
+    ok: t("Resultados del banco de la app y del diccionario general."),
+    guest: sb
+      ? t("Sin sesión iniciada solo se busca en el banco de la app (unas 6.700 palabras). Inicia sesión para buscar también en el diccionario general.")
+      : t("Solo se busca en el banco de la app (unas 6.700 palabras)."),
+    offline: t("Sin conexión: solo se busca en el banco de la app."),
+    error: t("No se pudo consultar el diccionario general: solo se muestran las palabras del banco.")
+  };
+  return notes[dictState.remote] || "";
 }
 
 function dictRowHTML(entry) {
@@ -132,6 +186,7 @@ function renderDictionary() {
   const { text, results } = dictState;
   $("dictCount").textContent = text ? plural(results.length, "resultado", "resultados") : "";
   $("dictCount").classList.toggle("hidden", !text);
+  $("dictNote").textContent = text ? dictNoteText() : "";
   if (!text) {
     $("dictResults").innerHTML = `
       <div class="empty-state">
@@ -146,11 +201,24 @@ function renderDictionary() {
     : `<div class="no-items">${t("No se encontró nada para “{text}”.", { text: escapeHTML(text) })}</div>`;
 }
 
-function runDictSearch(text) {
+/* Primero lo que ya hay en el dispositivo; después se completa con los niveles
+   del banco que faltaban por descargar y con el diccionario general. */
+async function runDictSearch(text) {
   const query = parseDictQuery(text, dictToHiragana);
-  dictState = { text: query ? query.raw : "", results: [], open: "" };
-  if (query) dictState.results = rankResults(searchBank(query), query, lang);
-  if (document.body.dataset.view !== "dict") switchView("dict"); else renderDictionary();
+  const id = ++dictSearchId;
+  dictState = { text: query ? query.raw : "", results: [], open: "", remote: query ? "loading" : "" };
+  const show = (remote = []) => {
+    dictState.results = rankResults([...searchBank(), ...remote], query, lang);
+    if (document.body.dataset.view !== "dict") switchView("dict"); else renderDictionary();
+  };
+  if (!query) return document.body.dataset.view === "dict" ? renderDictionary() : switchView("dict");
+  show();
+
+  const bankLoaded = BANK.LEVELS.every((level) => BANK.loaded(level));
+  const [found] = await Promise.all([searchRemote(query), BANK.loadUpTo("N1").catch(() => {})]);
+  if (id !== dictSearchId) return; // ya se buscó otra cosa
+  dictState.remote = found.state;
+  if (found.entries.length || !bankLoaded) show(found.entries); else renderDictionary();
 }
 
 function bindDictionary() {

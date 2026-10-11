@@ -17,6 +17,12 @@ const EN = {
   "Busca una palabra": "Look up a word",
   "Escribe en japonés (漢字, かな), en romaji (kado) o su significado en español o inglés.": "Type in Japanese (漢字, かな), in romaji (kado) or its meaning in English or Spanish.",
   "No se encontró nada para “{text}”.": "Nothing found for “{text}”.",
+  "Buscando también en el diccionario general…": "Also searching the general dictionary…",
+  "Resultados del banco de la app y del diccionario general.": "Results from the app's bank and the general dictionary.",
+  "Sin sesión iniciada solo se busca en el banco de la app (unas 6.700 palabras). Inicia sesión para buscar también en el diccionario general.": "Without signing in, only the app's bank is searched (about 6,700 words). Sign in to search the general dictionary too.",
+  "Solo se busca en el banco de la app (unas 6.700 palabras).": "Only the app's bank is searched (about 6,700 words).",
+  "Sin conexión: solo se busca en el banco de la app.": "Offline: only the app's bank is searched.",
+  "No se pudo consultar el diccionario general: solo se muestran las palabras del banco.": "The general dictionary could not be reached: only words from the bank are shown.",
   "resultado": "result",
   "resultados": "results",
   /* ---------- Instalar como app ---------- */
