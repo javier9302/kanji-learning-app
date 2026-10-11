@@ -41,6 +41,7 @@ function show(view) {
   $("adminPanel").classList.toggle("hidden", view !== "panel" || section !== "texts");
   $("wordsPanel").classList.toggle("hidden", view !== "panel" || section !== "words");
   $("logsPanel").classList.toggle("hidden", view !== "panel" || section !== "logs");
+  $("gradesPanel").classList.toggle("hidden", view !== "panel" || section !== "grades");
 }
 
 /* Con sesión: comprueba el permiso y muestra el panel o el motivo */
@@ -230,7 +231,8 @@ async function loadLogs() {
   const [failed, reports, total] = await Promise.all([
     sb.from("generations").select("created_at, model, prompt_version, result, error, params, attempt")
       .neq("result", "ok").order("created_at", { ascending: false }).limit(15),
-    sb.from("text_reports").select("*").order("created_at", { ascending: false }).limit(15),
+    // Las correcciones discutidas (kind "grade") van en la pestaña Traducciones
+    sb.from("text_reports").select("*").neq("kind", "grade").order("created_at", { ascending: false }).limit(15),
     sb.from("generations").select("id", { count: "exact", head: true })
   ]);
   if (failed.error || reports.error) {
@@ -285,6 +287,76 @@ async function exportLogs() {
   }
 }
 
+/* ---------- Correcciones de la sección Traducir ---------- */
+
+const GRADE_RESULT_LABEL = { ...RESULT_LABEL, missing_words: "Faltan palabras en la corrección" };
+const VERDICT_LABEL = { correct: "Correcta", mostly: "Casi correcta", partial: "En parte", incorrect: "Incorrecta" };
+
+/* Últimos fallos de la función grade-translation y correcciones con las que un
+   estudiante no estuvo de acuerdo: sirven para mejorar el prompt */
+async function loadGrades() {
+  $("gradesList").innerHTML = `<p class="message">Cargando…</p>`;
+  const [failed, contested, total] = await Promise.all([
+    sb.from("translation_grades").select("created_at, model, prompt_version, result, error, attempt, ja, answer, lang, latency_ms")
+      .eq("ok", false).order("created_at", { ascending: false }).limit(20),
+    sb.from("text_reports").select("*").eq("kind", "grade").order("created_at", { ascending: false }).limit(20),
+    sb.from("translation_grades").select("id", { count: "exact", head: true })
+  ]);
+  if (failed.error || contested.error) {
+    $("gradesList").innerHTML = "";
+    return say(`No se pudieron cargar las correcciones (${(failed.error || contested.error).message}). ¿Ejecutaste supabase/schema.sql?`, true);
+  }
+  $("gradesCount").textContent = `${total.count ?? 0} llamadas a la IA`;
+  const date = (iso) => new Date(iso).toLocaleString("es", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  const rowsHTML = [
+    ...failed.data.map((row) => ({ at: row.created_at, html: `
+      <article class="item-row">
+        <div class="item-info">
+          <div class="item-title">${escapeHTML(GRADE_RESULT_LABEL[row.result] || row.result || "Fallo")} · intento ${row.attempt}
+            · <span lang="ja">${escapeHTML(row.ja || "")}</span></div>
+          <div class="item-sub">${date(row.created_at)} · ${escapeHTML(row.model)} · prompt ${escapeHTML(row.prompt_version || "—")} ·
+            ${row.latency_ms ?? "?"} ms · «${escapeHTML(row.answer || "")}» · ${escapeHTML((row.error || "").slice(0, 160))}</div>
+        </div>
+      </article>` })),
+    ...contested.data.map((row) => ({ at: row.created_at, html: `
+      <article class="item-row">
+        <div class="item-info">
+          <div class="item-title">⚑ No está de acuerdo: ${escapeHTML(VERDICT_LABEL[row.details?.verdict] || row.details?.verdict || "")}
+            (${escapeHTML(row.details?.score ?? "")}) · <span lang="ja">${escapeHTML(row.details?.ja || "")}</span></div>
+          <div class="item-sub">${date(row.created_at)} · ${escapeHTML(row.model || "")} · prompt ${escapeHTML(row.prompt_version || "—")} ·
+            respondió «${escapeHTML(row.details?.answer || "")}» · referencia «${escapeHTML(row.details?.reference?.es || row.details?.reference?.en || "")}» ·
+            la IA dijo: ${escapeHTML(row.details?.feedback || "")}</div>
+        </div>
+      </article>` }))
+  ].sort((a, b) => b.at.localeCompare(a.at));
+  $("gradesList").innerHTML = rowsHTML.length ? rowsHTML.map((row) => row.html).join("")
+    : `<div class="no-items">No hay fallos ni correcciones discutidas todavía.</div>`;
+}
+
+async function exportGrades() {
+  const button = $("gradesExportBtn");
+  button.disabled = true;
+  try {
+    say("Preparando la exportación…");
+    const [grades, reports] = await Promise.all([fetchAll("translation_grades"), fetchAll("text_reports")]);
+    const contested = reports.filter((row) => row.kind === "grade");
+    const blob = new Blob([JSON.stringify({ exportedAt: new Date().toISOString(), grades, contested }, null, 2)],
+      { type: "application/json" });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = `correcciones-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+    say(`Exportadas ${grades.length} llamadas a la IA y ${contested.length} correcciones discutidas.`);
+  } catch (error) {
+    say(`No se pudo exportar (${error.message}).`, true);
+  } finally {
+    button.disabled = false;
+  }
+}
+
 /* ---------- Diccionario general ---------- */
 
 async function dictionaryCount() {
@@ -319,6 +391,7 @@ async function importDictionary() {
 function bind() {
   $("dictImportBtn").addEventListener("click", importDictionary);
   $("logsExportBtn").addEventListener("click", exportLogs);
+  $("gradesExportBtn").addEventListener("click", exportGrades);
   $("adminTabs").addEventListener("click", (event) => {
     const tab = event.target.closest("[data-admin]");
     if (!tab) return;
@@ -328,6 +401,7 @@ function bind() {
     show("panel");
     if (section === "words") { loadWords(); dictionaryCount(); }
     else if (section === "logs") loadLogs();
+    else if (section === "grades") loadGrades();
     else loadTexts();
   });
 

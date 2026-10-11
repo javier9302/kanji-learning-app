@@ -88,6 +88,17 @@ await step("cuenta: el diálogo de sesión se abre", async () => {
 const extra = path.join(ROOT, "tools/smoke-extra.mjs");
 if (fs.existsSync(extra)) await (await import(extra)).default({ page, step, check });
 
+// La página de administración carga sin errores (sin sesión: solo se ve el acceso)
+await step("administración: la página carga con todas sus pestañas", async () => {
+  await page.goto(`${url}admin.html`, { waitUntil: "networkidle2" });
+  const state = await page.evaluate(() => ({
+    tabs: [...document.querySelectorAll("[data-admin]")].map((tab) => tab.dataset.admin),
+    panels: ["adminPanel", "wordsPanel", "logsPanel", "gradesPanel"].every((id) => !!document.getElementById(id)),
+    functions: typeof loadGrades === "function" && typeof exportGrades === "function" && typeof loadLogs === "function"
+  }));
+  check(state.tabs.join() === "texts,words,logs,grades" && state.panels && state.functions, JSON.stringify(state));
+});
+
 await browser.close();
 server.close();
 console.log(steps.join("\n"));

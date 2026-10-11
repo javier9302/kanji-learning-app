@@ -51,6 +51,7 @@
       <button class="tab active" data-admin="texts" type="button">Textos</button>
       <button class="tab" data-admin="words" type="button">Palabras por revisar</button>
       <button class="tab" data-admin="logs" type="button">Registros</button>
+      <button class="tab" data-admin="grades" type="button">Traducciones</button>
     </nav>
 
     <!-- Palabras por revisar -->
@@ -100,6 +101,28 @@
       </div>
       <div class="list-toolbar"><h3>Últimos fallos y reportes</h3></div>
       <div id="logsList" class="items-list"></div>
+    </section>
+
+    <!-- Correcciones de la sección Traducir -->
+    <section id="gradesPanel" class="hidden">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">CORRECCIONES DE LA IA</p>
+          <h2>Traducciones</h2>
+        </div>
+        <span id="gradesCount" class="pill"></span>
+      </div>
+      <div class="panel import-panel">
+        <div>
+          <h3>Exportar todo</h3>
+          <p class="helper">Descarga un JSON con cada corrección (fecha, modelo, versión del prompt, frase, respuesta, veredicto, tokens, tiempo y lo que respondió la IA) y todas las correcciones con las que un estudiante no estuvo de acuerdo.</p>
+        </div>
+        <div class="import-actions">
+          <button id="gradesExportBtn" class="button button-primary" type="button">↓ Exportar correcciones (JSON)</button>
+        </div>
+      </div>
+      <div class="list-toolbar"><h3>Últimos fallos y correcciones discutidas</h3></div>
+      <div id="gradesList" class="items-list"></div>
     </section>
 
     <!-- Panel -->

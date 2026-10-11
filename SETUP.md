@@ -266,6 +266,31 @@ Cómo funciona:
 - La versión del prompt es `GRADING_PROMPT_VERSION`, en la propia función. Súbela al cambiar el
   prompt y vuelve a desplegar.
 
+Qué cambia en el progreso (todo ajustable en `study-config.js`, bloque `translate`):
+
+- Traducir demuestra que se entiende el **significado**. No mueve el calendario de repaso de la
+  lectura: solo apunta, aparte, aciertos y fallos de significado en cada palabra y kanji.
+- Una palabra entendida suma según quién corrige (`credit`): la IA 1 punto; coincidir con la
+  referencia, corregirse uno mismo o no estar de acuerdo con la IA, medio punto. Una palabra que el
+  estudiante tocó para ver su significado no suma. Cada frase suma una sola vez por palabra.
+- Con `promoteAt` puntos seguidos (2: dos frases distintas corregidas por la IA) se da su
+  significado por sabido, y una palabra «por confirmar» pasa a dominada. Un fallo la deja en
+  «aprendiendo», pone la cuenta a cero, la sube en «Las que más fallas» y le da prioridad entre las
+  palabras nuevas del repaso (`weights.meaningFail`).
+- El significado de un kanji se da por sabido cuando `kanjiWords` (3) palabras distintas que lo
+  llevan se entienden así. Una sola no basta.
+- **Vuelve a ejecutar `supabase/schema.sql`** también para esto: añade las columnas `meaning_*` a
+  `user_words` y `user_kanji`, el origen `traducir`, las columnas de traducciones de `days` y el
+  tipo `grade` de `text_reports`. Mientras falten, el resto del progreso se sigue sincronizando.
+
+«No estoy de acuerdo» (solo en correcciones de la IA que no son «Correcta») deshace la corrección,
+cuenta la frase como entendida con menos peso y deja un reporte. En `admin.html`, la pestaña
+**Traducciones** enseña los últimos fallos de la función y las correcciones discutidas, y exporta
+todo a JSON para revisar el prompt.
+
+Las frases respondidas (almacén `translations`) se quedan en cada dispositivo; lo que se sincroniza
+es el progreso de palabras y kanjis y el historial del día.
+
 Consumo y fallos:
 
 ```sql
