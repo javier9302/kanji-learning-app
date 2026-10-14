@@ -39,6 +39,7 @@ const EN = {
   "Hoy ha habido demasiados intentos fallidos con la IA. Puedes seguir practicando y corregirte tú.": "There have been too many failed AI attempts today. You can keep practising and grade yourself.",
   "La IA no consiguió corregir esta respuesta. No se ha descontado de tu límite; compárala tú con la referencia.": "The AI could not grade this answer. It has not been counted against your limit; compare it with the reference yourself.",
   "La IA ha agotado su cuota por ahora. Puedes seguir practicando y corregirte tú.": "The AI has run out of quota for now. You can keep practising and grade yourself.",
+  "La IA está tardando demasiado ahora mismo. Compárala tú con la referencia.": "The AI is taking too long right now. Compare it with the reference yourself.",
   "La corrección con IA aún no está configurada. Compárala tú con la referencia.": "AI grading is not set up yet. Compare it with the reference yourself.",
   "La IA no pudo corregir la respuesta. Compárala tú con la referencia.": "The AI could not grade the answer. Compare it with the reference yourself.",
   "Traducir": "Translate",

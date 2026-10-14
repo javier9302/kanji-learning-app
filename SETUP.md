@@ -246,6 +246,8 @@ corrija la IA hay que desplegar la función `grade-translation`.
 | `GRADE_FALLBACK_MODEL` | por defecto el de `GEMINI_FALLBACK_MODEL` o `gemini-3.5-flash-lite` |
 | `DAILY_GRADES` | correcciones entregadas por usuario y día; por defecto `30` |
 | `DAILY_GRADES_HARD_CAP` | tope de llamadas a la IA por usuario y día, cuenten o no; por defecto el triple |
+| `GRADE_CALL_TIMEOUT_MS` | espera máxima por cada llamada a Gemini; por defecto `20000` (si tarda más se prueba otra clave o el modelo de reserva) |
+| `GRADE_TIME_BUDGET_MS` | tiempo máximo de toda la corrección; por defecto `50000`. Pasado ese tiempo la app deja que el estudiante se corrija |
 
 Cómo funciona:
 

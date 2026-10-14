@@ -37,18 +37,24 @@ const gemini = (payload, { status = 200, finishReason = "STOP" } = {}) => ({
 });
 
 /* Entorno de mentira: las respuestas de la IA salen de una cola */
-function world({ answers = [gemini(GOOD)], rows = [], user = { id: "user-1" }, env = {} } = {}) {
+/* Una respuesta de la IA que no llega nunca: solo termina cuando la función la corta */
+const HANG = { hang: true };
+
+function world({ answers = [gemini(GOOD)], rows = [], user = { id: "user-1" }, env = {}, now = null } = {}) {
   const state = { calls: [], logs: [], clock: 1_000_000 };
   const secrets = { GEMINI_API_KEYS: "uno=KEY1,dos=KEY2", ...env };
   const deps = {
     env: (name) => secrets[name],
-    now: () => (state.clock += 250),
+    now: now || (() => (state.clock += 250)),
     getUser: async (authorization) => authorization === "Bearer ok" ? user : null,
     rowsToday: async () => rows === null ? null : [...rows, ...state.logs.map((row) => ({ request_id: row.request_id, ok: row.ok }))],
     log: async (row) => { state.logs.push(row); },
     fetch: async (url, init) => {
       const next = answers.length > 1 ? answers.shift() : answers[0];
       state.calls.push({ url, key: init.headers["x-goog-api-key"], body: JSON.parse(init.body) });
+      if (next.hang) {
+        return new Promise((_, reject) => init.signal.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError"))));
+      }
       return new Response(JSON.stringify(next.body), { status: next.status });
     }
   };
@@ -336,4 +342,36 @@ test("el prompt lleva la frase, las palabras por su índice, la referencia y el 
   assert.ok(renderGradingPrompt(readParams({ ...BODY, lang: "en" })).includes("in English"));
   assert.deepEqual(wordsToGrade(UNITS).map((w) => w.i), [0, 2, 3, 5]);
   assert.deepEqual(apiKeys((name) => ({ GEMINI_API_KEYS: "a=1, 2", GEMINI_API_KEY: "3" })[name]).map((k) => k.label), ["a", "clave2", "default"]);
+});
+
+/* ---------- tiempos ---------- */
+
+test("una llamada que tarda demasiado se corta y se prueba la siguiente clave", async () => {
+  const run = world({ answers: [HANG, gemini(GOOD)], env: { GRADE_CALL_TIMEOUT_MS: "40" } });
+  const started = Date.now();
+  const { status, data } = await run.call();
+  assert.equal(status, 200);
+  assert.equal(data.result.verdict, "correct");
+  assert.ok(Date.now() - started < 2000);
+  assert.deepEqual(run.state.calls.map((c) => c.key), ["KEY1", "KEY2"]);
+  assert.match(run.state.logs[0].attempts, /^uno\/.+:timeout$/);
+});
+
+test("si todo tarda demasiado: error timeout antes del corte de Supabase, sin seguir reintentando", async () => {
+  const run = world({ answers: [HANG], now: () => Date.now(), env: { GRADE_CALL_TIMEOUT_MS: "60", GRADE_TIME_BUDGET_MS: "1400" } });
+  const started = Date.now();
+  const { status, data } = await run.call();
+  const took = Date.now() - started;
+  assert.deepEqual([status, data.error], [503, "timeout"]);
+  assert.ok(took < 1400, `tardó ${took} ms`);           // nunca más que el tiempo total
+  assert.ok(run.state.calls.length < 12);                // no hace los 3 intentos × 2 claves × 2 modelos
+  assert.equal(run.state.logs.length, 1);
+  assert.equal(run.state.logs[0].result, "timeout");
+});
+
+test("cada llamada tiene su espera máxima y la petición entera también (valores por defecto)", async () => {
+  // Con los valores por defecto se responde siempre antes de los 150 s en que corta Supabase
+  const source = (await import("node:fs")).readFileSync(new URL("../supabase/functions/grade-translation/index.ts", import.meta.url), "utf8");
+  assert.match(source, /GRADE_CALL_TIMEOUT_MS"\)\) \|\| 20000/);
+  assert.match(source, /GRADE_TIME_BUDGET_MS"\)\) \|\| 50000/);
 });

@@ -289,7 +289,7 @@ async function exportLogs() {
 
 /* ---------- Correcciones de la sección Traducir ---------- */
 
-const GRADE_RESULT_LABEL = { ...RESULT_LABEL, missing_words: "Faltan palabras en la corrección" };
+const GRADE_RESULT_LABEL = { ...RESULT_LABEL, missing_words: "Faltan palabras en la corrección", timeout: "La IA tardó demasiado" };
 const VERDICT_LABEL = { correct: "Correcta", mostly: "Casi correcta", partial: "En parte", incorrect: "Incorrecta" };
 
 /* Últimos fallos de la función grade-translation y correcciones con las que un

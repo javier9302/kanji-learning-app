@@ -641,7 +641,7 @@ create policy "user_sentences_delete_own" on public.user_sentences
 -- y tiempos, y para revisar las correcciones dudosas. Solo la función escribe;
 -- los administradores pueden leer.
 --   result: ok | invalid_json | missing_fields | missing_words | truncated |
---           empty | provider | quota
+--           empty | provider | quota | timeout
 create table if not exists public.translation_grades (
   id bigint generated always as identity primary key,
   user_id uuid not null references auth.users (id) on delete cascade,

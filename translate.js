@@ -231,6 +231,7 @@ function gradingMessage(code, limit) {
     busy: t("Hoy ha habido demasiados intentos fallidos con la IA. Puedes seguir practicando y corregirte tú."),
     invalid: t("La IA no consiguió corregir esta respuesta. No se ha descontado de tu límite; compárala tú con la referencia."),
     quota: t("La IA ha agotado su cuota por ahora. Puedes seguir practicando y corregirte tú."),
+    timeout: t("La IA está tardando demasiado ahora mismo. Compárala tú con la referencia."),
     not_configured: t("La corrección con IA aún no está configurada. Compárala tú con la referencia.")
   };
   return messages[code] || t("La IA no pudo corregir la respuesta. Compárala tú con la referencia.");
@@ -261,7 +262,9 @@ async function requestGrade(sentence, answer) {
     // Sin red, o la función no está desplegada todavía
     if (!error.context?.json) throw new Error(navigator.onLine ? gradingMessage("not_configured") : aiUnavailable());
     const info = await error.context.json().catch(() => ({}));
-    throw new Error(gradingMessage(error.context.status === 404 ? "not_configured" : info.error, info.limit));
+    // 504: Supabase cortó la petición por tiempo (la función no llegó a responder)
+    const code = error.context.status === 404 ? "not_configured" : error.context.status === 504 ? "timeout" : info.error;
+    throw new Error(gradingMessage(code, info.limit));
   }
   const result = data?.result;
   if (!result || !Array.isArray(result.words)) throw new Error(gradingMessage("invalid"));

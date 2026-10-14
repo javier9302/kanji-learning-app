@@ -14,6 +14,11 @@
 //   DAILY_GRADES            opcional, correcciones ENTREGADAS por usuario y día (por defecto 30)
 //   DAILY_GRADES_HARD_CAP   opcional, tope de llamadas a la IA por usuario y día, cuenten
 //                           o no (por defecto el triple de DAILY_GRADES)
+//   GRADE_CALL_TIMEOUT_MS   opcional, espera máxima por cada llamada a Gemini (por defecto
+//                           20000): si tarda más se prueba la siguiente clave o el modelo de reserva
+//   GRADE_TIME_BUDGET_MS    opcional, tiempo total de la petición (por defecto 50000). Pasado
+//                           ese tiempo se responde "timeout" y la app deja que el estudiante
+//                           se corrija; así nunca se llega al corte de Supabase (504).
 //
 // Cuota justa, como en generate-text: al estudiante solo le cuenta una
 // corrección que recibe. Si la IA responde algo que no vale, se le vuelve a
@@ -231,29 +236,40 @@ export function apiKeys(env: (name: string) => string | undefined): { label: str
   return list;
 }
 
-async function callGemini(fetcher: typeof fetch, model: string, prompt: string, key: string, full = true): Promise<{ status: number; data: any }> {
+/* Una llamada a Gemini que nunca espera más de timeoutMs: si se pasa, se corta
+   y cuenta como fallo del servicio (status 0, timedOut). */
+async function callGemini(fetcher: typeof fetch, model: string, prompt: string, key: string, timeoutMs: number, full = true): Promise<{ status: number; data: any; timedOut?: boolean }> {
   const generationConfig: Record<string, unknown> = {
     responseMimeType: "application/json", responseSchema: RESPONSE_SCHEMA,
     temperature: 0.1, maxOutputTokens: MAX_OUTPUT_TOKENS,
   };
   if (full) generationConfig.thinkingConfig = { thinkingLevel: "low" };
-  let response: Response;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), Math.max(1, timeoutMs));
+  const started = Date.now();
   try {
-    response = await fetcher(
+    const response = await fetcher(
       `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
       {
         method: "POST",
         headers: { "x-goog-api-key": key, "Content-Type": "application/json" },
         body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: prompt }] }], generationConfig }),
+        signal: controller.signal,
       },
     );
+    const data = await response.json().catch(() => ({}));
+    // Un modelo puede no admitir alguna opción: se reintenta sin ella, con el tiempo que quede
+    if (response.status === 400 && full) {
+      clearTimeout(timer);
+      return callGemini(fetcher, model, prompt, key, timeoutMs - (Date.now() - started), false);
+    }
+    return { status: response.status, data };
   } catch {
-    return { status: 0, data: {} }; // sin red hacia la IA: se trata como un fallo del servicio
+    // Sin red hacia la IA o cortada por tardar demasiado: se trata como un fallo del servicio
+    return { status: 0, data: {}, timedOut: controller.signal.aborted };
+  } finally {
+    clearTimeout(timer);
   }
-  const data = await response.json().catch(() => ({}));
-  // Un modelo puede no admitir alguna opción: se reintenta sin ella
-  if (response.status === 400 && full) return callGemini(fetcher, model, prompt, key, false);
-  return { status: response.status, data };
 }
 
 /* ---------- La petición ---------- */
@@ -308,22 +324,29 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
   const fallback = deps.env("GRADE_FALLBACK_MODEL") || deps.env("GEMINI_FALLBACK_MODEL") || "gemini-3.5-flash-lite";
   const models = fallback && fallback !== model ? [model, fallback] : [model];
 
+  // Tiempos: cada llamada tiene un máximo y la petición entera también
+  const callTimeout = Number(deps.env("GRADE_CALL_TIMEOUT_MS")) || 20000;
+  const deadline = deps.now() + (Number(deps.env("GRADE_TIME_BUDGET_MS")) || 50000);
+  const timeLeft = () => deadline - deps.now();
+
   let failure = "", used = rows.length;
-  for (let attempt = 1; attempt <= MAX_ATTEMPTS && used < hardCap; attempt++, used++) {
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS && used < hardCap && timeLeft() > 1000; attempt++, used++) {
     // Se prueba cada clave con el modelo principal y, si todas fallan, con el de
     // reserva. Solo se pasa a la siguiente cuando el fallo es de cuota, de clave
     // o del servicio; una respuesta (aunque sea mala) detiene la búsqueda.
     const tried: string[] = [];
     let usedModel = model, label = keys[0].label;
-    let result: { status: number; data: any } = { status: 0, data: {} };
+    let result: { status: number; data: any; timedOut?: boolean } = { status: 0, data: {} };
+    let outOfTime = false;
     const started = deps.now();
     search:
     for (usedModel of models) {
       for (const entry of keys) {
+        if (timeLeft() <= 1000) { outOfTime = true; break search; }
         label = entry.label;
-        result = await callGemini(deps.fetch, usedModel, prompt, entry.key);
+        result = await callGemini(deps.fetch, usedModel, prompt, entry.key, Math.min(callTimeout, timeLeft() - 500));
         if (![0, 401, 403, 429, 500, 503].includes(result.status)) break search;
-        tried.push(`${label}/${usedModel}:${result.status}`);
+        tried.push(`${label}/${usedModel}:${result.timedOut ? "timeout" : result.status}`);
       }
     }
     const latency = deps.now() - started;
@@ -331,7 +354,9 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
     const candidate = result.data?.candidates?.[0];
     const raw = (candidate?.content?.parts || []).map((part: any) => part.text || "").join("");
     const usage = result.data?.usageMetadata || {};
-    failure = [401, 403, 429].includes(result.status) ? "quota"
+    // Si la última clave falló por tardar (o se acabó el tiempo) es "timeout", aunque antes hubiera otros fallos
+    failure = outOfTime || result.timedOut ? "timeout"
+      : [401, 403, 429].includes(result.status) ? "quota"
       : result.status !== 200 ? "provider"
       : candidate?.finishReason === "MAX_TOKENS" ? "truncated"
       : !raw ? "empty" : "";
@@ -366,9 +391,10 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
         latencyMs: latency, attempts: attempt,
       });
     }
-    if (failure === "quota") break; // sin cuota en ninguna clave no sirve repetir
+    if (failure === "quota" || failure === "timeout") break; // sin cuota o sin tiempo no sirve repetir
   }
-  return reply(failure === "quota" ? 503 : 502, { error: failure || "busy" });
+  if (!failure) failure = "timeout"; // no quedó tiempo ni para el primer intento
+  return reply(failure === "quota" || failure === "timeout" ? 503 : 502, { error: failure });
 }
 
 /* ---------- Solo en Supabase (Deno) ---------- */
