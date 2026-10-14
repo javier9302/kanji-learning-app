@@ -67,12 +67,11 @@ vm.runInContext(fs.readFileSync(path.join(ROOT, "config.js"), "utf8"), context);
 const { url, anonKey } = vm.runInContext("SUPABASE_CONFIG", context);
 const base = new URL(url).origin;
 const email = process.env.CALIBRATION_EMAIL, password = process.env.CALIBRATION_PASSWORD;
-if (pending.length && (!email || !password)) {
-  console.error("Faltan CALIBRATION_EMAIL y CALIBRATION_PASSWORD (una cuenta de la app).");
-  process.exit(1);
-}
+// Sin cuenta no se corrige nada nuevo, pero se enseña el informe de lo ya guardado
+const canCall = !!(email && password);
+if (pending.length && !canCall) console.error("Faltan CALIBRATION_EMAIL y CALIBRATION_PASSWORD (una cuenta de la app): solo se enseña lo ya corregido.");
 
-if (pending.length) {
+if (pending.length && canCall) {
   const login = await fetch(`${base}/auth/v1/token?grant_type=password`, {
     method: "POST", headers: { apikey: anonKey, "Content-Type": "application/json" }, body: JSON.stringify({ email, password })
   });
@@ -114,7 +113,7 @@ for (const lang of ["es", "en", "todos"]) {
     const row = list.filter((item) => item.kind === kind);
     const counts = VERDICTS.map((verdict) => row.filter((item) => item.data.result.verdict === verdict).length);
     const hit = row.filter((item) => item.data.result.verdict === EXPECTED[kind]).length;
-    console.log(`${kind.padEnd(12)}${counts.map((n) => String(n).padStart(10)).join("")}   ${row.length ? Math.round(hit / row.length * 100) : 0} %`);
+    console.log(`${kind.padEnd(12)}${counts.map((n) => String(n).padStart(10)).join("")}   ${row.length ? `${Math.round(hit / row.length * 100)} %` : "—"}`); // sin respuestas de ese tipo no hay acierto que medir
   }
 }
 const average = (list) => list.length ? Math.round(list.reduce((sum, n) => sum + n, 0) / list.length) : 0;
