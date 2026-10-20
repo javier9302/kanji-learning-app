@@ -149,6 +149,8 @@ function groupPieces(pieces) {
     else if (chain && piece.pos === "助動詞") join = !copula || last.surface_form === "ん";
     else if (chain && piece.pos === "助詞" && piece.pos_detail_1 === "接続助詞" && ["て", "で", "ちゃ", "じゃ"].includes(piece.surface_form)) join = true;
     else if (chain && isInflected(piece) && ["非自立", "接尾"].includes(piece.pos_detail_1)) join = true; // ている, られる, やすい
+    // 降りそう, おいしそう: そう ("parece que") va con el verbo o adjetivo, no suelto (sería 僧 "monje")
+    else if (chain && piece.surface_form === "そう" && piece.pos === "名詞" && piece.pos_detail_1 === "接尾") join = true;
     else if (last?.pos === "接頭詞") join = true;                                                          // お|茶 -> お茶
     else if (last?.pos === "名詞" && last.pos_detail_1 === "数" && piece.pos === "名詞" &&
       (piece.pos_detail_1 === "数" || piece.pos_detail_1 === "接尾" && piece.pos_detail_2 === "助数詞")) join = true; // 三|人 -> 三人

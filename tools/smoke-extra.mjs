@@ -371,6 +371,26 @@ export default async function extra({ page, step, check }) {
       meanings["とても"] === "very" && /^to become/.test(meanings["なる"]), JSON.stringify(meanings));
   });
 
+  await step("homógrafos: cada aparición de una palabra con su propio sentido", async () => {
+    const result = await page.evaluate(async () => {
+      // Formato con tokens (el antiguo): la IA da la lectura de cada aparición
+      const tok = (surface, lemma, reading, pos) => ({ surface, lemma, reading, pos });
+      const { text } = await validateText(JSON.stringify({ title: "角", level: "N5", topic: "x", sentences: [{ id: 1, jp: "角の牛の角。", en: "x", es: "x",
+        tokens: [tok("角", "角", "かど", "noun"), tok("の", "の", "の", "particle"), tok("牛", "牛", "うし", "noun"), tok("の", "の", "の", "particle"),
+          tok("角", "角", "つの", "noun"), tok("。", "。", "。", "punctuation")] }] }));
+      const s = text.sentences[0];
+      const keys = s.tokens.filter((t) => t.surface === "角").map((t) => t.key);
+      // El furigana de una palabra de una sola lectura lo pone el banco (kuromoji lee 雨 como う tras 一日中)
+      const seg = await validateText(JSON.stringify({ title: "雨", sentences: [{ p: 1, ja: "一日中|雨|が|降っていた|。", en: "x", es: "x" }] }));
+      const rain = seg.text.sentences[0].tokens.find((t) => t.surface === "雨");
+      const counts = countLemmas(text);
+      return { keys, meanings: keys.map((key) => s.entries[key].meanings[0]), rain: rain.reading, counted: Object.keys(counts.lemmas) };
+    });
+    check(JSON.stringify(result.keys) === '["角|かど","角|つの"]' && result.meanings[0] !== result.meanings[1], JSON.stringify(result));
+    check(result.counted.includes("角|かど") && result.counted.includes("角|つの"), "cobertura: " + result.counted);
+    check(result.rain === "あめ", `雨 se lee ${result.rain}`);
+  });
+
   await step("significados: se reparan los guardados por una versión anterior", async () => {
     const result = await page.evaluate(async () => {
       // Un texto y una palabra como los dejaba la versión anterior: なる con el significado de 鳴る

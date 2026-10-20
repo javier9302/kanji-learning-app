@@ -576,7 +576,7 @@ async function validateText(raw) {
       if (!isText(token.lemma)) repairs.push(`lemma missing: ${surface}`);
       if (!isText(token.reading) && pos !== "punctuation" && pos !== "symbol") repairs.push(`reading missing: ${surface}`);
       if (!UNCOUNTED_POS.has(pos) && !bankLookup(lemma, "")) pending.add(lemma);
-      return { surface, lemma, reading, pos, ...(token.morph ? { morph: token.morph } : {}) };
+      return { surface, lemma, reading, pos, ...(token.morph ? { morph: token.morph } : {}) }; // la clave se pone al resolverla
     });
     for (const field of ["en", "es"]) if (!isText(sentence[field])) repairs.push(`sentence ${index + 1}: "${field}" missing`);
     return {
@@ -593,15 +593,34 @@ async function validateText(raw) {
   for (const sentence of sentences) {
     const original = sentence.tokens.map((token) => token.surface).join("");
     sentence.dictionary = {};
+    // Una entrada por palabra ("escritura|lectura"): una misma escritura puede ser
+    // dos palabras en el mismo texto (角 かど "esquina" y 角 つの "cuerno").
+    // `dictionary` (por lema) se mantiene para las versiones anteriores de la app.
+    sentence.entries = {};
     for (const token of sentence.tokens) {
       if (UNCOUNTED_POS.has(token.pos) && !given.has(token.lemma)) continue;
-      const { entry, source, word, uk } = resolveWord(token.lemma, given.get(token.lemma), extra);
+      // Si la escritura tiene varias lecturas en el banco, vale la que suena en esta frase
+      const senses = BANK.byWriting.get(token.lemma) || [];
+      const heard = senses.length > 1 ? senses.find((sense) => readingMatches(token, token.lemma, sense.r)) : null;
+      const hint = heard ? { ...(given.get(token.lemma) || {}), reading: heard.r } : given.get(token.lemma);
+      const { entry, source, word, uk } = resolveWord(token.lemma, hint, extra);
       if (source === "none") {
         token.pos = UNCOUNTED_POS.has(token.pos) ? token.pos : "expression";
         repairs.push(`dictionary entry missing: ${token.lemma}`);
       }
       if (!entry.reading) entry.reading = isKana(token.lemma) ? token.lemma : token.reading;
       if (!isKana(entry.reading || "")) continue; // sin lectura fiable no se puede enlazar: queda como texto
+
+      // kuromoji a veces lee mal una palabra que solo tiene una lectura (雨 -> う):
+      // para el furigana manda la del banco o la de JMdict. Lo mismo si la escritura
+      // tiene varias lecturas y kuromoji dio otra distinta: así furigana y significado
+      // son de la misma palabra (角 leído かく con el significado de 角 かど "esquina").
+      const sure = source === "bank" && word ? [word.r, ...word.alt] : source === "jmdict" ? [entry.reading] : [];
+      if (sure.length && token.surface === token.lemma && token.reading && (senses.length <= 1 || !heard) &&
+          !sure.some((r) => normalizeReading(r) === normalizeReading(token.reading))) {
+        repairs.push(`reading fixed: ${token.surface} ${token.reading} -> ${sure[0]}`);
+        token.reading = sure[0];
+      }
 
       // Casi siempre va en kana y llegó con kanji: se muestra en kana
       const kanaForm = (word?.kana || uk) && /\p{Script=Han}/u.test(token.surface) && isKana(token.reading);
@@ -620,7 +639,9 @@ async function validateText(raw) {
           source: from, sentence: original
         });
       }
-      sentence.dictionary[token.lemma] = entry;
+      token.key = wordKey(token.lemma, entry.reading);
+      sentence.entries[token.key] = entry;
+      sentence.dictionary[token.lemma] ??= entry;
     }
     sentence.jp = sentence.tokens.map((token) => token.surface).join("");
   }
@@ -704,8 +725,10 @@ function countLemmas(data) {
   for (const sentence of data.sentences) Object.assign(dictionary, sentence.dictionary);
   for (const sentence of data.sentences) {
     for (const token of sentence.tokens) {
-      if (UNCOUNTED_POS.has(token.pos) || !dictionary[token.lemma]) continue; // sin entrada no es una palabra enlazable
-      const key = wordKey(token.lemma, dictionary[token.lemma].reading);
+      if (UNCOUNTED_POS.has(token.pos)) continue;
+      // Textos nuevos: la clave va en el token; los anteriores solo tienen el diccionario por lema
+      const key = token.key || (dictionary[token.lemma] ? wordKey(token.lemma, dictionary[token.lemma].reading) : "");
+      if (!key) continue; // sin entrada no es una palabra enlazable
       lemmas[key] = (lemmas[key] || 0) + 1;
       total++;
     }
@@ -717,7 +740,11 @@ function countLemmas(data) {
 function wordsFromText(data) {
   const fresh = [];
   for (const sentence of data.sentences) {
-    for (const [lemma, entry] of Object.entries(sentence.dictionary)) {
+    // Las entradas por palabra si las hay (textos nuevos); si no, las del diccionario por lema
+    const list = sentence.entries
+      ? Object.entries(sentence.entries).map(([key, entry]) => [key.slice(0, key.lastIndexOf("|")), entry])
+      : Object.entries(sentence.dictionary || {});
+    for (const [lemma, entry] of list) {
       const id = wordKey(lemma, entry.reading);
       if (words.has(id)) continue;
       const word = {
@@ -1658,13 +1685,20 @@ async function openText(id) {
   if (!text) return;
   const canSkip = !text.readAt && await skipsUsed() < MAX_SKIPS; // un texto ya leído no se salta
   const dictionary = {};
-  for (const sentence of text.data.sentences) Object.assign(dictionary, sentence.dictionary);
-  reader = { text, dictionary, canSkip, clicks: new Map(), panel: null, startedAt: Date.now() };
+  const entries = {};
+  for (const sentence of text.data.sentences) {
+    Object.assign(dictionary, sentence.dictionary);
+    Object.assign(entries, sentence.entries);
+  }
+  reader = { text, dictionary, entries, canSkip, clicks: new Map(), panel: null, startedAt: Date.now() };
   switchView("read");
 }
 
-const tokenKey = (token) => reader.dictionary[token.lemma]
-  ? wordKey(token.lemma, reader.dictionary[token.lemma].reading) : "";
+/* La palabra de una unidad del texto: su clave y su entrada. Los textos nuevos
+   llevan la clave en cada unidad; los anteriores, un diccionario por lema. */
+const tokenEntry = (token) => token.key && reader.entries?.[token.key] || reader.dictionary[token.lemma] || null;
+const tokenKey = (token) => token.key && reader.entries?.[token.key] ? token.key
+  : reader.dictionary[token.lemma] ? wordKey(token.lemma, reader.dictionary[token.lemma].reading) : "";
 
 /* Furigana solo sobre la parte en kanji: 飲みます -> 飲(の)みます */
 function rubyHTML(surface, reading) {
@@ -1725,7 +1759,7 @@ function panelHTML() {
   }
 
   const token = sentence.tokens[open.t];
-  const entry = reader.dictionary[token.lemma];
+  const entry = tokenEntry(token);
   const meanings = lang === "es" && entry.meanings_es?.length ? entry.meanings_es : entry.meanings;
   const current = reader.clicks.get(tokenKey(token));
   return `${close}
@@ -1845,7 +1879,7 @@ async function classifyWord(cls) {
   const { s, t: index } = reader.panel;
   const token = reader.text.data.sentences[s].tokens[index];
   const key = tokenKey(token);
-  const mine = userWords.get(key) || blankUserWord(token.lemma, reader.dictionary[token.lemma].reading);
+  const mine = userWords.get(key) || blankUserWord(token.lemma, tokenEntry(token).reading);
   if (reader.clicks.get(key) === "looked" || !reader.clicks.has(key)) mine.lookups++;
   mine.lastSeen = Date.now();
   mine.origin ??= "lectura";

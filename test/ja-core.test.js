@@ -73,6 +73,9 @@ test("segmentSentence: las mismas unidades que se le piden a la IA", async () =>
   assert.equal(seg("昨日は何も食べませんでした。"), "昨日|は|何|も|食べませんでした|。");
   assert.equal(seg("とても静かでした。"), "とても|静か|でした|。");
   assert.equal(seg("お茶を三杯飲んでしまいました。"), "お茶|を|三杯|飲んでしまいました|。");
+  // そう ("parece que") va con su verbo o adjetivo: suelto se tomaba por 僧 "monje"
+  assert.equal(seg("雨が降りそうだから、傘を持っていこう。"), "雨|が|降りそう|だ|から|、|傘|を|持っていこう|。");
+  assert.equal(seg("このケーキはおいしそうです。"), "この|ケーキ|は|おいしそう|です|。");
   // Nada se pierde ni se añade, tampoco con espacios o con una barra en el texto
   for (const text of ["「明日も一緒に行きませんか」と友達に聞かれました。", "東京 に 行った。", "A|Bです。"]) {
     assert.equal(seg(text).split("|").join(""), text.replace(/\s/g, "").replace(/\|/g, "｜"));

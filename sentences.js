@@ -71,8 +71,9 @@ function sentencesOfText(text) {
     const tokens = sentence.tokens.map((token) => {
       if (UNCOUNTED_POS.has(token.pos)) return { ...token, key: "" };
       // La palabra que anotó el texto; si la escritura tiene varias lecturas, la que suena en la frase
+      // La palabra que anotó el texto: la de la unidad (textos nuevos) o la del diccionario por lema
       const entry = dictionary[token.lemma];
-      const noted = entry && isKana(entry.reading || "") ? wordKey(token.lemma, entry.reading) : "";
+      const noted = token.key || (entry && isKana(entry.reading || "") ? wordKey(token.lemma, entry.reading) : "");
       return { ...token, key: resolveKey(token, (form) => BANK.byWriting.get(form), noted) };
     });
     const built = buildSentence({
@@ -219,7 +220,8 @@ const sentenceTranslation = (sentence) => (lang === "es" ? sentence.es || senten
 function sentenceLineHTML(sentence, { target = -1, extra = -1, furigana = prefs.furigana, reveal = false } = {}) {
   const known = knownLemmas();
   return sentence.tokens.map((token, index) => {
-    const hasKanji = /\p{Script=Han}/u.test(token.surface) && token.reading;
+    // Furigana solo en palabras resueltas: kuromoji lee mal números y contadores (七時 -> ななじ)
+    const hasKanji = /\p{Script=Han}/u.test(token.surface) && token.reading && !!token.key;
     if (index === target) {
       return `<mark class="sent-target">${reveal && hasKanji ? rubyHTML(token.surface, token.reading) : escapeHTML(token.surface)}</mark>`;
     }

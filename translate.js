@@ -69,7 +69,8 @@ const sentencePlain = (sentence) => sentence.tokens.map((token) => token.surface
 function translateLineHTML(sentence, { reveal = false } = {}) {
   const known = knownLemmas();
   return sentence.tokens.map((token, index) => {
-    const hasKanji = /\p{Script=Han}/u.test(token.surface) && token.reading;
+    // Furigana solo en palabras resueltas: kuromoji lee mal números y contadores (七時 -> ななじ)
+    const hasKanji = /\p{Script=Han}/u.test(token.surface) && token.reading && !!token.key;
     const unknown = !!token.key && !UNCOUNTED_POS.has(token.pos) && !isKnownKey(token.key, known);
     const ruby = hasKanji && (reveal || prefs.furigana === "all" || prefs.furigana === "unknown" && unknown);
     const html = ruby ? rubyHTML(token.surface, token.reading) : escapeHTML(token.surface);
