@@ -402,6 +402,7 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
 declare const Deno: any;
 
 if (typeof Deno !== "undefined") {
+  // @ts-ignore: "npm:" lo resuelve Deno en Supabase; el editor (TypeScript normal) no lo conoce
   const { createClient } = await import("npm:@supabase/supabase-js@2");
   const url = Deno.env.get("SUPABASE_URL")!;
   const admin = createClient(url, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
