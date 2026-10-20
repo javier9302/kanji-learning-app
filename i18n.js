@@ -9,6 +9,7 @@
 const LANGS = ["es", "en"];
 
 const EN = {
+  "Hoy ya has subido el máximo de textos. Los que faltan se subirán mañana; en este dispositivo ya están.": "You have uploaded the maximum number of texts today. The rest will upload tomorrow; they are already on this device.",
   "Pega un texto en japonés o el JSON que te devolvió la IA.": "Paste a Japanese text or the JSON the AI returned.",
   /* ---------- Traducir ---------- */
   "entendida": "understood",

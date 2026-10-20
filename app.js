@@ -592,6 +592,10 @@ function syncErrorMessage(error) {
   if (["PGRST205", "42P01"].includes(error.code)) {
     return t("Faltan las tablas en Supabase: ejecuta supabase/schema.sql.");
   }
+  // Límite de filas nuevas al día (supabase/schema.sql, limit_daily_inserts): lo que falta se sube mañana
+  if (/daily_limit/.test(error.message || "")) {
+    return t("Hoy ya has subido el máximo de textos. Los que faltan se subirán mañana; en este dispositivo ya están.");
+  }
   return t("No se pudo sincronizar ({error}).", { error: error.message || error.code || "?" });
 }
 

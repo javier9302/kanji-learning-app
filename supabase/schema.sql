@@ -193,7 +193,9 @@ alter table public.user_words add column if not exists meaning text;
 -- anterior no lo admitía, así que se sustituye (se puede repetir sin problema).
 alter table public.user_words drop constraint if exists user_words_origin_check;
 alter table public.user_words add constraint user_words_origin_check
-  check (origin in ('manual', 'lectura', 'frecuencia', 'diccionario'));
+  check (origin in ('manual', 'lectura', 'frecuencia', 'diccionario', 'traducir'));
+-- (Más abajo, en Traducir, se repite igual. Las dos listas tienen que ser la misma:
+--  si no, al volver a ejecutar el archivo fallaría con las palabras de origen "traducir".)
 
 create index if not exists user_words_user_updated_idx on public.user_words (user_id, updated_at);
 
@@ -709,3 +711,62 @@ alter table public.text_reports add constraint text_reports_kind_check check (ki
 -- Historial diario: frases traducidas y cuántas bien. No cambian reviews/correct/new_items.
 alter table public.days add column if not exists translations integer not null default 0;
 alter table public.days add column if not exists translations_correct integer not null default 0;
+
+-- =========================================
+-- LÍMITES CONTRA EL ABUSO
+-- =========================================
+
+-- Tamaño máximo de lo que escribe un usuario. "not valid": las filas que ya
+-- existen no se comprueban (no puede fallar al ejecutar el archivo); las nuevas sí.
+do $$
+declare item record;
+begin
+  for item in select * from (values
+    ('texts', 'texts_size_check', 'octet_length(data::text) <= 300000 and char_length(title) <= 200'),
+    ('text_reports', 'text_reports_size_check', 'char_length(coalesce(comment, '''')) <= 2000 and octet_length(details::text) <= 20000'),
+    ('words_to_review', 'words_to_review_size_check', 'char_length(lemma) <= 50 and char_length(reading) <= 100 and char_length(coalesce(sentence, '''')) <= 600 and octet_length(meanings::text) + octet_length(meanings_es::text) <= 4000'),
+    ('user_words', 'user_words_size_check', 'char_length(lemma) <= 50 and char_length(reading) <= 100 and char_length(coalesce(meaning, '''')) <= 200'),
+    ('user_sentences', 'user_sentences_size_check', 'octet_length(coalesce(data::text, '''')) <= 20000'),
+    ('reading_sessions', 'reading_sessions_size_check', 'octet_length(clicks::text) <= 50000')
+  ) as t(tbl, name, expr) loop
+    execute format('alter table public.%I drop constraint if exists %I', item.tbl, item.name);
+    execute format('alter table public.%I add constraint %I check (%s) not valid', item.tbl, item.name, item.expr);
+  end loop;
+end $$;
+
+-- Cuántas filas nuevas puede crear un usuario al día en las tablas que llegan
+-- al administrador (textos por aprobar, reportes, palabras por revisar). Los
+-- administradores y las Edge Functions (service_role) no tienen límite.
+create or replace function public.limit_daily_inserts()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  used integer;
+  maximum integer := tg_argv[0]::integer;
+begin
+  if coalesce(auth.jwt() ->> 'role', '') <> 'authenticated' or public.is_admin() then
+    return new;
+  end if;
+  execute format('select count(*) from public.%I where user_id = $1 and created_at > now() - interval ''1 day''', tg_table_name)
+    into used using auth.uid();
+  if used >= maximum then
+    raise exception 'daily_limit: % filas nuevas al día como máximo en %', maximum, tg_table_name using errcode = 'P0001';
+  end if;
+  return new;
+end;
+$$;
+
+revoke all on function public.limit_daily_inserts() from public, anon, authenticated;
+
+drop trigger if exists texts_daily_limit on public.texts;
+create trigger texts_daily_limit before insert on public.texts
+  for each row execute function public.limit_daily_inserts('50');
+drop trigger if exists text_reports_daily_limit on public.text_reports;
+create trigger text_reports_daily_limit before insert on public.text_reports
+  for each row execute function public.limit_daily_inserts('300');
+drop trigger if exists words_to_review_daily_limit on public.words_to_review;
+create trigger words_to_review_daily_limit before insert on public.words_to_review
+  for each row execute function public.limit_daily_inserts('1000');

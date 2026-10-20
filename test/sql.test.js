@@ -88,3 +88,30 @@ test("Traducir: columnas del significado, origen traducir e historial del día",
   const { rows: defaults } = await db.query("select reviews, translations from public.days");
   assert.deepEqual(defaults, [{ reviews: 0, translations: 4 }]);
 });
+
+test("límites: tamaño máximo y filas nuevas al día por usuario", async () => {
+  const db = await database();
+  const USER = "00000000-0000-0000-0000-000000000009";
+  await db.exec(`insert into auth.users (id) values ('${USER}') on conflict do nothing`);
+  // Como un usuario normal con sesión
+  await db.exec(`
+    create or replace function auth.uid() returns uuid language sql stable as $$ select '${USER}'::uuid $$;
+    create or replace function auth.jwt() returns jsonb language sql stable as $$ select '{"role":"authenticated"}'::jsonb $$;`);
+  try {
+    const text = (n, data = "{}") => db.query(
+      "insert into public.texts (id, user_id, title, data) values ($1, $2, 't', $3::jsonb)", [`t-${n}`, USER, data]);
+    await assert.rejects(text("grande", JSON.stringify({ x: "a".repeat(300001) })), /texts_size_check/);
+    for (let n = 0; n < 50; n++) await text(n);
+    await assert.rejects(text(50), /daily_limit/);
+    // Un reporte con un comentario enorme tampoco
+    await assert.rejects(db.query("insert into public.text_reports (kind, category, comment, user_id) values ('user', 'other', $1, $2)",
+      ["x".repeat(2001), USER]), /text_reports_size_check/);
+  } finally {
+    await db.exec(`
+      create or replace function auth.uid() returns uuid language sql stable as $$ select null::uuid $$;
+      create or replace function auth.jwt() returns jsonb language sql stable as $$ select '{}'::jsonb $$;`);
+  }
+  // Sin el rol de usuario (Edge Functions, panel) no hay límite
+  await db.query("insert into public.texts (id, user_id, title, data) values ('t-servicio', $1, 't', '{}')", [USER]);
+  await db.exec(SCHEMA); // y el archivo se sigue pudiendo ejecutar otra vez
+});
