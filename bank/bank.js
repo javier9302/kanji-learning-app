@@ -94,6 +94,21 @@ const BANK = {
     return this.kanji.get(c)?.level || this.kanjiLevels[c] || null;
   },
 
+  /* Otras escrituras de una palabra del banco (bank/aliases.js): escritura -> id.
+     El banco sigue las listas JLPT, que a veces escriben 終る, 曲る o 御飯; en
+     los textos aparece 終わる, 曲がる o ご飯, que son la misma palabra. */
+  aliases: {},
+  setAliases(aliases) {
+    this.aliases = aliases;
+  },
+  /* Las palabras del banco con esa escritura, también si es una escritura alternativa */
+  sensesOf(writing) {
+    const senses = this.byWriting.get(writing);
+    if (senses) return senses;
+    const word = this.aliases[writing] && this.words.get(this.aliases[writing]);
+    return word ? [word] : undefined;
+  },
+
   /* Lecturas de kanji de cada palabra (bank/readings.js): id -> "学がく,校こう".
      Solo hacen falta para las frases; se descargan con loadReadings(). */
   readings: {},

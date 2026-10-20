@@ -15,7 +15,10 @@ const TYPES = { ".html": "text/html", ".js": "text/javascript", ".css": "text/cs
   ".svg": "image/svg+xml", ".png": "image/png", ".webmanifest": "application/manifest+json", ".gz": "application/gzip" };
 
 const server = http.createServer((req, res) => {
-  const file = path.join(ROOT, decodeURIComponent(new URL(req.url, "http://x").pathname).replace(/\/$/, "/index.html"));
+  const pathname = decodeURIComponent(new URL(req.url, "http://x").pathname);
+  // Las frases comunes (bank/sentences) cambian a medida que se generan: la prueba no depende de ellas
+  if (pathname.includes("/bank/sentences/")) return res.writeHead(404).end();
+  const file = path.join(ROOT, pathname.replace(/\/$/, "/index.html"));
   if (!file.startsWith(ROOT) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) return res.writeHead(404).end();
   res.writeHead(200, { "Content-Type": TYPES[path.extname(file)] || "application/octet-stream" });
   fs.createReadStream(file).pipe(res);

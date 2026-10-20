@@ -74,7 +74,7 @@ function sentencesOfText(text) {
       // La palabra que anotó el texto: la de la unidad (textos nuevos) o la del diccionario por lema
       const entry = dictionary[token.lemma];
       const noted = token.key || (entry && isKana(entry.reading || "") ? wordKey(token.lemma, entry.reading) : "");
-      return { ...token, key: resolveKey(token, (form) => BANK.byWriting.get(form), noted) };
+      return { ...token, key: resolveKey(token, (form) => BANK.sensesOf(form), noted) };
     });
     const built = buildSentence({
       id: `${text.id}:${sentence.id ?? index + 1}`, tokens, en: sentence.en || "", es: sentence.es || "",

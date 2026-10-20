@@ -191,7 +191,8 @@ function readingMatches(token, lemma, expected) {
      sensesOf  escritura -> [{ id, r }] (las palabras del banco con esa escritura)
      fallback  clave a usar si ninguna lectura coincide ("" = sin resolver) */
 function resolveKey(token, sensesOf, fallback = "") {
-  for (const form of new Set([token.lemma, token.surface])) {
+  // Primero la escritura tal cual (誕生日 es 誕生日, no 誕生 + 日); después la forma de diccionario
+  for (const form of new Set([token.surface, token.lemma])) {
     const hit = (sensesOf(form) || []).find((word) => readingMatches(token, form, word.r));
     if (hit) return hit.id;
   }
@@ -266,7 +267,9 @@ function validateSentence(sentence, options = {}) {
     if (!scIsContent(token)) continue;
     if (!token.key) { if (!allowUnresolved) reasons.add("unresolved"); continue; }
     if (targets.includes(token.key)) continue;
-    const level = wordOf(token.key)?.level;
+    const info = wordOf(token.key);
+    if (info?.kana) continue; // casi siempre en kana (する = 為る, N3 en las listas): no cuenta para el nivel
+    const level = info?.level;
     // Una palabra de fuera del banco no tiene nivel: con límite de nivel no se admite
     if (maxLevel && (!level ? scHasKanji(scKeyParts(token.key)[0]) : SC_LEVELS.indexOf(level) > SC_LEVELS.indexOf(maxLevel))) {
       reasons.add("level");

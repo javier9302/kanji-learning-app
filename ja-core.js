@@ -76,7 +76,28 @@ function analyseUnits(tokenizer, ja) {
     grouped[unit].push(piece);
     offset = end;
   }
-  return units.map((text, i) => unitOf(clean[i] && grouped[i].length ? grouped[i] : tokenizer.tokenize(text)));
+  return fixReadings(units.map((text, i) => unitOf(clean[i] && grouped[i].length ? grouped[i] : tokenizer.tokenize(text))));
+}
+
+/* Lecturas que kuromoji suele dar mal y que dependen de la unidad siguiente:
+   何 delante de です, だ, の, で o un contador se lee なん (何ですか, 何の本, 何人). */
+function fixReadings(units) {
+  units.forEach((unit, i) => {
+    const next = units[i + 1];
+    if (unit.surface === "何" && unit.reading === "なに" && next &&
+        (/^(です|だ|で|の|と)/.test(next.surface) || /^(人|時|回|本|枚|歳|月|日|年|分|階|個)/.test(next.surface))) {
+      unit.reading = "なん";
+    }
+  });
+  return units;
+}
+
+/* El verbo del que sale un potencial: 買える -> 買う, 書ける -> 書く, 読める -> 読む.
+   kuromoji da el potencial como verbo propio, y en el banco solo está el verbo. */
+const POTENTIAL_ENDINGS = { える: "う", ける: "く", げる: "ぐ", せる: "す", てる: "つ", ねる: "ぬ", べる: "ぶ", める: "む", れる: "る" };
+function potentialBase(lemma) {
+  const ending = String(lemma).slice(-2);
+  return POTENTIAL_ENDINGS[ending] && /\p{Script=Han}/u.test(lemma) ? lemma.slice(0, -2) + POTENTIAL_ENDINGS[ending] : null;
 }
 
 /* =========================================
@@ -176,6 +197,6 @@ const segmentSentence = (tokenizer, text) =>
 if (typeof module !== "undefined") {
   module.exports = {
     isKana, toHiragana, UNCOUNTED_POS, PUNCTUATION, KUROMOJI_POS, PARTICLES, piecePos, isContentPiece, pieceBase, pieceReading,
-    unitOf, analyseUnits, splitSentences, groupPieces, segmentSentence, kanaFormWord, onlyHomophone
+    unitOf, analyseUnits, fixReadings, potentialBase, splitSentences, groupPieces, segmentSentence, kanaFormWord, onlyHomophone
   };
 }

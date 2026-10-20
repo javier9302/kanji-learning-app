@@ -93,3 +93,17 @@ test("palabras en kana: la que se escribe en kana, o la única que se lee así; 
   assert.equal(onlyHomophone([要る, 炒る]), null);          // varias: no se adivina
   assert.equal(onlyHomophone([]), null);
 });
+
+test("何 delante de です o de un contador se lee なん; el potencial es su verbo", async () => {
+  const { potentialBase } = require("../ja-core.js");
+  const tokenizer = await loadTokenizer();
+  const reading = (ja, i) => analyseUnits(tokenizer, ja)[i].reading;
+  assert.equal(reading("あの|建物|は|何|です|か|。", 3), "なん");
+  assert.equal(reading("それ|は|何|の|本|です|か|。", 2), "なん");
+  assert.equal(reading("何|を|食べます|か|。", 0), "なに");          // delante de を sigue siendo なに
+  assert.equal(potentialBase("買える"), "買う");
+  assert.equal(potentialBase("読める"), "読む");
+  assert.equal(potentialBase("書ける"), "書く");
+  assert.equal(potentialBase("かける"), null);                     // sin kanji no se adivina
+  assert.equal(potentialBase("見る"), null);
+});

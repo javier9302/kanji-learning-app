@@ -1010,7 +1010,7 @@ const isKanaText = (text) => /^[\p{Script=Hiragana}\p{Script=Katakana}ー・]+$/
 
 /* La entrada del banco para lo escrito: por escritura y, si hay varias, por lectura */
 function bankMatch(writing, reading) {
-  const senses = BANK.byWriting.get(writing) || [];
+  const senses = BANK.sensesOf(writing) || [];
   const typed = normalizeReading(reading);
   return senses.find((word) => normalizeReading(word.r) === typed) ||
     senses.find((word) => word.alt.some((alt) => normalizeReading(alt) === typed)) ||

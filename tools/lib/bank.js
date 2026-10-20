@@ -13,6 +13,7 @@ function loadBank() {
   const run = (file) => vm.runInContext(fs.readFileSync(path.join(ROOT, file), "utf8"), context, { filename: file });
   run("bank/bank.js");
   run("bank/frequency.js");
+  if (fs.existsSync(path.join(ROOT, "bank/aliases.js"))) run("bank/aliases.js");
   bank = vm.runInContext("BANK", context);
   for (const level of bank.LEVELS) run(`bank/${level.toLowerCase()}.js`);
   return bank;

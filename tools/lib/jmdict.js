@@ -109,4 +109,32 @@ function buildRows(entries, skip = () => false) {
   return [...best.values()].sort((a, b) => b.score - a.score).map((item) => item.row);
 }
 
-module.exports = { parseEntry, rowsOf, buildRows, priority, isCommon, glosses, KANA_PREFER };
+/* Otras escrituras de las palabras del banco: si una entrada de JMdict tiene la
+   escritura y la lectura de una palabra del banco (終る おわる), sus demás
+   escrituras normales (終わる) son la misma palabra.
+     bankWords   [{ id, w, r }]  (r en hiragana)
+     isBankWriting(escritura)  si ya es una escritura del banco (entonces no es alternativa)
+   Devuelve { escritura: id }. Si una escritura sirve a dos palabras distintas, se descarta. */
+function buildAliases(entries, bankWords, isBankWriting, toHiragana) {
+  const byKey = new Map(bankWords.map((word) => [`${word.w}\u0000${word.r}`, word.id]));
+  const rare = (el) => el.inf.some((tag) => ["rK", "iK", "oK", "sK", "ik", "ok", "sk"].includes(tag));
+  const aliases = new Map(), clash = new Set();
+  for (const entry of entries) {
+    const kebs = entry.kebs.filter((el) => !rare(el)).map((el) => el.text);
+    for (const keb of entry.kebs.map((el) => el.text)) {
+      for (const reb of entry.rebs) {
+        const id = byKey.get(`${keb}\u0000${toHiragana(reb.text)}`);
+        if (!id) continue;
+        for (const other of kebs) {
+          if (other === keb || isBankWriting(other)) continue;
+          if (aliases.has(other) && aliases.get(other) !== id) clash.add(other);
+          else aliases.set(other, id);
+        }
+      }
+    }
+  }
+  for (const writing of clash) aliases.delete(writing);
+  return Object.fromEntries([...aliases].sort());
+}
+
+module.exports = { parseEntry, rowsOf, buildRows, buildAliases, priority, isCommon, glosses, KANA_PREFER };

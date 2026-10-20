@@ -186,7 +186,7 @@ const readingCandidates = (lemma) => bankByReading().get(normalizeReading(lemma)
    (御飯 / ご飯 / お茶) o, si llega en kana, por su lectura */
 function bankLookup(lemma, reading) {
   const pick = (writing) => {
-    const senses = BANK.byWriting.get(writing);
+    const senses = BANK.sensesOf(writing); // también 終わる -> 終る (bank/aliases.js)
     if (!senses) return null;
     return reading && BANK.words.get(BANK.id(writing, reading)) || senses[0];
   };
@@ -233,6 +233,11 @@ function resolveWord(lemma, given, extra) {
       }
     };
   }
+
+  // c2. Un potencial (買える) que no está en el banco es su verbo (買う)
+  const base = potentialBase(lemma);
+  const verb = base && !BANK.sensesOf(lemma) ? bankLookup(base, "") : null;
+  if (verb) return { entry: bankEntry(verb, given?.pos), source: "bank", word: verb };
 
   // d. Lo que explicó la IA
   if (given && typeof given === "object") {
@@ -570,7 +575,9 @@ async function validateText(raw) {
   const sentences = data.sentences.map((sentence, index) => {
     const tokens = sentence.tokens.map((token) => {
       const surface = token.surface;
-      const pos = normalizePos(token.pos) || (PUNCTUATION.test(surface) ? "punctuation" : "expression");
+      let pos = normalizePos(token.pos) || (PUNCTUATION.test(surface) ? "punctuation" : "expression");
+      // 一人, 一日, 二つ: kuromoji los marca como número, pero son palabras del banco que se estudian
+      if ((pos === "number" || pos === "counter") && BANK.sensesOf(surface)) pos = "noun";
       const lemma = isText(token.lemma) ? normalizeText(token.lemma) : surface;
       const reading = isText(token.reading) ? normalizeText(token.reading) : isKana(surface) ? surface : "";
       if (!normalizePos(token.pos)) repairs.push(`pos: ${surface} (${token.pos ?? "missing"})`);
@@ -601,7 +608,7 @@ async function validateText(raw) {
     for (const token of sentence.tokens) {
       if (UNCOUNTED_POS.has(token.pos) && !given.has(token.lemma)) continue;
       // Si la escritura tiene varias lecturas en el banco, vale la que suena en esta frase
-      const senses = BANK.byWriting.get(token.lemma) || [];
+      const senses = BANK.sensesOf(token.lemma) || [];
       const heard = senses.length > 1 ? senses.find((sense) => readingMatches(token, token.lemma, sense.r)) : null;
       const hint = heard ? { ...(given.get(token.lemma) || {}), reading: heard.r } : given.get(token.lemma);
       const { entry, source, word, uk } = resolveWord(token.lemma, hint, extra);

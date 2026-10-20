@@ -9,7 +9,7 @@
      versión nueva de la app no lo borra.
    ========================================= */
 
-const CACHE = "kanji-learning-v16";
+const CACHE = "kanji-learning-v17";
 /* Súbelo SOLO si cambian los archivos de vendor/: obliga a descargarlos otra vez */
 const LASTING = "kanji-lasting-v1";
 const SHELL = [
@@ -21,6 +21,7 @@ const SHELL = [
   "vendor/ts-fsrs/index.umd.js",
   "bank/bank.js",
   "bank/frequency.js",
+  "bank/aliases.js",
   "study-config.js",
   "bank/n5.js",
   "ja-core.js",
