@@ -1,11 +1,17 @@
 /* =========================================
    KANJI LEARNING APP - sw.js
-   Permite abrir la app sin conexión.
-   Estrategia: primero la red (para recibir siempre la última versión)
-   y, si falla, la copia guardada.
+   Permite abrir la app sin conexión. Dos estrategias:
+   - La app (HTML, JS, CSS, banco): primero la red, para recibir siempre la
+     última versión, y si falla, la copia guardada.
+   - Lo grande que nunca cambia (el diccionario de kuromoji, unos 17 MB, y las
+     librerías con versión fija): primero la copia guardada. Se descarga una
+     sola vez por dispositivo y se guarda aparte (LASTING), así que publicar una
+     versión nueva de la app no lo borra.
    ========================================= */
 
-const CACHE = "kanji-learning-v14";
+const CACHE = "kanji-learning-v15";
+/* Súbelo SOLO si cambian los archivos de vendor/: obliga a descargarlos otra vez */
+const LASTING = "kanji-lasting-v1";
 const SHELL = [
   "./",
   "index.html",
@@ -39,23 +45,60 @@ const SHELL = [
 const CACHEABLE = [self.location.origin, "https://unpkg.com", "https://cdn.jsdelivr.net",
   "https://fonts.googleapis.com", "https://fonts.gstatic.com"];
 
+/* ¿Es de lo que nunca cambia? vendor/ de la propia app y las librerías de los
+   CDN, que llevan la versión en la dirección (wanakana@5.3.1). Los trazos de
+   KanjiVG del CDN también: ese archivo de un kanji no cambia. */
+function isLasting(url) {
+  if (url.origin === self.location.origin) return url.pathname.includes("/vendor/");
+  return url.origin === "https://unpkg.com" || url.origin === "https://cdn.jsdelivr.net" ||
+    url.origin === "https://fonts.gstatic.com";
+}
+
 self.addEventListener("install", (event) => {
   event.waitUntil(
     caches.open(CACHE).then((cache) => cache.addAll(SHELL)).then(() => self.skipWaiting())
   );
 });
 
+/* Al activarse una versión nueva: lo duradero que hubiera en las copias
+   antiguas pasa a LASTING (así nadie vuelve a descargar el diccionario) y
+   después se borran las copias antiguas. */
 self.addEventListener("activate", (event) => {
-  event.waitUntil(
-    caches.keys()
-      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
-      .then(() => self.clients.claim())
-  );
+  event.waitUntil((async () => {
+    const lasting = await caches.open(LASTING);
+    for (const key of await caches.keys()) {
+      if (key === CACHE || key === LASTING) continue;
+      if (key.startsWith("kanji-learning-")) {
+        const old = await caches.open(key);
+        for (const request of await old.keys()) {
+          if (!isLasting(new URL(request.url)) || await lasting.match(request)) continue;
+          const response = await old.match(request);
+          if (response) await lasting.put(request, response);
+        }
+      }
+      await caches.delete(key);
+    }
+    await self.clients.claim();
+  })());
 });
 
 self.addEventListener("fetch", (event) => {
   const { request } = event;
   if (request.method !== "GET" || !CACHEABLE.includes(new URL(request.url).origin)) return;
+
+  // Lo que nunca cambia: la copia guardada y, si no la hay, la red (y se guarda)
+  if (isLasting(new URL(request.url))) {
+    event.respondWith(
+      caches.open(LASTING).then(async (cache) => {
+        const saved = await cache.match(request);
+        if (saved) return saved;
+        const response = await fetch(request);
+        if (response.ok || response.type === "opaque") cache.put(request, response.clone());
+        return response;
+      })
+    );
+    return;
+  }
 
   event.respondWith(
     fetch(request)
