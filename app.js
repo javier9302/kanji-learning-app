@@ -1031,6 +1031,8 @@ async function init() {
 
   if ("serviceWorker" in navigator && location.protocol === "https:") {
     navigator.serviceWorker.register("sw.js").catch(() => {});
+    // Pide al navegador que no borre lo guardado (el diccionario de 17 MB) cuando le falte espacio
+    navigator.storage?.persist?.().catch(() => {});
   }
 }
 
