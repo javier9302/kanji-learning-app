@@ -221,22 +221,15 @@ function knownKanji() {
   return known;
 }
 
-/* Kanjis VISTOS: los que salieron en una lectura que el usuario terminó */
-function seenKanji() {
-  const seen = new Set();
-  for (const rec of userKanji.values()) if (rec.seenAt) seen.add(rec.id);
-  for (const text of texts) {
-    if (!text.readAt) continue;
-    for (const key of Object.keys(text.lemmas || {})) {
-      for (const c of kanjiOf(key.split("|")[0])) seen.add(c);
-    }
-  }
-  return seen;
-}
+/* Lo que necesita kanjiGate (learning-core.js) para el usuario de ahora */
+const kanjiGateContext = (known) => ({
+  level: userLevel(), known, kanjiLevel: (c) => BANK.kanjiLevel(c),
+  knownNeeded: STUDY_CONFIG.newWordKanji.knownNeeded
+});
 
 /* Puntuación de una palabra nueva (pesos en study-config.js) y su porqué.
-   blocked: kanjis avanzados que aún no han salido en una lectura. */
-function scoreWord(entry, rec, known, seen) {
+   blocked: kanjis por encima del nivel del usuario que impiden proponerla (ver kanjiGate). */
+function scoreWord(entry, rec, known, gate = kanjiGateContext(known)) {
   const W = STUDY_CONFIG.weights;
   const manual = rec?.origin === "manual";
   // Buscada en el diccionario: no es lo mismo que haberla visto en una lectura
@@ -251,9 +244,8 @@ function scoreWord(entry, rec, known, seen) {
   const frequency = rank ? Math.max(0, 1 - (rank - 1) / STUDY_CONFIG.frequencyMaxRank) : 0;
 
   const exempt = manual || !!rec?.knowsMeaning; // "Conozco la palabra pero no el kanji"
-  const blocked = !exempt && STUDY_CONFIG.basicWordLevels.includes(entry.level)
-    ? entry.kanji.filter((c) => STUDY_CONFIG.advancedKanjiLevels.includes(BANK.kanjiLevel(c)) && !seen.has(c))
-    : [];
+  const check = exempt ? null : kanjiGate(entry, gate);
+  const blocked = check && !check.ok ? check.above : [];
 
   return {
     score: manual * W.manual + dictionary * W.dictionary + lookup * W.lookup + meaningFail * W.meaningFail +
@@ -262,14 +254,15 @@ function scoreWord(entry, rec, known, seen) {
   };
 }
 
-/* Palabras nuevas posibles, de mayor a menor puntuación. Salen del banco
-   (hasta el nivel del usuario) y de las que el usuario agregó a mano o marcó
-   al leer. excluded: las que esperan a que su kanji avanzado salga en una lectura. */
+/* Palabras nuevas posibles, de mayor a menor puntuación. Salen de todo el banco
+   y de las que el usuario agregó a mano o marcó al leer; las decide el nivel de
+   sus kanjis (kanjiGate), no el de la palabra. excluded: las que llevan kanjis
+   por encima del nivel del usuario. */
 function newWordCandidates() {
-  const known = knownKanji(), seen = seenKanji();
+  const known = knownKanji(), gate = kanjiGateContext(known);
   const list = [], excluded = [];
   const consider = (entry, rec) => {
-    const info = scoreWord(entry, rec, known, seen);
+    const info = scoreWord(entry, rec, known, gate);
     (info.blocked.length ? excluded : list).push({ kind: "word", id: entry.id, entry, rec, group: "new", info });
   };
 
@@ -281,12 +274,13 @@ function newWordCandidates() {
     if (rec.studied || rec.status === "mastered") continue;
     if (!hasKanjiChar(entry.w) || entry.kana) continue; // en kana no hay lectura que preguntar
     const manual = rec.origin === "manual";
-    // Por encima de su nivel, o fuera del banco, solo lo que el usuario pidió
-    if (entry.custom ? !manual && rec.status !== "learning" : !manual && !withinLevel(entry.level)) continue;
+    // Fuera del banco, solo lo que el usuario pidió o está aprendiendo (sus kanjis se comprueban igual)
+    if (entry.custom && !manual && rec.status !== "learning") continue;
     consider(entry, rec);
   }
+  // Todo el banco, de cualquier nivel de palabra: lo que decide es el nivel de sus kanjis
   for (const entry of BANK.words.values()) {
-    if (!mine.has(entry.id) && !entry.kana && withinLevel(entry.level)) consider(entry, null);
+    if (!mine.has(entry.id) && !entry.kana && entry.kanji.length) consider(entry, null);
   }
 
   const order = (a, b) => b.info.score - a.info.score ||
@@ -340,8 +334,8 @@ function studyCards() {
   return { due, fresh, excluded, extra: extra.sort((a, b) => a.rec.nextReview.localeCompare(b.rec.nextReview)) };
 }
 
-/* El banco se descarga hasta el nivel del usuario: por encima no se presentan palabras */
-const ensureStudyBank = () => BANK.loadUpTo(userLevel());
+/* Todo el banco: una palabra de N3 hecha con kanjis de N5 también vale para quien está en N5 */
+const ensureStudyBank = () => BANK.loadUpTo("N1");
 
 /* Vista de depuración (Ajustes): por qué sale cada palabra nueva */
 function debugHTML(fresh, excluded) {
@@ -357,7 +351,7 @@ function debugHTML(fresh, excluded) {
         info.reading ? t("vista en lecturas") : "",
         t("kanjis conocidos {known}/{total}", { known: info.kanjiKnown, total: info.kanjiTotal }),
         info.rank ? t("frecuencia n.º {rank}", { rank: info.rank }) : t("sin puesto de frecuencia"),
-        info.blocked.length ? t("espera al kanji {kanji}", { kanji: info.blocked.join("、") }) : ""
+        info.blocked.length ? t("kanji por encima de tu nivel: {kanji}", { kanji: info.blocked.join("、") }) : ""
       ].filter(Boolean).map(escapeHTML).join(" · ")}</td>
     </tr>`;
   const words = fresh.filter((card) => card.kind === "word");
@@ -370,7 +364,7 @@ function debugHTML(fresh, excluded) {
         <tbody>${words.slice(0, 20).map(row).join("")}</tbody>
       </table></div>
       ${excluded.length ? `
-      <p class="helper">${t("{n} en espera: son básicas pero llevan un kanji avanzado que aún no ha salido en tus lecturas.", { n: plural(excluded.length, "palabra", "palabras") })}</p>
+      <p class="helper">${t("{n} en espera: llevan kanjis por encima de tu nivel ({level}). Saldrán cuando subas de nivel o conozcas alguno de sus otros kanjis.", { n: plural(excluded.length, "palabra", "palabras"), level: userLevel() })}</p>
       <div class="table-scroll"><table class="debug-table">
         <tbody>${excluded.slice(0, 10).map(row).join("")}</tbody>
       </table></div>` : ""}
@@ -796,10 +790,21 @@ async function gradeCard(card, rating) {
    ejemplo en la que el kanji pedido va oculto:  Usado en: 勉＿（べんきょう）
    ========================================= */
 
-/* Kanjis que el estudiante ya ha visto: los de las palabras que conoce o
-   repasa, y los que ha acertado por su significado */
-function drawCandidates() {
-  const level = $("drawLevel").value;
+/* ---------- Qué kanji toca ----------
+   Modo automático (por defecto): nivel a nivel, con repaso de vez en cuando
+   (reglas en learning-core.js). Con un nivel elegido a mano, sus kanjis al azar. */
+
+/* Kanjis de cada nivel que se pueden escribir (con significado), en el orden del banco */
+function kanjiByLevel() {
+  const byLevel = Object.fromEntries(BANK.LEVELS.map((level) => [level, []]));
+  for (const kanji of BANK.kanji.values()) {
+    if (byLevel[kanji.level] && meaningOf(kanji).length) byLevel[kanji.level].push(kanji.c);
+  }
+  return byLevel;
+}
+
+/* Kanjis de las palabras que el estudiante conoce o repasa: salen antes */
+function usefulKanji() {
   const chars = new Set();
   for (const rec of userWords.values()) {
     if (rec.status === "mastered" || rec.canReadKanji || rec.studied && rec.correctCount > 0) {
@@ -807,8 +812,37 @@ function drawCandidates() {
     }
   }
   for (const rec of userKanji.values()) if (rec.knowsMeaning) chars.add(rec.id);
-  return [...chars].map((c) => BANK.kanji.get(c))
-    .filter((kanji) => kanji && meaningOf(kanji).length && (level === "ALL" || kanji.level === level));
+  return chars;
+}
+
+const writtenKanji = (c) => !!userKanji.get(c)?.canWrite;
+const writingSkipped = () => meta.writing?.skipped || [];
+let drawTurn = 0; // kanjis escritos en esta sesión: cada STUDY_CONFIG.writing.reviewEvery sale un repaso
+
+/* El siguiente kanji: { kanji, review } o null si no queda nada */
+function pickDrawKanji() {
+  const mode = $("drawLevel").value;
+  const byLevel = kanjiByLevel();
+  if (mode !== "auto") {
+    const list = shuffle(byLevel[mode] || []).filter((c) => c !== draw?.kanji?.c);
+    return list.length ? { kanji: BANK.kanji.get(list[0]), review: false } : null;
+  }
+  const useful = usefulKanji();
+  const next = nextWritingKanji({
+    kanjiByLevel: byLevel, written: writtenKanji, skipped: writingSkipped(),
+    useful: (c) => useful.has(c), lastWritten: (c) => userKanji.get(c)?.lastWrittenAt || 0,
+    turn: drawTurn, avoid: draw?.kanji?.c
+  }, STUDY_CONFIG.writing);
+  return next ? { kanji: BANK.kanji.get(next.c), review: next.review } : null;
+}
+
+/* Cuánto lleva del nivel actual, para la cabecera */
+function writingProgress() {
+  const byLevel = kanjiByLevel();
+  const level = writingLevel(byLevel, writtenKanji, writingSkipped());
+  if (!level) return { level: null, done: 0, total: 0 };
+  const list = byLevel[level];
+  return { level, done: list.filter(writtenKanji).length, total: list.length };
 }
 
 /* Palabra de ejemplo: mejor una que el estudiante conozca; si no, la más fácil */
@@ -821,37 +855,97 @@ function exampleWord(kanji) {
   return [...kanji.words].sort((a, b) => rank(a) - rank(b))[0] || null;
 }
 
+/* La pantalla de Escribir. En mitad de una prueba, o con un kanji a medias, no se cambia */
 async function renderDraw() {
-  await BANK.loadUpTo(meta.reading.level || "N5").catch(() => {});
+  await BANK.loadUpTo("N1").catch(() => {}); // los kanjis de todos los niveles, para saber qué toca
   if (document.body.dataset.view !== "draw") return;
-  const candidates = drawCandidates();
-  $("drawCount").textContent = plural(candidates.length, "kanji disponible", "kanjis disponibles");
+  renderDrawStatus();
+  if (draw?.test || draw?.kanji && $("drawArea").querySelector(".draw-card")) return;
+  nextDraw();
+}
 
-  if (!candidates.length) {
+/* Cabecera: el nivel que toca, cuánto falta y la prueba para saltarlo */
+function renderDrawStatus() {
+  const auto = $("drawLevel").value === "auto";
+  const { level, done, total } = writingProgress();
+  $("drawCount").textContent = !auto ? $("drawLevel").value : level ? `${level} · ${done} / ${total}` : t("Todo escrito");
+  const status = $("drawStatus");
+  if (!auto) {
+    status.textContent = t("Practicas los kanjis de {level} sin orden. En automático se avanza nivel a nivel.", { level: $("drawLevel").value });
+    return;
+  }
+  if (!level) {
+    status.textContent = t("Ya sabes escribir los kanjis de todos los niveles: ahora solo salen repasos.");
+    return;
+  }
+  status.innerHTML = `${escapeHTML(t("Nivel de escritura: {level}. Has escrito {done} de sus {total} kanjis; los de niveles superiores no saldrán hasta terminarlos. De vez en cuando sale uno ya escrito, para repasarlo.", { level, done, total }))}
+    ${draw?.test ? "" : `<button id="drawTestBtn" class="link-btn" type="button">${escapeHTML(t("¿Ya sabes escribir los de {level}? Haz la prueba para saltarlo", { level }))}</button>`}`;
+  if ($("drawTestBtn")) $("drawTestBtn").onclick = () => startWritingTest(level);
+}
+
+/* ---------- Prueba para saltar un nivel ---------- */
+
+function startWritingTest(level) {
+  const { size } = STUDY_CONFIG.writing.test;
+  const queue = writingTestKanji(kanjiByLevel()[level] || [], writtenKanji, size);
+  draw = { test: { level, queue, results: [] } };
+  renderDrawStatus();
+  nextDraw();
+}
+
+/* Fin de la prueba: aprobada, el nivel queda saltado y los kanjis bien escritos, sabidos */
+async function finishWritingTest(test) {
+  const config = STUDY_CONFIG.writing.test;
+  const result = writingTestResult(test.results, config);
+  for (const c of result.good) {
+    const rec = userKanji.get(c) || blankUserKanji(c);
+    Object.assign(rec, { canWrite: true, writes: (rec.writes || 0) + 1, lastWrittenAt: Date.now(), lastSeen: Date.now() });
+    await saveUserKanji(rec);
+  }
+  if (result.passed) {
+    meta.writing = { ...meta.writing, skipped: [...new Set([...writingSkipped(), test.level])], updatedAt: Date.now() };
+    await saveMeta();
+    scheduleSync();
+  }
+  draw = null;
+  $("drawArea").innerHTML = `
+    <div class="empty-state">
+      <div class="empty-icon">${result.passed ? "✓" : "…"}</div>
+      <h3>${result.passed ? t("Prueba de {level} aprobada", { level: test.level }) : t("Prueba de {level} no superada", { level: test.level })}</h3>
+      <p>${t("Escribiste bien {good} de {total} (hacían falta {pass}).", { good: result.good.length, total: result.total, pass: config.pass })}
+        ${result.passed ? t("Ya no te saldrán kanjis nuevos de {level}; solo alguno, de vez en cuando, para repasar.", { level: test.level })
+          : t("Sigue practicando {level}: puedes repetir la prueba cuando quieras.", { level: test.level })}</p>
+      <button id="drawAgainBtn" class="button button-primary" type="button">${t("Seguir escribiendo")}</button>
+    </div>`;
+  $("drawAgainBtn").onclick = () => { renderDrawStatus(); nextDraw(); };
+  renderDrawStatus();
+}
+
+/* ---------- El kanji ---------- */
+
+async function nextDraw() {
+  const test = draw?.test || null;
+  let pick;
+  if (test) {
+    const c = test.queue[test.results.length];
+    if (!c) return finishWritingTest(test);
+    pick = { kanji: BANK.kanji.get(c), review: false };
+  } else {
+    pick = pickDrawKanji();
+    drawTurn++;
+  }
+  if (!pick?.kanji) {
     draw = null;
     $("drawArea").innerHTML = `
       <div class="empty-state">
         <div class="empty-icon" lang="ja">書</div>
-        <h3>${t("Aún no hay kanjis para escribir")}${$("drawLevel").value === "ALL" ? "" : ` (${$("drawLevel").value})`}</h3>
-        <p>${t("Aquí aparecen los kanjis de las palabras que ya has acertado al estudiar o que dominas al leer.")}</p>
+        <h3>${t("No hay kanjis para escribir")}</h3>
+        <p>${t("Prueba otro nivel o el modo automático.")}</p>
       </div>`;
     return;
   }
-  // Se conserva el kanji a medias si sigue siendo válido
-  if (!draw || !candidates.includes(draw.kanji)) nextDraw();
-}
-
-async function nextDraw() {
-  const candidates = drawCandidates();
-  if (!candidates.length) return renderDraw();
-
-  let queue = (draw?.queue || []).filter((k) => candidates.includes(k));
-  if (!queue.length) {
-    queue = shuffle(candidates);
-    if (queue.length > 1 && queue[0] === draw?.kanji) queue.push(queue.shift());
-  }
-  const kanji = queue.shift();
-  const current = draw = { kanji, queue };
+  const { kanji, review } = pick;
+  const current = draw = { kanji, review, test };
   const area = $("drawArea");
   area.innerHTML = `<p class="message">${t("Cargando…")}</p>`;
 
@@ -867,7 +961,7 @@ async function nextDraw() {
           <button id="drawNextBtn" class="button button-outline" type="button">${t("Otro kanji")}</button>
         </div>
       </div>`;
-    $("drawNextBtn").onclick = nextDraw;
+    $("drawNextBtn").onclick = () => { if (test) test.results.push({ c: kanji.c, mistakes: 0, shown: true, hinted: false }); nextDraw(); };
     return;
   }
   if (draw !== current) return;
@@ -879,7 +973,8 @@ async function nextDraw() {
   area.innerHTML = `
     <div class="card draw-card">
       <div class="card-top">
-        <span class="pill">${escapeHTML(kanji.level)}</span>
+        <span class="pill">${test ? escapeHTML(t("Prueba {level}: {i} / {n}", { level: test.level, i: test.results.length + 1, n: test.queue.length }))
+          : review ? escapeHTML(t("Repaso · {level}", { level: kanji.level })) : escapeHTML(kanji.level)}</span>
         <span id="drawProgress" class="card-progress"></span>
       </div>
       <p class="helper">${t("Escribe el kanji que significa:")}</p>
@@ -905,7 +1000,7 @@ async function nextDraw() {
   const ink = $("drawInk");
   const feedback = $("drawFeedback");
   const paths = [...pad.querySelectorAll(".stroke")];
-  let index = 0, misses = 0, mistakes = 0, points = null, shown = false;
+  let index = 0, misses = 0, mistakes = 0, points = null, shown = false, hinted = false, recorded = false;
 
   const say = (text, cls = "") => {
     feedback.textContent = text;
@@ -919,9 +1014,17 @@ async function nextDraw() {
   const reset = () => {
     paths.forEach((path) => { path.className.baseVal = "stroke"; });
     index = misses = mistakes = 0;
-    shown = false;
+    shown = false; // "Reiniciar" deja intentarlo de nuevo, pero en la prueba una pista ya cuenta
+
     say("");
     progress();
+  };
+
+  /* En la prueba, cómo le fue con este kanji (una sola vez) */
+  const record = (gaveUp) => {
+    if (!test || recorded) return;
+    recorded = true;
+    test.results.push({ c: kanji.c, mistakes, shown: shown || gaveUp, hinted });
   };
 
   /* Escrito entero sin pedir que se lo muestren: ya sabe escribirlo */
@@ -929,11 +1032,13 @@ async function nextDraw() {
     say(mistakes ? t("Completado con {n}.", { n: plural(mistakes, "fallo", "fallos") }) : t("¡Perfecto!"),
       mistakes ? "" : "correct");
     $("drawNextBtn").focus();
+    if (test) return record(false); // en la prueba se guarda al final
     const rec = userKanji.get(kanji.c) || blankUserKanji(kanji.c);
     rec.canWrite = true;
     rec.writes = (rec.writes || 0) + 1;
-    rec.lastSeen = Date.now();
+    rec.lastSeen = rec.lastWrittenAt = Date.now();
     await saveUserKanji(rec);
+    renderDrawStatus();
   }
 
   function check(drawn) {
@@ -943,7 +1048,7 @@ async function nextDraw() {
       mistakes++;
       say(result === "reversed"
         ? t("El trazo va en la dirección contraria.") : t("Ese no es el trazo que toca."), "incorrect");
-      if (misses >= 3) paths[index].classList.add("hint");
+      if (misses >= 3) { paths[index].classList.add("hint"); hinted = true; }
       return;
     }
     paths[index].className.baseVal = "stroke done";
@@ -984,7 +1089,7 @@ async function nextDraw() {
     check(drawn);
   };
 
-  $("drawHintBtn").onclick = () => paths[index]?.classList.add("hint");
+  $("drawHintBtn").onclick = () => { paths[index]?.classList.add("hint"); hinted = true; };
   $("drawShowBtn").onclick = () => {
     paths.slice(index).forEach((path) => { path.className.baseVal = "stroke done shown"; });
     index = paths.length;
@@ -993,7 +1098,8 @@ async function nextDraw() {
     say(t("Así se escribe. Pulsa “Reiniciar” para intentarlo."));
   };
   $("drawClearBtn").onclick = reset;
-  $("drawNextBtn").onclick = nextDraw;
+  // En la prueba, pasar sin terminarlo cuenta como no sabido
+  $("drawNextBtn").onclick = () => { record(true); nextDraw(); };
   reset();
 }
 

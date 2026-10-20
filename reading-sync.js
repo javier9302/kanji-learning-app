@@ -20,7 +20,7 @@ const isoOf = (ms) => ms ? new Date(ms).toISOString() : null;
 const msOf = (iso) => iso ? Date.parse(iso) : null;
 const isOwnText = (text) => !text.owner || text.owner === sync.config.userId;
 const statePrint = (text) => `${text.readAt || 0}:${text.discardedAt || 0}:${text.hiddenAt || 0}`;
-const profilePrint = (profile) => `${profile.level}|${profile.assumed}|${profile.placedAt}`;
+const profilePrint = (profile) => `${profile.level}|${profile.assumed}|${profile.placedAt}|${(meta.writing?.skipped || []).join(",")}`;
 
 /* Una palabra del banco que llega solo como progreso: su significado sale del banco */
 function ensureWordEntry(mine) {
@@ -67,7 +67,7 @@ const srsFromRow = (row) => ({
 const PHASE2_COLUMNS = ["fsrs", "origin", "meaning", "seen_at"];
 /* Columnas de Traducir (significado). Si faltan solo se quitan estas: el resto
    del progreso, también el de la fase 2, se sigue subiendo. */
-const MEANING_COLUMNS = ["meaning_correct", "meaning_wrong", "last_meaning_at"];
+const MEANING_COLUMNS = ["meaning_correct", "meaning_wrong", "last_meaning_at", "last_written_at"];
 const NEWER_ORIGINS = ["diccionario", "traducir"]; // orígenes que una base de datos sin actualizar no admite
 const without = (rows, columns) => rows.map((row) => Object.fromEntries(Object.entries(row).filter(([key]) => !columns.includes(key))));
 
@@ -104,6 +104,12 @@ async function pullReading(userId) {
   for (const row of rows) {
     // El plan (gratuito o premium) lo pone un administrador; aquí solo se lee
     if (row.plan) sync.config.plan = { plan: row.plan, until: row.plan_until || null };
+    // Niveles de Escribir aprobados con la prueba: se suman los de todos los dispositivos
+    if (Array.isArray(row.writing_skipped) && row.writing_skipped.some((level) => !(meta.writing?.skipped || []).includes(level))) {
+      meta.writing = { ...meta.writing, skipped: [...new Set([...(meta.writing?.skipped || []), ...row.writing_skipped])] };
+      await saveMeta();
+      changed = true;
+    }
     if (!row.placed_at) continue;
     const remote = { level: row.reading_level, assumed: row.assumed_level || "",
       placedAt: msOf(row.placed_at), updatedAt: Number(row.client_updated_at) };
@@ -208,7 +214,8 @@ async function pullReading(userId) {
     const record = {
       id: row.id, status: row.status, knowsMeaning: row.knows_meaning, canWrite: row.can_write,
       writes: row.writes || 0, firstSeen: msOf(row.first_seen), lastSeen: msOf(row.last_seen),
-      updatedAt: stamp, ...(row.seen_at ? { seenAt: msOf(row.seen_at) } : {}), ...srsFromRow(row)
+      updatedAt: stamp, ...(row.seen_at ? { seenAt: msOf(row.seen_at) } : {}),
+      ...(row.last_written_at ? { lastWrittenAt: msOf(row.last_written_at) } : {}), ...srsFromRow(row)
     };
     userKanji.set(record.id, record);
     newerKanji.push(record);
@@ -244,10 +251,19 @@ async function pushReading(userId) {
   // Perfil
   if (meta.reading.placedAt && pushed.profile !== profilePrint(meta.reading)) {
     const print = profilePrint(meta.reading);
-    await pushRows("profiles", "user_id", [{
+    const row = {
       user_id: userId, reading_level: meta.reading.level, assumed_level: meta.reading.assumed || null,
-      placed_at: isoOf(meta.reading.placedAt), client_updated_at: Math.round(meta.reading.updatedAt || meta.reading.placedAt)
-    }], [], {});
+      placed_at: isoOf(meta.reading.placedAt), client_updated_at: Math.round(meta.reading.updatedAt || meta.reading.placedAt),
+      writing_skipped: meta.writing?.skipped || []
+    };
+    try {
+      await pushRows("profiles", "user_id", [row], [], {});
+    } catch (error) {
+      // Falta la columna (no se ha vuelto a ejecutar schema.sql): sin ella, y se reintenta la próxima vez
+      if (error?.code !== "PGRST204") throw error;
+      const { writing_skipped, ...plain } = row;
+      await pushRows("profiles", "user_id", [plain], [], {});
+    }
     pushed.profile = print;
   }
 
@@ -303,6 +319,7 @@ async function pushReading(userId) {
     user_id: userId, id: k.id, status: k.status || "unknown",
     knows_meaning: !!k.knowsMeaning, can_write: !!k.canWrite, writes: whole(k.writes),
     first_seen: isoOf(k.firstSeen), last_seen: isoOf(k.lastSeen), seen_at: isoOf(k.seenAt),
+    last_written_at: isoOf(k.lastWrittenAt),
     client_updated_at: Math.round(k.updatedAt), ...srsToRow(k)
   })), kanjiChanged.map((k) => [k.id, String(k.updatedAt)]), pushed.kanji);
 

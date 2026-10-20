@@ -180,7 +180,19 @@ Sin sesión no se anotan palabras por revisar.
 El repaso usa **FSRS** (`vendor/ts-fsrs`). Todo lo ajustable está en un solo archivo,
 [`study-config.js`](study-config.js): palabras nuevas por sesión, los pesos con los que se
 elige la siguiente palabra nueva (agregada a mano > vista en lecturas > kanjis conocidos >
-frecuencia), la regla de las palabras básicas con kanji avanzado y los parámetros de FSRS.
+frecuencia), las reglas por nivel de kanji (`newWordKanji`), las de Escribir (`writing`) y los parámetros de FSRS.
+
+**Qué palabras nuevas se proponen** lo decide el nivel de sus **kanjis**, no el de la palabra (hay
+palabras de N5 con un kanji de N1 y palabras de N3 hechas solo con kanjis de N5). Sale una palabra
+si todos sus kanjis son de tu nivel o inferior, o ya los conoces; o si tiene varios kanjis, conoces
+al menos uno y la palabra es de tu nivel. Las que agregas a mano no tienen esta limitación. La vista
+de depuración enseña las que esperan y qué kanji las bloquea. Reglas en `learning-core.js`.
+
+**Escribir** va nivel a nivel en el modo automático: no salen kanjis de N4 hasta escribir todos los
+de N5. Cada `writing.reviewEvery` kanjis sale uno ya escrito para repasarlo. Quien ya sabe escribir
+un nivel puede hacer la prueba («¿Ya sabes escribir los de N5?»): unos kanjis al azar de ese nivel,
+sin ayuda; si aprueba, el nivel se salta. Los niveles saltados se sincronizan (vuelve a ejecutar
+`supabase/schema.sql`). Eligiendo un nivel en el selector se practican sus kanjis sin orden.
 Cámbialo, recarga la página y listo.
 
 - Tras actualizar la app hay que volver a ejecutar `supabase/schema.sql` en el SQL Editor:

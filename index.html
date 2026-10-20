@@ -22,6 +22,7 @@
   <script src="bank/frequency.js" defer></script>
   <script src="bank/aliases.js" defer></script>
   <script src="study-config.js" defer></script>
+  <script src="learning-core.js" defer></script>
   <script src="ja-core.js" defer></script>
   <script src="sentences-core.js" defer></script>
   <script src="translate-core.js" defer></script>
@@ -262,7 +263,7 @@
         <label class="field">
           <span>Nivel JLPT</span>
           <select id="drawLevel">
-            <option value="ALL">Todos</option>
+            <option value="auto">Automático (nivel a nivel)</option>
             <option>N5</option>
             <option>N4</option>
             <option>N3</option>
@@ -274,6 +275,7 @@
           Se pide un kanji cada vez, por su significado y con una palabra de
           ejemplo. Dibuja cada trazo en su orden y dirección.
         </p>
+        <p id="drawStatus" class="helper draw-status" aria-live="polite"></p>
       </div>
 
       <div id="drawArea" class="study-area"></div>

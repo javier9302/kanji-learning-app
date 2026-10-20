@@ -8,7 +8,8 @@ const LEVELS = ["N5", "N4", "N3", "N2", "N1"];
 
 let db;
 // Historial diario, borrados, perfil de lectura y lecturas de kanji practicadas en frases
-let meta = { days: {}, deleted: {}, reading: {}, practice: {} };
+// writing: { skipped: ["N5"] } niveles de Escribir aprobados con la prueba
+let meta = { days: {}, deleted: {}, reading: {}, practice: {}, writing: {} };
 let emptyStudyHTML = ""; // mensaje inicial de la pantalla de estudio
 
 const $ = (id) => document.getElementById(id);
@@ -669,6 +670,7 @@ async function clearLocalData() {
   meta.deleted = {};
   meta.reading = {};
   meta.practice = {};
+  meta.writing = {};
   reader = placement = evaluation = null;
   await saveMeta();
   await clearReadingData();
@@ -1015,7 +1017,14 @@ function bindSettings() {
   });
   bindAddWord();
 
-  $("drawLevel").addEventListener("change", () => { draw = null; renderDraw(); });
+  // Nivel de Escribir: automático (por defecto) o uno elegido; se recuerda en el dispositivo
+  if ([...$("drawLevel").options].some((o) => o.value === prefs.drawLevel)) $("drawLevel").value = prefs.drawLevel;
+  $("drawLevel").addEventListener("change", () => {
+    prefs.drawLevel = $("drawLevel").value;
+    saveLocal("kanji-prefs", prefs);
+    draw = null;
+    renderDraw();
+  });
   $("startBtn").addEventListener("click", startSession);
 }
 

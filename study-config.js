@@ -29,12 +29,23 @@ const STUDY_CONFIG = {
   /* Puesto a partir del cual la frecuencia ya no suma nada */
   frequencyMaxRank: 6000,
 
-  /* Una palabra básica con un kanji avanzado (N5-N4 con un kanji de N2-N1) no
-     se presenta hasta que ese kanji haya salido en una lectura terminada.
+  /* Qué palabras nuevas se proponen: lo decide el nivel de sus KANJIS, no el de
+     la palabra (hay palabras de N5 con un kanji de N1, y de N3 hechas solo con
+     kanjis de N5). Reglas en learning-core.js (kanjiGate):
+       - todos sus kanjis son de tu nivel o inferior, o ya los conoces;
+       - o tiene varios kanjis, conoces al menos knownNeeded de ellos y la
+         palabra es de tu nivel o inferior (puede llevar algún kanji superior).
      No se aplica a las palabras que agregó el usuario ni a las que marcó
      "Conozco la palabra pero no el kanji". */
-  basicWordLevels: ["N5", "N4"],
-  advancedKanjiLevels: ["N2", "N1"],
+  newWordKanji: { knownNeeded: 1 },
+
+  /* Escribir: se avanza nivel a nivel (no salen kanjis de N4 hasta escribir
+     todos los de N5, o aprobar la prueba de N5).
+       reviewEvery  cada cuántos kanjis sale uno ya escrito, para no olvidarlo
+       test         prueba para saltar un nivel: size kanjis al azar; se aprueba
+                    con pass bien escritos (sin "Mostrar", sin pistas y con
+                    como mucho maxMistakes trazos fallados) */
+  writing: { reviewEvery: 5, test: { size: 8, pass: 7, maxMistakes: 1 } },
 
   /* "Ya la domino": días hasta el primer repaso de una palabra agregada así */
   masteredIntervalDays: 60,

@@ -967,3 +967,12 @@ $$;
 
 revoke all on function public.admin_set_plan(uuid, text, timestamptz) from public, anon;
 grant execute on function public.admin_set_plan(uuid, text, timestamptz) to authenticated;
+
+-- =========================================
+-- ESCRIBIR: NIVEL A NIVEL
+-- =========================================
+
+-- Niveles aprobados con la prueba de Escribir (se saltan) y cuándo se escribió
+-- por última vez cada kanji (para repasar primero el que hace más que no se escribe)
+alter table public.profiles add column if not exists writing_skipped text[] not null default '{}';
+alter table public.user_kanji add column if not exists last_written_at timestamptz;

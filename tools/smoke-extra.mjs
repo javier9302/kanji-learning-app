@@ -344,7 +344,7 @@ export default async function extra({ page, step, check }) {
     const state = await page.evaluate(() => {
       const rec = userWords.get("毎朝|まいあさ");
       return { last: translationLog[translationLog.length - 1], rec, cards: JSON.stringify([rec.fsrs, rec.nextReview, rec.interval, rec.repetitions]),
-        failed: $("failedList") ? null : null, score: scoreWord(BANK.words.get("飲む|のむ"), userWords.get("飲む|のむ"), new Set(), new Set()) };
+        failed: $("failedList") ? null : null, score: scoreWord(BANK.words.get("飲む|のむ"), userWords.get("飲む|のむ"), new Set()) };
     });
     check(state.last.source === "unknown" && state.last.verdict === "incorrect", JSON.stringify(state.last));
     check(state.rec.status === "learning" && state.rec.meaningWrong >= 1 && state.rec.meaningCorrect === 0 && state.rec.knowsMeaning === false, JSON.stringify(state.rec));
@@ -408,6 +408,57 @@ export default async function extra({ page, step, check }) {
       return after;
     });
     check(/^to become/.test(result.text) && /^to become/.test(result.word) && result.flag === 1, JSON.stringify(result));
+  });
+
+  await step("palabras nuevas: las decide el nivel de sus kanjis, no el de la palabra", async () => {
+    const result = await page.evaluate(async () => {
+      await BANK.loadUpTo("N1");
+      const saved = meta.reading.level;
+      meta.reading.level = "N5";
+      const { list, excluded } = newWordCandidates();
+      meta.reading.level = saved;
+      const shown = new Set(list.map((card) => card.id));
+      const levelOf = (c) => BANK.kanjiLevel(c);
+      const known = knownKanji();
+      // Ninguna propuesta lleva un kanji de un nivel superior que no conozca, salvo la excepción de varios kanjis
+      const wrong = list.filter((card) => !card.info.manual && !card.rec?.knowsMeaning).filter((card) => {
+        const above = card.entry.kanji.filter((c) => !known.has(c) && levelOf(c) !== "N5");
+        if (!above.length) return false;
+        return !(card.entry.kanji.length > 1 && card.entry.kanji.some((c) => known.has(c)) && card.entry.level === "N5");
+      });
+      const highWordEasyKanji = list.find((card) => card.entry.level !== "N5" && card.entry.kanji.every((c) => levelOf(c) === "N5"));
+      return { total: list.length, waiting: excluded.length, wrong: wrong.map((card) => card.id).slice(0, 5), highWordEasyKanji: highWordEasyKanji?.id };
+    });
+    check(result.total > 0 && result.waiting > 0 && !result.wrong.length, JSON.stringify(result));
+    check(!!result.highWordEasyKanji, "ninguna palabra de otro nivel con kanjis de N5");
+  });
+
+  await step("escritura: nivel a nivel, con repaso, y la prueba salta un nivel", async () => {
+    const result = await page.evaluate(async () => {
+      await BANK.loadUpTo("N1");
+      $("drawLevel").value = "auto";
+      const savedKanji = new Map(userKanji), savedMeta = meta.writing;
+      userKanji = new Map(); meta.writing = {};
+      drawTurn = 1;
+      const first = pickDrawKanji();
+      // La prueba de N5 aprobada: el siguiente kanji ya es de N4
+      const n5 = kanjiByLevel().N5;
+      const test = { level: "N5", queue: n5.slice(0, 8), results: n5.slice(0, 8).map((c) => ({ c, mistakes: 0, shown: false, hinted: false })) };
+      switchView("draw");
+      await finishWritingTest(test);
+      const after = pickDrawKanji();
+      const status = $("drawStatus").textContent;
+      // Repaso: con kanjis ya escritos, cada reviewEvery sale uno de ellos
+      drawTurn = STUDY_CONFIG.writing.reviewEvery;
+      const review = pickDrawKanji();
+      const out = { first: first.kanji.level, after: after.kanji.level, skipped: meta.writing.skipped, review: review.review, reviewLevel: review.kanji.level, status,
+        written: [...userKanji.values()].filter((k) => k.canWrite).length };
+      userKanji = savedKanji; meta.writing = savedMeta;
+      return out;
+    });
+    check(result.first === "N5" && result.after === "N4" && result.skipped.join() === "N5", JSON.stringify(result));
+    check(result.review === true && result.reviewLevel === "N5" && result.written === 8, JSON.stringify(result));
+    check(/N4/.test(result.status), result.status);
   });
 
   await step("escritura: los trazos de un kanji llegan de KanjiVG (versión fija)", async () => {
