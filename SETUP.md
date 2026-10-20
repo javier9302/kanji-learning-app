@@ -239,11 +239,16 @@ lo intente sin pasar por la app, y la función lee el plan en el servidor. Todav
 cuando los haya, una Edge Function con la clave de servicio llamará a `admin_set_plan` desde el
 aviso del proveedor de pagos (Stripe o Lemon Squeezy).
 
-## Frases de ejemplo y «Repasar con frases»
+## Frases de ejemplo y la presentación «En una frase»
 
-Con **Ajustes → Repaso → Repasar con frases** (desactivado por defecto), el modo «Escribir la lectura»
-pregunta cada palabra dentro de una frase en la que el resto ya se conoce. Si no hay ninguna frase
-que valga, sale la tarjeta de siempre. La corrección y el calendario de repasos no cambian.
+En **Estudiar → Repasar**, con el modo «Escribir la lectura», la opción **Presentación** elige
+entre «Palabra sola» (por defecto) y «En una frase»: cada palabra se pregunta resaltada dentro de
+una frase en la que el resto ya se conoce. Con «En una frase» también se pueden repasar kanjis: se
+resalta el kanji dentro de una palabra de la frase y se pide cómo suena allí (語 en 日本語 → ご),
+repartiendo la lectura de la palabra con `bank/readings.js`. Si no hay ninguna frase que valga,
+sale la tarjeta de siempre con el aviso «Sin frase disponible». La corrección y el calendario de
+repasos no cambian. Sustituye al antiguo ajuste «Repasar con frases»: quien lo tenía activado
+empieza en «En una frase».
 
 - Las frases salen de tus textos: al guardar uno (escrito por la IA, de la comunidad o pegado) se
   quedan sus frases de 4 a 20 unidades con todas las palabras resueltas. No se usa ninguna IA.

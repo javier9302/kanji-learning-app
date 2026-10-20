@@ -7,11 +7,12 @@
    - A una PALABRA se le pide su lectura, siempre completa (長い -> ながい) y
      con una sola respuesta. Si la escritura es ambigua se muestra con su
      significado: 角 (esquina) -> かど.
-   - A un KANJI suelto nunca se le pide la lectura: solo su significado
-     (aquí, con tarjetas que se voltean) o su escritura (en Escribir, con
-     contexto: "Usado en: 勉＿").
-   El modo "Escribir la lectura" es siempre un cuadro de texto, así que
-   solo pregunta palabras; los kanjis salen únicamente en el modo tarjetas.
+   - A un KANJI suelto se le pide su significado (aquí, con tarjetas que se
+     voltean), su escritura (en Escribir, con contexto: "Usado en: 勉＿") o,
+     con la presentación "En una frase", cómo suena dentro de una palabra de
+     la frase (語 en 日本語 -> ご). Nunca su lectura sin contexto.
+   El modo "Escribir la lectura" es siempre un cuadro de texto: con "Palabra
+   sola" solo pregunta palabras; con "En una frase", también kanjis.
 
    Progreso del usuario:
      userWords  (reading.js)  por palabra, clave "escritura|lectura"
@@ -179,15 +180,20 @@ function studyItems() {
    2. QUÉ TOCA ESTUDIAR
    ========================================= */
 
-/* El contenido depende del modo. Escribir la lectura solo existe para
-   palabras: en ese modo "Kanjis" y "Palabras y kanjis" ni se muestran.
-   En el modo tarjetas están las tres opciones. */
+/* El contenido depende del modo. La presentación (palabra sola o en una frase)
+   solo existe al escribir la lectura. Un kanji suelto solo tiene lectura que
+   escribir dentro de una frase: con "Palabra sola", "Kanjis" y "Palabras y
+   kanjis" ni se muestran. En el modo tarjetas están las tres opciones. */
+const inSentences = () => $("studyMode").value === "type" && $("studyPresentation").value === "sentence";
+
 function syncStudyControls() {
   const typing = $("studyMode").value === "type";
+  $("studyPresentation").closest(".field").classList.toggle("hidden", !typing);
+  const wordsOnly = typing && !inSentences();
   for (const option of $("studyType").options) {
-    option.hidden = option.disabled = typing && option.value !== "word";
+    option.hidden = option.disabled = wordsOnly && option.value !== "word";
   }
-  if (typing && $("studyType").value !== "word") {
+  if (wordsOnly && $("studyType").value !== "word") {
     $("studyType").value = prefs.studyType = "word";
     saveLocal("kanji-prefs", prefs);
   }
@@ -291,7 +297,7 @@ function newWordCandidates() {
 /* Tarjetas posibles, por grupos: due (toca repasar), fresh (nuevas, ya en el
    orden en que se presentan) y extra (ya estudiadas que aún no tocan). */
 function studyCards() {
-  const type = $("studyMode").value === "type" ? "word" : $("studyType").value;
+  const type = $("studyMode").value === "type" && !inSentences() ? "word" : $("studyType").value;
   const due = [], extra = [], fresh = [];
   let excluded = [];
   const card = (kind, entry, rec, group) => ({ kind, id: entry.id || entry.c, entry, rec, group });
@@ -412,11 +418,20 @@ async function startSession() {
     document.body.classList.remove("studying");
     return renderStudyHome();
   }
-  session = { queue, total: queue.length, done: 0, firstTry: 0, missed: new Map(), mode: $("studyMode").value };
-  if (prefs.sentenceReview && session.mode === "type") {
-    // Frases comunes de los niveles de estas palabras (las del usuario ya están en memoria)
+  session = {
+    queue, total: queue.length, done: 0, firstTry: 0, missed: new Map(), mode: $("studyMode").value,
+    sentences: inSentences()
+  };
+  if (session.sentences) {
+    // Frases comunes de los niveles de estas tarjetas y del usuario (las suyas ya están en memoria).
+    // Para los kanjis, además, cómo se reparte la lectura de cada palabra (bank/readings.js).
     const current = session;
-    await ensureSentences(queue.map((card) => card.entry.level).filter(Boolean)).catch(() => {});
+    const levels = [...queue.map((card) => card.entry.level).filter(Boolean),
+      ...BANK.LEVELS.slice(0, BANK.LEVELS.indexOf(userLevel()) + 1)];
+    await Promise.all([
+      ensureSentences(levels),
+      queue.some((card) => card.kind === "kanji") ? BANK.loadReadings() : null
+    ]).catch(() => {});
     if (session !== current) return;
   }
   document.body.classList.add("studying");
@@ -455,38 +470,49 @@ function questionHTML(card) {
       ? `<p class="card-sense">（${escapeHTML(gloss(entry, 2))}）</p>` : ""}`;
 }
 
-/* Con "Repasar con frases": la palabra se pregunta dentro de una frase. Se
-   pide su lectura entera (nunca la de un kanji suelto) y se corrige igual que
-   la tarjeta de siempre. pick: lo que devuelve sentenceForCard. */
+/* Con la presentación "En una frase": la palabra (o el kanji, dentro de una
+   palabra) se pregunta en una frase y se corrige igual que la tarjeta de
+   siempre. pick: lo que devuelve sentenceForCard. */
 function sentenceQuestionHTML(card, pick) {
-  const { sentence, target, extra } = pick;
+  const { sentence, target, extra, char, sounds } = pick;
   const token = sentence.tokens[target];
   const translation = sentenceTranslation(sentence);
   return `
-    <div class="card-sentence" lang="ja">${sentenceLineHTML(sentence, { target, extra })}${
+    <div class="card-sentence" lang="ja">${sentenceLineHTML(sentence, { target, extra, char, sounds })}${
       translation ? `<button class="sent-btn" type="button" data-sent-translate
         title="${t("Traducción de la frase")}" aria-label="${t("Traducción de la frase")}" lang="ja">訳</button>` : ""}</div>
     ${translation ? `<p id="sentTranslation" class="sent-translation hidden">${escapeHTML(translation)}</p>` : ""}
     <p id="sentExtra" class="helper sent-gloss hidden"></p>
-    <p class="helper">${t("¿Cómo se lee la palabra marcada?")}${token.surface !== card.entry.w
-      ? ` ${t("Vale su lectura aquí o la de su forma de diccionario ({word}).", { word: card.entry.w })}` : ""}</p>`;
+    <p class="helper">${t("Escribe la lectura de la parte resaltada")}${card.kind === "word" && token.surface !== card.entry.w
+      ? `. ${t("Vale su lectura aquí o la de su forma de diccionario ({word}).", { word: card.entry.w })}` : ""}</p>`;
 }
 
 /* La frase al enseñar la respuesta: entera, con furigana y traducción */
 function sentenceAnswerHTML(pick) {
-  const { sentence, target } = pick;
+  const { sentence, target, char, sounds } = pick;
   const translation = sentenceTranslation(sentence);
   return `
-    <div class="card-sentence answered" lang="ja">${sentenceLineHTML(sentence, { target, reveal: true })}</div>
+    <div class="card-sentence answered" lang="ja">${sentenceLineHTML(sentence, { target, char, sounds, reveal: true })}</div>
     ${translation ? `<p class="sent-translation">${escapeHTML(translation)}</p>` : ""}
     ${"speechSynthesis" in window
       ? `<button id="sentSpeakBtn" class="button button-quiet speak-btn" type="button">🔊 ${t("Escuchar la frase")}</button>` : ""}
     ${sentenceCreditHTML(sentence)}`;
 }
 
-/* Lo que se enseña al responder */
-function answerHTML(card) {
+/* Lo que se enseña al responder. pick: la frase, si se preguntó dentro de una */
+function answerHTML(card, pick = null) {
   const { entry } = card;
+  if (card.kind === "kanji" && pick) {
+    // Cómo suena aquí, su lectura de diccionario si es otra (学 en 学校: がっ, がく) y la palabra
+    const base = pick.tag.split("|")[1];
+    const token = pick.sentence.tokens[pick.target];
+    const word = token.key ? wordEntry(token.key) : null;
+    return `
+      <p class="reading" lang="ja">${escapeHTML(pick.sound)}${base !== pick.sound ? ` <small>（${escapeHTML(base)}）</small>` : ""}</p>
+      <p class="meaning">${escapeHTML(gloss(entry, 4))}</p>
+      <p class="kanji-note"><span lang="ja">${escapeHTML(token.surface)}（${escapeHTML(normalizeReading(token.reading))}）</span>${
+        word && meaningOf(word).length ? ` · ${escapeHTML(gloss(word, 2))}` : ""}</p>`;
+  }
   if (card.kind === "kanji") {
     const examples = [...entry.words].sort((a, b) => userWords.has(b.id) - userWords.has(a.id)).slice(0, 3);
     return `
@@ -495,8 +521,12 @@ function answerHTML(card) {
         `<span lang="ja">${escapeHTML(word.w)}（${escapeHTML(word.r)}）</span>`).join("")}</p>` : ""}`;
   }
   const parts = entry.kanji.map((c) => BANK.kanji.get(c)).filter((k) => k && meaningOf(k).length);
+  // En una frase, la lectura de la parte resaltada tal como está escrita (行きます いきます)
+  const token = pick?.sentence.tokens[pick.target];
   return `
-    <p class="reading" lang="ja">${escapeHTML(entry.r)}</p>
+    <p class="reading" lang="ja">${token && token.surface !== entry.w
+      ? `${escapeHTML(normalizeReading(token.reading))} <small>（${escapeHTML(entry.w)} ${escapeHTML(entry.r)}）</small>`
+      : escapeHTML(entry.r)}</p>
     <p class="meaning">${escapeHTML(gloss(entry))}</p>
     ${parts.length && !(parts.length === 1 && entry.w === parts[0].c) ? `<p class="kanji-note">${parts.map((k) =>
       `${escapeHTML(k.c)} ${escapeHTML(gloss(k, 2))}`).join(" · ")}</p>` : ""}
@@ -539,10 +569,12 @@ function showCard() {
   const card = session.queue[0];
   const { entry } = card;
   const area = $("studyArea");
-  // La lectura se escribe solo en palabras; un kanji siempre es tarjeta que se voltea
-  const form = session.mode === "type" && card.kind === "word" ? "type" : "flash";
-  // Con el ajuste "Repasar con frases": dentro de una frase si hay alguna que valga
-  const pick = form === "type" && prefs.sentenceReview ? sentenceForCard(card) : null;
+  // Con "En una frase": dentro de una frase si hay alguna que valga
+  const pick = session.mode === "type" && session.sentences ? sentenceForCard(card) : null;
+  // La lectura se escribe en palabras y, dentro de una frase, en kanjis; si no, el kanji es tarjeta que se voltea
+  const form = session.mode === "type" && (card.kind === "word" || pick) ? "type" : "flash";
+  // Un kanji que ahora se pregunta por cómo suena: no dice nada de si sabe su significado
+  card.byReading = card.kind === "kanji" && !!pick;
 
   area.innerHTML = `
     <div class="card">
@@ -554,6 +586,7 @@ function showCard() {
         <div style="width:${(session.done / session.total) * 100}%"></div>
       </div>
       ${pick ? sentenceQuestionHTML(card, pick) : questionHTML(card)}
+      ${session.sentences && !pick ? `<p class="helper sent-missing">${t("Sin frase disponible")}</p>` : ""}
       ${form === "type" ? `
       <form id="readingForm" autocomplete="off">
         <input id="readingInput" class="reading-input" type="text" lang="ja" inputmode="text"
@@ -583,7 +616,7 @@ function showCard() {
     area.querySelector("#sentTranslation")?.remove();
     answer.innerHTML = `
       ${pick ? sentenceAnswerHTML(pick) : ""}
-      ${answerHTML(card)}
+      ${answerHTML(card, pick)}
       <div class="card-actions">
         ${ratings.map(([rating, label, cls], i) => `
           <button class="button ${cls}" type="button" data-rate="${rating}">
@@ -666,6 +699,18 @@ function showCard() {
       feedback.textContent = t("Escribe una lectura primero.");
       return;
     }
+    if (card.kind === "kanji") {
+      // Cómo suena en esta palabra (学 en 学校: がっ). Su lectura de diccionario no es un fallo
+      const correct = typed === normalizeReading(pick.sound);
+      if (!correct && typed === normalizeReading(pick.tag.split("|")[1])) {
+        feedback.textContent = t("Esa es su lectura de diccionario; escribe cómo suena en esta palabra.");
+        feedback.className = "message";
+        input.select();
+        return;
+      }
+      lock();
+      return finish(correct, correct ? t("¡Correcto!") : t("No es correcto."));
+    }
     // En una frase también vale la lectura de la palabra tal como está escrita (行きます -> いきます)
     const correct = typed === normalizeReading(entry.r) ||
       !!pick && typed === normalizeReading(pick.sentence.tokens[pick.target].reading);
@@ -689,9 +734,9 @@ function showCard() {
 /* Una palabra se ha preguntado dentro de una frase: la frase cuenta como vista */
 function sentencePracticed(pick, card, correct) {
   markSentenceShown(pick.sentence.id).catch((error) => console.error("No se pudo anotar la frase:", error));
-  // Acertada a la primera: sus lecturas de kanji cuentan como practicadas en contexto
+  // Acertada a la primera: sus lecturas de kanji (la del kanji preguntado) cuentan como practicadas en contexto
   if (!correct || card.attempts) return;
-  for (const tag of wordTags(pick.sentence, card.entry.w)) {
+  for (const tag of pick.tag ? [pick.tag] : wordTags(pick.sentence, card.entry.w)) {
     const entry = meta.practice[tag] ??= { n: 0, last: "" };
     entry.n++;
     entry.last = today();
@@ -773,7 +818,7 @@ async function gradeCard(card, rating) {
   rec.lastSeen = Date.now();
 
   // Dominada: tres aciertos seguidos en días distintos o un intervalo largo. Un fallo la devuelve a "learning".
-  if (card.kind === "word") rec.canReadKanji = correct; else rec.knowsMeaning = correct;
+  if (card.kind === "word") rec.canReadKanji = correct; else if (!card.byReading) rec.knowsMeaning = correct;
   if (!correct) rec.status = "learning";
   else if (rec.streakDays >= MASTER_STREAK || rec.interval >= STUDY_CONFIG.masteredAtDays) rec.status = "mastered";
   else if (rec.status !== "mastered") rec.status = "learning";

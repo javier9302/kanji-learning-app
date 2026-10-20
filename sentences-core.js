@@ -136,6 +136,62 @@ const unpackTags = (packed) => packed ? packed.split(",").map((part) => {
   return `${[...part].slice(0, cut).join("")}|${[...part].slice(cut).join("")}`;
 }) : [];
 
+/* 来る cambia la lectura de su kanji al conjugarse: 来ます き, 来ない こ */
+const SC_IRREGULAR_SOUNDS = { "来": { "く": ["き", "こ"] } };
+
+/* Cómo suena cada carácter de una unidad de la frase, repartiendo su lectura
+   con las etiquetas de su palabra (las de JmdictFurigana, bank/readings.js):
+   学校 がっこう + [学|がく, 校|こう] -> ["がっ", "こう"]. La unidad puede ir
+   conjugada (行った いった -> ["い", "", ""]). Un carácter en kana lleva "";
+   varios kanjis que se leen juntos (今日 きょう) llevan la lectura en el primero
+   y null en los demás. null si no hay un reparto único. */
+function kanjiSounds(surface, reading, tags, kanjiInfo) {
+  const chars = [...surface];
+  const target = scReading(reading || "");
+  const single = new Map(), groups = [];
+  for (const tag of tags || []) {
+    const [text, base] = scKeyParts(tag);
+    if ([...text].length > 1) groups.push([text, [...text].length, base]);
+    else (single.get(text) || single.set(text, new Set()).get(text)).add(base);
+  }
+  const found = new Map(); // repartos distintos, por su forma escrita
+  const walk = (i, j, sounds, previous) => {
+    if (found.size > 1) return;
+    if (i === chars.length) {
+      if (j === target.length) found.set(JSON.stringify(sounds), sounds);
+      return;
+    }
+    const c = chars[i];
+    if (!scIsKanji(c) && c !== "々") {
+      const kana = scHiragana(c);
+      if (target[j] === kana || kana === "ー" && j < target.length) walk(i + 1, j + 1, [...sounds, ""], previous);
+      return;
+    }
+    for (const [text, length, base] of groups) {
+      if (chars.slice(i, i + length).join("") === text && target.startsWith(base, j)) {
+        walk(i + length, j + base.length, [...sounds, base, ...Array(length - 1).fill(null)], chars[i + length - 1]);
+      }
+    }
+    const kanji = c === "々" ? previous : c;
+    const bases = kanji && single.get(kanji);
+    if (!bases) return;
+    const options = new Set(bases);
+    for (const [sound, base] of kanjiVariants(kanjiInfo(kanji))) if (bases.has(base)) options.add(sound);
+    for (const base of bases) {
+      for (const sound of SC_IRREGULAR_SOUNDS[kanji]?.[base] || []) options.add(sound);
+      // La etiqueta puede traer la okurigana que sigue (終|おわ en 終わります): el kanji es お
+      for (let k = 1; k < [...base].length; k++) {
+        if (base.endsWith(scHiragana(chars.slice(i + 1, i + 1 + k).join("")))) options.add(base.slice(0, -k));
+      }
+    }
+    for (const sound of options) {
+      if (target.startsWith(sound, j)) walk(i + 1, j + sound.length, [...sounds, sound], kanji);
+    }
+  };
+  walk(0, 0, [], "");
+  return found.size === 1 ? [...found.values()][0] : null;
+}
+
 /* =========================================
    2. LA FRASE
    -----------------------------------------
@@ -318,35 +374,61 @@ function chooseSentence(card, state) {
     // La unidad tiene que leerse como espera la tarjeta: se comprueba otra vez aquí
     const target = sentence.tokens.findIndex((token) => token.key === card.id && readingMatches(token, lemma, reading));
     if (target < 0) continue;
-    const unknown = new Map(); // clave -> índice de su primera unidad
-    sentence.tokens.forEach((token, index) => {
-      if (!scIsContent(token) || token.key === card.id) return;
-      const key = token.key || `?${token.surface}`; // sin resolver: no se puede saber si la conoce
-      if (!unknown.has(key) && !(token.key && state.isKnown(token.key))) unknown.set(key, index);
-    });
-    if (unknown.size > 1) continue;
-    const stats = state.statsOf?.(sentence.id) || {};
-    usable.push({ sentence, target, extra: unknown.size ? [...unknown.values()][0] : -1,
-      shown: stats.shown || 0, lastShown: stats.lastShown || 0 });
+    const item = scUsable({ sentence, target }, card.id, state);
+    if (item) usable.push(item);
   }
-  if (!usable.length) return null;
+  const best = scBest(usable);
+  return best && { sentence: best.sentence, target: best.target, extra: best.extra };
+}
 
+/* Un kanji suelto: se pregunta cómo suena dentro de una palabra de la frase.
+   state.candidates: [{ sentence, target, char, sound, sounds, tag }] (la unidad,
+   el carácter dentro de ella, cómo suena, el reparto de kanjiSounds y su
+   etiqueta "kanji|lectura"). La palabra que lo lleva cuenta como una más: si no
+   la conoce es la desconocida de más, pero no se puede tocar (enseñaría la
+   respuesta). Devuelve el candidato elegido con su extra, o null. */
+function chooseKanjiSentence(state) {
+  const usable = (state.candidates || []).map((candidate) => scUsable(candidate, null, state)).filter(Boolean);
+  const best = scBest(usable);
+  if (!best) return null;
+  const { shown, lastShown, ...pick } = best;
+  return { ...pick, extra: pick.extra === pick.target ? -1 : pick.extra };
+}
+
+/* La frase sirve si, quitando la palabra preguntada (skip), le queda como mucho
+   una palabra sin conocer. Devuelve el candidato con extra y sus contadores, o null. */
+function scUsable(candidate, skip, state) {
+  const unknown = new Map(); // clave -> índice de su primera unidad
+  candidate.sentence.tokens.forEach((token, index) => {
+    if (!scIsContent(token) || skip && token.key === skip) return;
+    const key = token.key || `?${token.surface}`; // sin resolver: no se puede saber si la conoce
+    if (!unknown.has(key) && !(token.key && state.isKnown(token.key))) unknown.set(key, index);
+  });
+  if (unknown.size > 1) return null;
+  const stats = state.statsOf?.(candidate.sentence.id) || {};
+  return { ...candidate, extra: unknown.size ? [...unknown.values()][0] : -1,
+    shown: stats.shown || 0, lastShown: stats.lastShown || 0 };
+}
+
+/* La mejor de las frases que sirven, o null */
+function scBest(usable) {
+  if (!usable.length) return null;
   // La última que se enseñó para esta palabra se evita si hay otra
   const latest = Math.max(...usable.map((item) => item.lastShown));
+  const others = usable.some((item) => item.lastShown !== latest);
   const score = (item) =>
     (item.extra >= 0 ? 1000 : 0) +
-    (usable.length > 1 && latest > 0 && item.lastShown === latest ? 500 : 0) +
+    (others && latest > 0 && item.lastShown === latest ? 500 : 0) +
     (SOURCE_ORDER[item.sentence.source] ?? 3) * 20 +   // primero las de sus textos, luego Tatoeba, luego IA
     Math.min(item.shown, 20) * 8;                      // …salvo que ya la haya visto muchas veces
-  usable.sort((a, b) => score(a) - score(b) || a.lastShown - b.lastShown || (a.sentence.id < b.sentence.id ? -1 : 1));
-  const { sentence, target, extra } = usable[0];
-  return { sentence, target, extra };
+  return [...usable].sort((a, b) => score(a) - score(b) || a.lastShown - b.lastShown ||
+    (a.sentence.id < b.sentence.id ? -1 : a.sentence.id > b.sentence.id ? 1 : 0))[0];
 }
 
 /* Para tools/ y las pruebas (Node); en el navegador son globales */
 if (typeof module !== "undefined") {
   module.exports = {
-    kanjiVariants, canonicalReading, alignReading, tagsFromFurigana, packTags, unpackTags,
-    readingMatches, resolveKey, buildSentence, validateSentence, sentenceFingerprint, chooseSentence
+    kanjiVariants, canonicalReading, alignReading, tagsFromFurigana, packTags, unpackTags, kanjiSounds,
+    readingMatches, resolveKey, buildSentence, validateSentence, sentenceFingerprint, chooseSentence, chooseKanjiSentence
   };
 }

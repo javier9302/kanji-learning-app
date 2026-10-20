@@ -97,28 +97,49 @@ export default async function extra({ page, step, check }) {
     check(state.sentences.some((s) => s[3].includes("学校|がっこう")), "学校 no es target");
   });
 
-  /* Una sesión con una sola tarjeta, para preguntar justo esa palabra */
-  const studyOne = (id) => page.evaluate((wordId) => {
-    const entry = BANK.words.get(wordId), rec = userWords.get(wordId) || null;
-    session = { queue: [{ kind: "word", id: wordId, entry, rec, group: "new" }], total: 1, done: 0, firstTry: 0, missed: new Map(), mode: "type" };
+  /* Una sesión con una sola tarjeta, para preguntar justo esa palabra (o ese kanji) */
+  const studyOne = (id, kind = "word") => page.evaluate(async (cardId, cardKind) => {
+    if (cardKind === "kanji") await BANK.loadReadings();
+    const entry = cardKind === "kanji" ? BANK.kanji.get(cardId) : BANK.words.get(cardId);
+    const rec = (cardKind === "kanji" ? userKanji : userWords).get(cardId) || null;
+    session = { queue: [{ kind: cardKind, id: cardId, entry, rec, group: "new" }], total: 1, done: 0, firstTry: 0,
+      missed: new Map(), mode: "type", sentences: inSentences() };
     switchView("study");
     document.body.classList.add("studying");
     showCard();
-  }, id);
+  }, id, kind);
+  const setSelect = (id, value) => page.evaluate((selectId, selected) => {
+    $(selectId).value = selected;
+    $(selectId).dispatchEvent(new Event("change"));
+  }, id, value);
   const answer = async (typed) => {
     await page.evaluate((value) => { $("readingInput").value = value; $("checkBtn").click(); }, typed);
     await page.waitForSelector('[data-rate="good"], [data-rate="next"]', { timeout: 5000 });
   };
 
-  await step("repasar con frases: desactivado, la tarjeta es la de siempre", async () => {
+  await step("presentación «Palabra sola» (por defecto): la tarjeta es la de siempre", async () => {
     await page.evaluate(async () => { meta.reading.assumed = "N5"; await saveMeta(); }); // conoce el vocabulario de N5
+    check(await page.evaluate(() => $("studyPresentation").value === "word" && !$("sentenceReviewInput")), "presentación inicial");
     await studyOne("学校|がっこう");
-    check(await page.evaluate(() => !document.querySelector(".card-sentence") && !!document.querySelector(".card-symbol")), "salió una frase");
+    check(await page.evaluate(() => !document.querySelector(".card-sentence") && !document.querySelector(".sent-missing") &&
+      !!document.querySelector(".card-symbol")), "salió una frase");
   });
 
-  await step("repasar con frases: la palabra dentro de una frase, corregida como siempre", async () => {
-    await page.evaluate(() => { $("sentenceReviewInput").click(); });
-    check(await page.evaluate(() => prefs.sentenceReview === true), "el ajuste no se guardó");
+  await step("presentación: solo al escribir la lectura; con «Palabra sola» el contenido es solo palabras", async () => {
+    await setSelect("studyMode", "flash");
+    check(await page.evaluate(() => $("studyPresentation").closest(".field").classList.contains("hidden")), "se ve en Tarjetas");
+    await setSelect("studyMode", "type");
+    const state = await page.evaluate(() => ({
+      shown: !$("studyPresentation").closest(".field").classList.contains("hidden"),
+      kanji: $("studyType").querySelector('[value="kanji"]').disabled
+    }));
+    check(state.shown && state.kanji, JSON.stringify(state));
+  });
+
+  await step("presentación «En una frase»: la palabra dentro de una frase, corregida como siempre", async () => {
+    await setSelect("studyPresentation", "sentence");
+    check(await page.evaluate(() => prefs.studyPresentation === "sentence" &&
+      !$("studyType").querySelector('[value="kanji"]').disabled), "el ajuste no se guardó");
     await studyOne("学校|がっこう");
     const shown = await page.evaluate(() => ({
       target: document.querySelector(".sent-target")?.textContent,
@@ -139,7 +160,7 @@ export default async function extra({ page, step, check }) {
     await page.waitForFunction(() => userWords.get("学校|がっこう")?.studied, { timeout: 5000 });
   });
 
-  await step("repasar con frases: verbo conjugado, vale su lectura en la frase; un fallo sigue siendo fallo", async () => {
+  await step("en una frase: verbo conjugado, vale su lectura en la frase; un fallo sigue siendo fallo", async () => {
     await studyOne("行く|いく");
     check(await page.evaluate(() => document.querySelector(".sent-target")?.textContent === "行きます"), "no salió 行きます");
     await answer("いきます");
@@ -155,7 +176,51 @@ export default async function extra({ page, step, check }) {
     check(await page.evaluate(() => document.querySelector(".sent-target")?.textContent === "友達"), "no salió 友達 en una frase");
     await answer("ともたち");
     check(await page.evaluate(() => $("feedback").classList.contains("incorrect") && userWords.get("友達|ともだち").incorrectCount === 1), "el fallo no se registró");
+  });
+
+  await step("en una frase: respuesta en katakana y con espacios", async () => {
+    await studyOne("学校|がっこう");
+    await answer("  ガッコウ ");
+    check(await page.evaluate(() => $("feedback").classList.contains("correct")), "ガッコウ no se aceptó");
+  });
+
+  await step("en una frase: un kanji suelto se pregunta por cómo suena en su palabra", async () => {
+    await studyOne("学", "kanji");
+    const shown = await page.evaluate(() => ({
+      target: document.querySelector(".sent-target")?.textContent,
+      unit: document.querySelector(".sent-unit")?.textContent,
+      ruby: !!document.querySelector(".sent-target rt"),
+      input: !!$("readingInput")
+    }));
+    check(shown.target === "学" && shown.unit === "学校" && !shown.ruby && shown.input, JSON.stringify(shown));
+    await page.evaluate(() => { $("readingInput").value = "がく"; $("checkBtn").click(); });
+    check(await page.evaluate(() => !$("readingInput").disabled && $("feedback").textContent.length > 0 &&
+      !$("feedback").classList.contains("incorrect")), "la lectura de diccionario contó como fallo");
+    await answer("がっ");
+    const after = await page.evaluate(() => ({
+      ok: $("feedback").classList.contains("correct"),
+      ruby: document.querySelector(".card-sentence.answered .sent-target rt")?.textContent,
+      reading: document.querySelector("#answer .reading")?.textContent
+    }));
+    check(after.ok && after.ruby === "がっ" && after.reading.startsWith("がっ"), JSON.stringify(after));
+    await shot(page, "frase-kanji");
+    await page.evaluate(() => document.querySelector('[data-rate="good"]').click());
+    await page.waitForFunction(() => userKanji.get("学")?.studied, { timeout: 5000 });
+    const rec = await page.evaluate(() => ({ fsrs: !!userKanji.get("学").fsrs, meaning: userKanji.get("学").knowsMeaning,
+      practice: meta.practice["学|がく"]?.n }));
+    check(rec.fsrs && !rec.meaning && rec.practice === 3, JSON.stringify(rec));
+  });
+
+  await step("en una frase: sin frase, la palabra sola con aviso; el kanji, como tarjeta", async () => {
+    const word = await page.evaluate(() => [...BANK.words.values()].find((w) => w.kanji.length && !w.kana && !sentencesFor(w.id).length).id);
+    await studyOne(word);
+    check(await page.evaluate(() => !!document.querySelector(".sent-missing") && !!document.querySelector(".card-symbol") &&
+      !!$("readingInput")), "palabra sin frase");
+    const kanji = await page.evaluate(() => [...BANK.kanji.values()].find((k) => meaningOf(k).length && !kanjiSentencesFor(k.c).length).c);
+    await studyOne(kanji, "kanji");
+    check(await page.evaluate(() => !!document.querySelector(".sent-missing") && !!$("revealBtn")), "kanji sin frase");
     // Se deja todo como estaba para los pasos siguientes
+    await setSelect("studyPresentation", "word");
     await page.evaluate(async () => {
       session = null;
       document.body.classList.remove("studying");

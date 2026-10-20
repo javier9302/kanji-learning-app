@@ -111,9 +111,12 @@ function saveLocal(key, value) {
 
 const prefs = loadLocal("kanji-prefs", {
   studyType: "word", studyMode: "type", studyCount: "10", goal: 20,
-  furigana: "unknown", // furigana al leer: unknown | all | none
-  sentenceReview: false // repasar las palabras dentro de una frase
+  furigana: "unknown" // furigana al leer: unknown | all | none
 });
+// Presentación al escribir la lectura: word (palabra sola) | sentence (en una frase).
+// Sustituye al antiguo ajuste "Repasar con frases": quien lo tenía activado empieza en "sentence".
+prefs.studyPresentation ??= prefs.sentenceReview ? "sentence" : "word";
+delete prefs.sentenceReview;
 
 /* =========================================
    2. AUXILIARES
@@ -981,7 +984,7 @@ function bindInstall() {
 
 function bindSettings() {
   bindInstall();
-  for (const id of ["studyType", "studyMode", "studyCount"]) {
+  for (const id of ["studyType", "studyMode", "studyPresentation", "studyCount"]) {
     if ([...$(id).options].some((o) => o.value === String(prefs[id]))) $(id).value = prefs[id];
     $(id).addEventListener("change", () => {
       prefs[id] = $(id).value;
@@ -1003,11 +1006,6 @@ function bindSettings() {
     const value = Math.round(Number($("maxNewInput").value));
     prefs.maxNew = Math.min(50, Math.max(0, Number.isFinite(value) ? value : STUDY_CONFIG.maxNewPerSession));
     $("maxNewInput").value = prefs.maxNew;
-    saveLocal("kanji-prefs", prefs);
-  });
-  $("sentenceReviewInput").checked = !!prefs.sentenceReview;
-  $("sentenceReviewInput").addEventListener("change", () => {
-    prefs.sentenceReview = $("sentenceReviewInput").checked;
     saveLocal("kanji-prefs", prefs);
   });
   $("debugStudyInput").checked = !!prefs.debugStudy;

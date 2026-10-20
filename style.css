@@ -415,11 +415,20 @@ body.studying .intro {
   background: var(--heat-4);
 }
 
+/* Flex y no rejilla: "Presentación" se oculta en el modo tarjetas */
 .study-settings {
-  display: grid;
-  grid-template-columns: 1.3fr 1fr 1fr .7fr auto;
+  display: flex;
+  flex-wrap: wrap;
   gap: 13px;
-  align-items: end;
+  align-items: flex-end;
+}
+
+.study-settings .field {
+  flex: 1 1 140px;
+}
+
+.study-settings .button {
+  flex: 0 0 auto;
 }
 
 .field {
@@ -1327,12 +1336,12 @@ footer {
     padding-top: 5px;
   }
 
-  .study-settings {
-    grid-template-columns: 1fr 1fr;
+  .study-settings .field {
+    flex-basis: calc(50% - 7px);
   }
 
   .study-settings .button {
-    grid-column: 1 / -1;
+    flex-basis: 100%;
   }
 
   .stats-grid {
@@ -2473,13 +2482,37 @@ body[data-view="dict"] .intro {
   margin: 0;
 }
 
+/* La parte preguntada: color y subrayado grueso, sin fondo (se ve igual
+   impresa en blanco y negro). No se parte entre dos líneas. */
 .sent-target {
-  background: var(--mint);
+  background: none;
   color: var(--green);
-  border-bottom: 2px solid var(--primary);
-  border-radius: 5px 5px 0 0;
-  padding: 2px 4px;
+  font-weight: 700;
+  border-bottom: 3px solid currentColor;
+  padding: 0 1px 1px;
   margin: 0 2px;
+  white-space: nowrap;
+}
+
+/* La palabra de un kanji preguntado: tampoco se parte */
+.sent-unit {
+  white-space: nowrap;
+}
+
+.sent-unit .sent-target {
+  margin: 0;
+}
+
+.sent-missing {
+  text-align: center;
+  font-size: 12px;
+  margin: 0 0 8px;
+}
+
+@media print {
+  .sent-target {
+    color: #000;
+  }
 }
 
 .card-sentence.answered .sent-target rt {

@@ -157,6 +157,7 @@ async function rebuildSentencesIfNeeded() {
 const staticSentences = new Map(); // nivel -> frases comunes ya descargadas
 const staticLoading = {};          // nivel -> promesa
 let sentenceIndex = null;          // id de palabra -> frases (se calcula una vez y se guarda)
+let kanjiSentenceIndex = null;     // kanji -> [{ sentence, target, char, sound, sounds, tag }]
 
 /* Descarga las frases comunes de un nivel (una sola vez). Si el archivo no
    existe todavía o no hay conexión, ese nivel se queda sin frases comunes. */
@@ -176,6 +177,7 @@ const ensureSentences = (levels) => Promise.all([...new Set(levels)].map(loadSta
 
 function forgetSentenceIndex() {
   sentenceIndex = null;
+  kanjiSentenceIndex = null;
 }
 
 /* Todas las frases que sirven para preguntar una palabra */
@@ -194,16 +196,47 @@ function sentencesFor(wordId) {
   return sentenceIndex.get(wordId) || [];
 }
 
-/* La frase para una tarjeta según lo que el usuario conoce, o null */
+/* Dónde sale un kanji dentro de las palabras preguntables de las frases y cómo
+   suena allí (kanjiSounds, con las lecturas de bank/readings.js: hace falta
+   BANK.loadReadings()). Solo vale si el kanji tiene su propia lectura: en
+   今日 (きょう) no se puede separar la de 今. */
+function kanjiSentencesFor(c) {
+  // Se rehace también cuando llegan las lecturas: sin ellas el reparto es peor
+  if (!kanjiSentenceIndex || kanjiSentenceIndex.readings !== BANK.readings) {
+    kanjiSentenceIndex = Object.assign(new Map(), { readings: BANK.readings });
+    const add = (sentence) => sentence.tokens.forEach((token, target) => {
+      if (!token.key || !(sentence.targets || []).includes(token.key)) return;
+      const [lemma, reading] = token.key.split("|");
+      if (!readingMatches(token, lemma, reading)) return;
+      const tags = sentenceTagsOf(token.key);
+      const sounds = kanjiSounds(token.surface, token.reading, tags, (k) => BANK.kanji.get(k));
+      if (!sounds) return;
+      const chars = [...token.surface];
+      chars.forEach((kanji, char) => {
+        if (!sounds[char] || sounds[char + 1] === null || chars.indexOf(kanji) !== char) return;
+        const tag = tags.find((tag) => tag.split("|")[0] === kanji);
+        if (!tag) return;
+        if (!kanjiSentenceIndex.has(kanji)) kanjiSentenceIndex.set(kanji, []);
+        kanjiSentenceIndex.get(kanji).push({ sentence, target, char, sound: sounds[char], sounds, tag });
+      });
+    });
+    for (const sentence of userSentences.values()) add(sentence);
+    for (const list of staticSentences.values()) list.forEach(add);
+  }
+  return kanjiSentenceIndex.get(c) || [];
+}
+
+/* La frase para una tarjeta (palabra o kanji) según lo que el usuario conoce, o null */
 function sentenceForCard(card) {
-  const candidates = sentencesFor(card.id);
+  const candidates = card.kind === "kanji" ? kanjiSentencesFor(card.id) : sentencesFor(card.id);
   if (!candidates.length) return null;
   const known = knownLemmas();
-  return chooseSentence({ id: card.id }, {
+  const state = {
     candidates,
     isKnown: (key) => isKnownKey(key, known),
     statsOf: (id) => sentenceStats.get(id)
-  });
+  };
+  return card.kind === "kanji" ? chooseKanjiSentence(state) : chooseSentence({ id: card.id }, state);
 }
 
 /* =========================================
@@ -216,21 +249,43 @@ const sentenceTranslation = (sentence) => (lang === "es" ? sentence.es || senten
      target    índice de la unidad preguntada: va marcada y nunca lleva furigana
      extra     índice de la palabra desconocida de más: siempre con furigana y se puede tocar
      furigana  "all" | "unknown" | "none" para las demás (por defecto, el ajuste de lectura)
-     reveal    true al enseñar la respuesta: furigana en todo, también en la preguntada */
-function sentenceLineHTML(sentence, { target = -1, extra = -1, furigana = prefs.furigana, reveal = false } = {}) {
+     reveal    true al enseñar la respuesta: furigana en todo, también en la preguntada
+     char, sounds  al preguntar un kanji suelto: solo ese carácter de la unidad
+               va marcado; el resto de la unidad sigue el ajuste de furigana */
+function sentenceLineHTML(sentence, { target = -1, extra = -1, furigana = prefs.furigana, reveal = false, char = -1, sounds = null } = {}) {
   const known = knownLemmas();
   return sentence.tokens.map((token, index) => {
     // Furigana solo en palabras resueltas: kuromoji lee mal números y contadores (七時 -> ななじ)
     const hasKanji = /\p{Script=Han}/u.test(token.surface) && token.reading && !!token.key;
+    const unknown = !!token.key && !UNCOUNTED_POS.has(token.pos) && !isKnownKey(token.key, known);
+    const ruby = hasKanji && (reveal || index === extra || furigana === "all" || furigana === "unknown" && unknown);
+    if (index === target && char >= 0) {
+      return `<span class="sent-unit">${unitCharsHTML(token.surface, sounds, char, ruby, reveal)}</span>`;
+    }
     if (index === target) {
       return `<mark class="sent-target">${reveal && hasKanji ? rubyHTML(token.surface, token.reading) : escapeHTML(token.surface)}</mark>`;
     }
-    const unknown = !!token.key && !UNCOUNTED_POS.has(token.pos) && !isKnownKey(token.key, known);
-    const ruby = hasKanji && (reveal || index === extra || furigana === "all" || furigana === "unknown" && unknown);
     const html = ruby ? rubyHTML(token.surface, token.reading) : escapeHTML(token.surface);
     return index === extra
       ? `<span class="sent-extra" role="button" tabindex="0" data-sent-extra="${index}">${html}</span>` : html;
   }).join("");
+}
+
+/* Una unidad carácter a carácter (sounds, de kanjiSounds): solo char va marcado
+   y su furigana sale únicamente al enseñar la respuesta; los demás kanjis la
+   llevan si ruby. Los kanjis que se leen juntos (null) van con el anterior. */
+function unitCharsHTML(surface, sounds, char, ruby, reveal) {
+  const chars = [...surface];
+  let html = "";
+  for (let i = 0; i < chars.length; i++) {
+    let end = i + 1;
+    while (sounds[end] === null) end++;
+    const text = escapeHTML(chars.slice(i, end).join(""));
+    const part = sounds[i] && (i === char ? reveal : ruby) ? `<ruby>${text}<rt>${escapeHTML(sounds[i])}</rt></ruby>` : text;
+    html += i === char ? `<mark class="sent-target">${part}</mark>` : part;
+    i = end - 1;
+  }
+  return html;
 }
 
 /* Lo que se sabe de una unidad para explicarla al tocarla: lectura y significado */
@@ -257,7 +312,7 @@ function renderKanjiReadings() {
         return `<li title="${escapeHTML(tip)}"><strong lang="ja">${escapeHTML(kanji)}</strong>
           <span lang="ja">${escapeHTML(reading)}</span>${entry.n > 1 ? `<span>×${entry.n}</span>` : ""}</li>`;
       }).join("")
-    : `<li><span>${t("Aquí verás las lecturas de kanji que aciertes al repasar con frases.")}</span></li>`;
+    : `<li><span>${t("Aquí verás las lecturas de kanji que aciertes al repasar «En una frase».")}</span></li>`;
 }
 
 /* De dónde es la frase: las de Tatoeba llevan su autor y su licencia */

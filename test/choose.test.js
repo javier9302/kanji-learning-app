@@ -1,6 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { chooseSentence } = require("../sentences-core.js");
+const { chooseSentence, chooseKanjiSentence, kanjiSounds } = require("../sentences-core.js");
+const { loadBank } = require("../tools/lib/bank.js");
 
 /* Frase mínima: unidades [superficie, lema, lectura, tipo, clave] */
 const sentence = (id, source, units, targets) => ({
@@ -86,4 +87,39 @@ test("se descarta la frase donde la palabra se lee de otra forma", () => {
   // Conjugada: 行った leído いった vale para 行く
   const verb = sentence("c", "ai", [GAKKOU, NI, ["行った", "行く", "いった", "verb", "行く|いく"], DOT], ["行く|いく"]);
   assert.equal(chooseSentence({ id: "行く|いく" }, { candidates: [verb], isKnown: () => true }).target, 2);
+});
+
+test("kanjiSounds: cómo suena cada kanji dentro de su unidad", () => {
+  const BANK = loadBank();
+  const info = (c) => BANK.kanji.get(c);
+  assert.deepEqual(kanjiSounds("学校", "がっこう", ["学|がく", "校|こう"], info), ["がっ", "こう"]);
+  assert.deepEqual(kanjiSounds("日本語", "にほんご", ["日|に", "本|ほん", "語|ご"], info), ["に", "ほん", "ご"]);
+  assert.deepEqual(kanjiSounds("行った", "いった", ["行|い"], info), ["い", "", ""]);           // conjugada
+  assert.deepEqual(kanjiSounds("来ます", "きます", ["来|く"], info), ["き", "", ""]);           // irregular
+  assert.deepEqual(kanjiSounds("時々", "ときどき", ["時|とき", "時|とき"], info), ["とき", "どき"]);
+  assert.deepEqual(kanjiSounds("終わります", "おわります", ["終|おわ"], info), ["お", "", "", "", ""]); // okurigana en la etiqueta
+  assert.deepEqual(kanjiSounds("今日", "きょう", ["今日|きょう"], info), ["きょう", null]);     // se leen juntos
+  assert.equal(kanjiSounds("学校", "がくせい", ["学|がく", "校|こう"], info), null);             // no cuadra
+});
+
+test("chooseKanjiSentence: la frase del kanji, sin repetir la última y sin tocar su palabra", () => {
+  const NIHONGO = ["日本語", "日本語", "にほんご", "noun", "日本語|にほんご"];
+  const MAINICHI = ["毎日", "毎日", "まいにち", "noun", "毎日|まいにち"];
+  const BENKYOU = ["勉強しています", "勉強", "べんきょうしています", "verb", "勉強|べんきょう"];
+  const WO = ["を", "を", "を", "particle"];
+  const make = (id) => ({ sentence: sentence(id, "text", [MAINICHI, NIHONGO, WO, BENKYOU, DOT], ["日本語|にほんご"]),
+    target: 1, char: 2, sound: "ご", sounds: ["に", "ほん", "ご"], tag: "語|ご" });
+  const state = (isKnown, stats = {}) => ({ candidates: [make("a"), make("b")], isKnown, statsOf: (id) => stats[id] });
+  const all = known("毎日|まいにち", "日本語|にほんご", "勉強|べんきょう");
+  const result = chooseKanjiSentence(state(all));
+  assert.equal(result.sentence.id, "a");
+  assert.equal(result.sound, "ご");
+  assert.equal(result.extra, -1);
+  assert.ok(!("shown" in result));
+  // La última que salió se evita si hay otra
+  assert.equal(chooseKanjiSentence(state(all, { a: { shown: 1, lastShown: 5 } })).sentence.id, "b");
+  // Su palabra sin conocer cuenta como la desconocida de más, pero no se puede tocar
+  assert.equal(chooseKanjiSentence(state(known("毎日|まいにち", "勉強|べんきょう"))).extra, -1);
+  assert.equal(chooseKanjiSentence(state(known("毎日|まいにち"))), null);
+  assert.equal(chooseKanjiSentence({ candidates: [], isKnown: all }), null);
 });
