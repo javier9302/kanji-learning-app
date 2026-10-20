@@ -444,7 +444,8 @@ async function renderReadHome() {
       <label id="promptCustomField" class="field hidden"><span>${t("Tu tema")}</span>
         <input id="promptCustom" class="search" type="text" maxlength="80" autocomplete="off"></label>
       <div class="form-footer">
-        <p class="helper">${t("La IA escribe un texto a tu medida con las palabras que ya conoces. Tarda alrededor de un minuto.")}</p>
+        <p class="helper">${t("La IA escribe un texto a tu medida con las palabras que ya conoces. Tarda alrededor de un minuto.")}${
+          aiQuotaText() ? `<br><span class="ai-quota">${escapeHTML(aiQuotaText())}</span>` : ""}</p>
         <div class="import-actions">
           <button id="promptBuildBtn" class="button button-quiet" type="button">${t("Modo manual")}</button>
           <button id="generateBtn" class="button button-primary" type="button">✦ ${t("Generar con IA")}</button>
@@ -550,12 +551,34 @@ function generationMessage(code, limit) {
   return messages[code] || t("La IA no pudo escribir el texto. Inténtalo de nuevo o usa el modo manual.");
 }
 
+/* Textos con IA de hoy: lo que dijo la función en la última respuesta
+   (sync.config.aiToday = { day, remaining, limit, plan }) */
+function rememberAiQuota(info) {
+  if (!Number.isFinite(info?.limit)) return;
+  sync.config.aiToday = { day: today(), remaining: Math.max(0, info.remaining ?? 0), limit: info.limit, plan: info.plan || "free" };
+  saveLocal("kanji-sync", sync.config);
+}
+const planName = (plan) => plan === "premium" ? t("Premium") : t("Gratuito");
+
+/* "Plan gratuito: 10 textos con IA al día · te quedan 7 hoy" (o vacío si no se sabe) */
+function aiQuotaText() {
+  if (!sync.user) return "";
+  const known = sync.config.aiToday?.day === today() ? sync.config.aiToday : null;
+  const plan = known?.plan || sync.config.plan?.plan || "free";
+  const limit = known?.limit;
+  return [
+    limit ? t("Plan {plan}: {n} textos con IA al día", { plan: planName(plan).toLowerCase(), n: limit }) : t("Plan {plan}", { plan: planName(plan).toLowerCase() }),
+    known ? t("te quedan {n} hoy", { n: known.remaining }) : ""
+  ].filter(Boolean).join(" · ");
+}
+
 async function requestText(params) {
   const { data, error } = await sb.functions.invoke("generate-text", { body: params });
   if (!error) return data;
   // Sin red, o la función no está desplegada todavía
   if (!error.context?.json) throw new Error(navigator.onLine ? generationMessage("not_configured") : t("No hay conexión. Inténtalo de nuevo cuando tengas internet."));
   const info = await error.context.json().catch(() => ({}));
+  if (info.error === "limit") rememberAiQuota({ limit: info.limit, remaining: 0, plan: info.plan });
   const code = error.context.status === 404 ? "not_configured" : info.error;
   throw Object.assign(new Error(generationMessage(code, info.limit)), { canRetry: !!info.canRetry });
 }
@@ -588,6 +611,7 @@ async function generateAndOpen(options) {
         say(t("El primer intento no salió bien. Probando de nuevo…"));
       }
     }
+    rememberAiQuota(answer);
     say(t("Analizando el texto… la primera vez se descarga el analizador de japonés (18 MB)."));
     openText((await addText(answer.text, "api", {
       requestId: params.requestId, promptVersion: answer.promptVersion, model: answer.model,

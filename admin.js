@@ -42,6 +42,7 @@ function show(view) {
   $("wordsPanel").classList.toggle("hidden", view !== "panel" || section !== "words");
   $("logsPanel").classList.toggle("hidden", view !== "panel" || section !== "logs");
   $("gradesPanel").classList.toggle("hidden", view !== "panel" || section !== "grades");
+  $("usersPanel").classList.toggle("hidden", view !== "panel" || section !== "users");
 }
 
 /* Con sesión: comprueba el permiso y muestra el panel o el motivo */
@@ -357,6 +358,51 @@ async function exportGrades() {
   }
 }
 
+/* ---------- Usuarios y planes ---------- */
+
+const PLAN_LABEL = { free: "Gratuito", premium: "Premium" };
+
+async function loadUsers() {
+  $("usersList").innerHTML = `<p class="message">Cargando…</p>`;
+  const { data, error } = await sb.rpc("admin_list_users");
+  if (error) {
+    $("usersList").innerHTML = "";
+    return say(`No se pudieron cargar los usuarios (${error.message}). ¿Ejecutaste supabase/schema.sql?`, true);
+  }
+  $("usersCount").textContent = `${data.length} usuario${data.length === 1 ? "" : "s"}`;
+  const day = (iso) => iso ? iso.slice(0, 10) : "";
+  $("usersList").innerHTML = data.map((row) => `
+    <article class="item-row admin-user" data-user="${escapeHTML(row.user_id)}">
+      <div class="item-info">
+        <div class="item-title">${escapeHTML(row.email || row.user_id)}</div>
+        <div class="item-sub">Desde ${escapeHTML(day(row.created_at))} · ${row.texts_today} texto${row.texts_today === 1 ? "" : "s"} con IA hoy ·
+          ${escapeHTML(PLAN_LABEL[row.plan] || row.plan)}${row.plan === "premium" && row.plan_until ? ` hasta ${escapeHTML(day(row.plan_until))}` : ""}</div>
+      </div>
+      <div class="import-actions">
+        <select class="lang-select" data-plan aria-label="Plan">
+          ${Object.entries(PLAN_LABEL).map(([value, label]) => `<option value="${value}"${row.plan === value ? " selected" : ""}>${label}</option>`).join("")}
+        </select>
+        <input class="search" type="date" data-until value="${escapeHTML(day(row.plan_until))}" aria-label="Premium hasta (opcional)">
+        <button class="button button-primary" type="button" data-save-plan>Guardar</button>
+      </div>
+    </article>`).join("") || `<div class="no-items">No hay usuarios.</div>`;
+}
+
+async function savePlan(card) {
+  const plan = card.querySelector("[data-plan]").value;
+  const until = card.querySelector("[data-until]").value;
+  const button = card.querySelector("[data-save-plan]");
+  button.disabled = true;
+  const { error } = await sb.rpc("admin_set_plan", {
+    target: card.dataset.user, new_plan: plan,
+    until: plan === "premium" && until ? new Date(`${until}T23:59:59`).toISOString() : null
+  });
+  button.disabled = false;
+  if (error) return say(`No se pudo cambiar el plan (${error.message}).`, true);
+  say("Plan guardado. El usuario lo verá en su próxima sincronización y la función lo aplica desde ya.");
+  loadUsers();
+}
+
 /* ---------- Diccionario general ---------- */
 
 async function dictionaryCount() {
@@ -406,6 +452,10 @@ function bind() {
   $("dictImportBtn").addEventListener("click", importDictionary);
   $("logsExportBtn").addEventListener("click", exportLogs);
   $("gradesExportBtn").addEventListener("click", exportGrades);
+  $("usersList").addEventListener("click", (event) => {
+    const button = event.target.closest("[data-save-plan]");
+    if (button) savePlan(button.closest("[data-user]"));
+  });
   $("adminTabs").addEventListener("click", (event) => {
     const tab = event.target.closest("[data-admin]");
     if (!tab) return;
@@ -416,6 +466,7 @@ function bind() {
     if (section === "words") { loadWords(); dictionaryCount(); }
     else if (section === "logs") loadLogs();
     else if (section === "grades") loadGrades();
+    else if (section === "users") loadUsers();
     else loadTexts();
   });
 

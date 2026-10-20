@@ -93,7 +93,9 @@ El botón «Generar con IA» llama a una función del servidor, `generate-text`,
 | `GEMINI_API_KEY` | alternativa si solo tienes una clave (sin etiqueta) |
 | `GEMINI_MODEL` | opcional; por defecto `gemini-3.8-flash` |
 | `GEMINI_FALLBACK_MODEL` | opcional; por defecto `gemini-3.5-flash-lite` |
-| `DAILY_TEXTS` | opcional; textos entregados por usuario y día, por defecto `10` |
+| `DAILY_TEXTS` | opcional; textos entregados por usuario y día en el plan gratuito, por defecto `10` |
+| `PREMIUM_DAILY_TEXTS` | opcional; textos al día en el plan premium, por defecto `30` |
+| `PREMIUM_DAILY_HARD_CAP` | opcional; tope de llamadas al día en premium, por defecto el triple |
 | `DAILY_HARD_CAP` | opcional; tope de llamadas a la IA por usuario y día, cuenten o no; por defecto el triple de `DAILY_TEXTS` |
 
 4. **Desplegar la función.** En **Edge Functions → Deploy a new function → Via Editor**, ponle el nombre exacto `generate-text`, pega el contenido de [`supabase/functions/generate-text/index.ts`](supabase/functions/generate-text/index.ts) y despliega. Deja activada la verificación de JWT.
@@ -208,6 +210,22 @@ El buscador de la cabecera busca por escritura, lectura (en kana o en romaji) o 
   `weights.dictionary`, `weights.lookup` y `lookupDecayDays`.
 - «Estudiar esta palabra» y «Ya la domino» hacen lo mismo que los botones de **Agregar palabra**.
 - El máximo de palabras nuevas por sesión no cambia: buscar muchas palabras no llena el repaso.
+
+## Planes: gratuito y premium
+
+El plan de cada usuario decide cuántos textos con IA puede generar al día (`DAILY_TEXTS` o
+`PREMIUM_DAILY_TEXTS`, secretos de `generate-text`).
+
+1. **Vuelve a ejecutar `supabase/schema.sql`** (añade `plan` y `plan_until` a `profiles` y las
+   funciones de administración) y **vuelve a desplegar `generate-text`**.
+2. En `admin.html`, pestaña **Usuarios**, cambia el plan de cada usuario. Con una fecha, premium
+   dura hasta ese día; sin fecha, no caduca. El usuario ve su plan en **Ajustes → Mi perfil** y,
+   al crear un texto, cuántos le quedan hoy.
+
+Un usuario no puede cambiarse el plan a sí mismo: un trigger de la base de datos lo impide aunque
+lo intente sin pasar por la app, y la función lee el plan en el servidor. Todavía no hay pagos:
+cuando los haya, una Edge Function con la clave de servicio llamará a `admin_set_plan` desde el
+aviso del proveedor de pagos (Stripe o Lemon Squeezy).
 
 ## Frases de ejemplo y «Repasar con frases»
 

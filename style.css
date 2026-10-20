@@ -2664,3 +2664,8 @@ body[data-view="dict"] .intro {
   flex: 1 1 280px;
   font-size: 13px;
 }
+
+.ai-quota {
+  font-weight: 600;
+  color: var(--green);
+}

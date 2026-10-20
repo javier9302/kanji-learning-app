@@ -52,6 +52,7 @@
       <button class="tab" data-admin="words" type="button">Palabras por revisar</button>
       <button class="tab" data-admin="logs" type="button">Registros</button>
       <button class="tab" data-admin="grades" type="button">Traducciones</button>
+      <button class="tab" data-admin="users" type="button">Usuarios</button>
     </nav>
 
     <!-- Palabras por revisar -->
@@ -123,6 +124,23 @@
       </div>
       <div class="list-toolbar"><h3>Últimos fallos y correcciones discutidas</h3></div>
       <div id="gradesList" class="items-list"></div>
+    </section>
+
+    <!-- Usuarios y planes -->
+    <section id="usersPanel" class="hidden">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">PLANES</p>
+          <h2>Usuarios</h2>
+        </div>
+        <span id="usersCount" class="pill"></span>
+      </div>
+      <p class="helper admin-help">
+        El plan decide cuántos textos con IA puede generar cada usuario al día: los secretos
+        <strong>DAILY_TEXTS</strong> (gratuito, 10 por defecto) y <strong>PREMIUM_DAILY_TEXTS</strong>
+        (premium, 30 por defecto) de la función generate-text. Sin fecha de fin, premium no caduca.
+      </p>
+      <div id="usersList" class="items-list"></div>
     </section>
 
     <!-- Panel -->

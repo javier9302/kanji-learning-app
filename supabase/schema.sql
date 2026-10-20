@@ -880,3 +880,90 @@ begin
     execute format('create index if not exists dictionary_meanings_es_trgm_idx on public.dictionary using gin (lower(meanings_es::text) %s)', ops);
   end if;
 end $$;
+
+-- =========================================
+-- PLANES: GRATUITO Y PREMIUM
+-- =========================================
+
+-- El plan decide cuántos textos con IA puede generar un usuario al día (la
+-- función generate-text lo lee: DAILY_TEXTS o PREMIUM_DAILY_TEXTS).
+--   plan_until  premium hasta esa fecha (null = sin fecha de fin)
+-- Solo lo cambia un administrador (admin.html, pestaña Usuarios). Más adelante,
+-- un pago lo cambiaría desde una Edge Function con la clave de servicio.
+alter table public.profiles add column if not exists plan text not null default 'free';
+alter table public.profiles add column if not exists plan_until timestamptz;
+alter table public.profiles drop constraint if exists profiles_plan_check;
+alter table public.profiles add constraint profiles_plan_check check (plan in ('free', 'premium'));
+
+-- Un usuario puede escribir su fila de profiles (su nivel de lectura), pero no
+-- su plan: se ignora cualquier cambio que no venga de un administrador o del servidor.
+create or replace function public.protect_profile_plan()
+returns trigger
+language plpgsql
+set search_path = ''
+as $$
+begin
+  if coalesce(auth.jwt() ->> 'role', '') = 'authenticated' and not public.is_admin() then
+    if tg_op = 'INSERT' then
+      new.plan := 'free';
+      new.plan_until := null;
+    else
+      new.plan := old.plan;
+      new.plan_until := old.plan_until;
+    end if;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists profiles_protect_plan on public.profiles;
+create trigger profiles_protect_plan
+  before insert or update on public.profiles
+  for each row execute function public.protect_profile_plan();
+
+-- Usuarios para administración: correo, plan y textos con IA de hoy. Solo
+-- para administradores (la tabla de usuarios de Supabase no se puede leer desde la app).
+create or replace function public.admin_list_users()
+returns table (user_id uuid, email text, created_at timestamptz, plan text, plan_until timestamptz, texts_today bigint)
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $$
+begin
+  if not public.is_admin() then
+    raise exception 'solo para administradores' using errcode = '42501';
+  end if;
+  return query
+    select u.id, u.email::text, u.created_at, coalesce(p.plan, 'free'), p.plan_until,
+      (select count(distinct coalesce(g.request_id, g.id::text)) from public.generations g
+        where g.user_id = u.id and g.ok and g.created_at >= date_trunc('day', now() at time zone 'utc') at time zone 'utc')
+    from auth.users u left join public.profiles p on p.user_id = u.id
+    order by u.created_at;
+end;
+$$;
+
+revoke all on function public.admin_list_users() from public, anon;
+grant execute on function public.admin_list_users() to authenticated;
+
+-- Cambia el plan de un usuario (solo administradores)
+create or replace function public.admin_set_plan(target uuid, new_plan text, until timestamptz default null)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if not public.is_admin() then
+    raise exception 'solo para administradores' using errcode = '42501';
+  end if;
+  if new_plan not in ('free', 'premium') then
+    raise exception 'plan desconocido: %', new_plan using errcode = '22023';
+  end if;
+  insert into public.profiles (user_id, plan, plan_until) values (target, new_plan, until)
+  on conflict (user_id) do update set plan = excluded.plan, plan_until = excluded.plan_until;
+end;
+$$;
+
+revoke all on function public.admin_set_plan(uuid, text, timestamptz) from public, anon;
+grant execute on function public.admin_set_plan(uuid, text, timestamptz) to authenticated;

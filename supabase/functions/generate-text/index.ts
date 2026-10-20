@@ -10,9 +10,16 @@
 //   GEMINI_API_KEY          alternativa con una sola clave (etiqueta "default")
 //   GEMINI_MODEL            opcional, por defecto gemini-3.8-flash
 //   GEMINI_FALLBACK_MODEL   opcional, por defecto gemini-3.5-flash-lite
-//   DAILY_TEXTS             opcional, textos ENTREGADOS por usuario y día (por defecto 10)
+//   DAILY_TEXTS             opcional, textos ENTREGADOS por usuario y día en el plan gratuito
+//                           (por defecto 10)
 //   DAILY_HARD_CAP          opcional, tope de llamadas a la IA por usuario y día, cuenten
 //                           o no (por defecto el triple de DAILY_TEXTS)
+//   PREMIUM_DAILY_TEXTS     opcional, textos al día en el plan premium (por defecto 30)
+//   PREMIUM_DAILY_HARD_CAP  opcional, tope de llamadas en el plan premium (por defecto el triple)
+//
+// Plan de cada usuario: columnas plan y plan_until de la tabla profiles. Solo
+// un administrador puede cambiarlas (admin.html, pestaña Usuarios); el usuario
+// no, aunque lo intente desde la app (lo impide un trigger de schema.sql).
 //
 // Cuota justa: al estudiante solo le cuenta un texto que recibe y puede leer.
 // Los fallos de la IA o del sistema no cuentan. La app repite la petición con
@@ -20,12 +27,26 @@
 // la respuesta de la IA para poder revisarlo (tabla generations).
 // =========================================
 
-import { createClient } from "npm:@supabase/supabase-js@2";
+// Lo que depende de Deno (los secretos, el cliente de Supabase, Deno.serve) va
+// protegido para que las pruebas puedan importar este archivo desde Node.
+declare const Deno: any;
+const env = (name: string): string | undefined => typeof Deno !== "undefined" ? Deno.env.get(name) : undefined;
+let createClient: any = null;
 
-const MODEL = Deno.env.get("GEMINI_MODEL") || "gemini-3.8-flash";
-const FALLBACK_MODEL = Deno.env.get("GEMINI_FALLBACK_MODEL") || "gemini-3.5-flash-lite";
-const DAILY_TEXTS = Number(Deno.env.get("DAILY_TEXTS")) || Number(Deno.env.get("DAILY_CALLS")) || 10;
-const DAILY_HARD_CAP = Number(Deno.env.get("DAILY_HARD_CAP")) || DAILY_TEXTS * 3;
+const MODEL = env("GEMINI_MODEL") || "gemini-3.8-flash";
+const FALLBACK_MODEL = env("GEMINI_FALLBACK_MODEL") || "gemini-3.5-flash-lite";
+
+/* Límite de textos al día según el plan del usuario.
+     profile  { plan, plan_until } de la tabla profiles (o null si no hay fila)
+   Premium solo cuenta si no ha caducado. Devuelve { plan, texts, hardCap }. */
+export function planLimits(profile: any, read: (name: string) => string | undefined = env, now = Date.now()) {
+  const premium = profile?.plan === "premium" && (!profile.plan_until || Date.parse(profile.plan_until) > now);
+  const texts = premium
+    ? Number(read("PREMIUM_DAILY_TEXTS")) || 30
+    : Number(read("DAILY_TEXTS")) || Number(read("DAILY_CALLS")) || 10;
+  const hardCap = Number(read(premium ? "PREMIUM_DAILY_HARD_CAP" : "DAILY_HARD_CAP")) || texts * 3;
+  return { plan: premium ? "premium" : "free", texts, hardCap };
+}
 const MAX_ATTEMPTS = 3; // el primero y dos reintentos
 const MAX_OUTPUT_TOKENS = 30000;
 
@@ -43,13 +64,13 @@ const cors = {
 
 /* Claves disponibles, cada una con la etiqueta que se guarda en el registro */
 function apiKeys(): { label: string; key: string }[] {
-  const list = (Deno.env.get("GEMINI_API_KEYS") || "").split(",").map((entry, index) => {
+  const list = (env("GEMINI_API_KEYS") || "").split(",").map((entry, index) => {
     const cut = entry.indexOf("=");
     return cut > 0
       ? { label: entry.slice(0, cut).trim(), key: entry.slice(cut + 1).trim() }
       : { label: `clave${index + 1}`, key: entry.trim() };
   }).filter((entry) => entry.key);
-  const single = Deno.env.get("GEMINI_API_KEY");
+  const single = env("GEMINI_API_KEY");
   if (single) list.push({ label: "default", key: single.trim() });
   return list;
 }
@@ -333,7 +354,7 @@ async function callGemini(model: string, prompt: string, key: string, full = tru
   return { status: response.status, data };
 }
 
-Deno.serve(async (req) => {
+async function handler(req: Request) {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   if (req.method !== "POST") return reply(405, { error: "bad_request" });
 
@@ -341,8 +362,8 @@ Deno.serve(async (req) => {
   if (!keys.length) return reply(500, { error: "not_configured" });
 
   // Quién llama: el token de sesión de la app
-  const url = Deno.env.get("SUPABASE_URL")!;
-  const userClient = createClient(url, Deno.env.get("SUPABASE_ANON_KEY")!, {
+  const url = env("SUPABASE_URL")!;
+  const userClient = createClient(url, env("SUPABASE_ANON_KEY")!, {
     global: { headers: { Authorization: req.headers.get("Authorization") || "" } },
   });
   const { data: auth } = await userClient.auth.getUser();
@@ -356,7 +377,10 @@ Deno.serve(async (req) => {
     ? body.requestId : crypto.randomUUID();
 
   // Uso de hoy (tabla generations, solo accesible desde aquí)
-  const admin = createClient(url, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+  const admin = createClient(url, env("SUPABASE_SERVICE_ROLE_KEY")!);
+  // El plan del usuario. Si faltan las columnas (no se ha vuelto a ejecutar schema.sql), plan gratuito.
+  const { data: profile } = await admin.from("profiles").select("plan, plan_until").eq("user_id", user.id).maybeSingle();
+  const limits = planLimits(profile);
   const today = new Date();
   today.setUTCHours(0, 0, 0, 0);
   const { data: rows, error: countError } = await admin.from("generations")
@@ -369,8 +393,8 @@ Deno.serve(async (req) => {
   const delivered = new Set(rows.filter((row) => row.ok).map((row) => row.request_id || row.id)).size;
   if (mine.some((row) => row.ok)) return reply(400, { error: "bad_request" });
   if (attempt > MAX_ATTEMPTS) return reply(429, { error: "invalid", canRetry: false });
-  if (attempt === 1 && delivered >= DAILY_TEXTS) return reply(429, { error: "limit", limit: DAILY_TEXTS });
-  if (rows.length >= DAILY_HARD_CAP) return reply(429, { error: "busy" });
+  if (attempt === 1 && delivered >= limits.texts) return reply(429, { error: "limit", limit: limits.texts, plan: limits.plan });
+  if (rows.length >= limits.hardCap) return reply(429, { error: "busy" });
 
   // En un reintento se le devuelve a la IA su respuesta anterior con el motivo del rechazo
   const segmented = params.format === 2;
@@ -440,5 +464,14 @@ Deno.serve(async (req) => {
     const canRetry = failure !== "quota" && attempt < MAX_ATTEMPTS;
     return reply(failure === "quota" ? 503 : 502, { error: failure, canRetry });
   }
-  return reply(200, { text, model, requestId, promptVersion: version, remaining: DAILY_TEXTS - delivered - 1 });
-});
+  return reply(200, {
+    text, model, requestId, promptVersion: version,
+    remaining: limits.texts - delivered - 1, limit: limits.texts, plan: limits.plan,
+  });
+}
+
+if (typeof Deno !== "undefined") {
+  // @ts-ignore: "npm:" lo resuelve Deno en Supabase; el editor (TypeScript normal) no lo conoce
+  ({ createClient } = await import("npm:@supabase/supabase-js@2"));
+  Deno.serve(handler);
+}

@@ -11,7 +11,7 @@ const SUPABASE_STUB = `
   create role anon; create role authenticated;
   create schema auth;
   create schema extensions;
-  create table auth.users (id uuid primary key default gen_random_uuid(), email text);
+  create table auth.users (id uuid primary key default gen_random_uuid(), email text, created_at timestamptz not null default now());
   create function auth.uid() returns uuid language sql stable as $$ select null::uuid $$;
   create function auth.jwt() returns jsonb language sql stable as $$ select '{}'::jsonb $$;
 `;
@@ -137,4 +137,38 @@ test("Traducir: frases respondidas, e índices de trigramas en el diccionario", 
   await assert.rejects(db.query("insert into public.user_translations (user_id, id, answer) values ($1, 'a2', $2)", [USER, "x".repeat(201)]), /user_translations_size_check/);
   const { rows } = await db.query("select indexname from pg_indexes where tablename = 'dictionary' and indexname like '%trgm%' order by 1");
   assert.deepEqual(rows.map((row) => row.indexname), ["dictionary_meanings_es_trgm_idx", "dictionary_meanings_trgm_idx"]);
+});
+
+test("planes: el usuario no puede cambiarse el plan; un administrador sí", async () => {
+  const db = await database();
+  const USER = "00000000-0000-0000-0000-00000000000a", ADMIN = "00000000-0000-0000-0000-00000000000b";
+  await db.exec(`insert into auth.users (id, email) values ('${USER}', 'alumno@ejemplo.com'), ('${ADMIN}', 'admin@ejemplo.com') on conflict do nothing;
+    insert into public.admins (user_id) values ('${ADMIN}') on conflict do nothing;`);
+  const as = (id) => db.exec(`
+    create or replace function auth.uid() returns uuid language sql stable as $$ select '${id}'::uuid $$;
+    create or replace function auth.jwt() returns jsonb language sql stable as $$ select '{"role":"authenticated"}'::jsonb $$;`);
+  const plan = async () => (await db.query("select plan from public.profiles where user_id = $1", [USER])).rows[0]?.plan;
+  try {
+    await as(USER);
+    // Como usuario: crear o cambiar su fila no le da premium
+    await db.query("insert into public.profiles (user_id, reading_level, plan) values ($1, 'N5', 'premium')", [USER]);
+    assert.equal(await plan(), "free");
+    await db.query("update public.profiles set plan = 'premium', reading_level = 'N4' where user_id = $1", [USER]);
+    assert.equal(await plan(), "free");
+    assert.equal((await db.query("select reading_level from public.profiles where user_id = $1", [USER])).rows[0].reading_level, "N4");
+    // Ni con las funciones de administración
+    await assert.rejects(db.query("select public.admin_set_plan($1, 'premium')", [USER]), /solo para administradores/);
+    await assert.rejects(db.query("select * from public.admin_list_users()"), /solo para administradores/);
+    // Como administrador
+    await as(ADMIN);
+    await db.query("select public.admin_set_plan($1, 'premium', '2027-01-01')", [USER]);
+    assert.equal(await plan(), "premium");
+    const users = (await db.query("select email, plan, texts_today from public.admin_list_users()")).rows;
+    assert.deepEqual(users.find((row) => row.email === "alumno@ejemplo.com").plan, "premium");
+    await assert.rejects(db.query("select public.admin_set_plan($1, 'oro')", [USER]), /plan desconocido/);
+  } finally {
+    await db.exec(`
+      create or replace function auth.uid() returns uuid language sql stable as $$ select null::uuid $$;
+      create or replace function auth.jwt() returns jsonb language sql stable as $$ select '{}'::jsonb $$;`);
+  }
 });

@@ -102,6 +102,8 @@ async function pullReading(userId) {
   // Perfil
   let rows = await fetchChanged("profiles", "user_id", userId, cursors.profiles);
   for (const row of rows) {
+    // El plan (gratuito o premium) lo pone un administrador; aquí solo se lee
+    if (row.plan) sync.config.plan = { plan: row.plan, until: row.plan_until || null };
     if (!row.placed_at) continue;
     const remote = { level: row.reading_level, assumed: row.assumed_level || "",
       placedAt: msOf(row.placed_at), updatedAt: Number(row.client_updated_at) };

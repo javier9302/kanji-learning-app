@@ -887,6 +887,9 @@ function renderDataView() {
     $("profileMastered").textContent = [...userWords.values()].filter((w) => w.status === "mastered").length;
     $("profileTexts").textContent = texts.filter((x) => x.readAt).length;
     $("profileKanji").textContent = [...userKanji.values()].filter((k) => k.knowsMeaning || k.canWrite).length;
+    // Plan y textos con IA de hoy (el plan lo cambia un administrador)
+    $("profilePlan").textContent = planName(sync.config.plan?.plan || sync.config.aiToday?.plan || "free");
+    $("profilePlan").title = aiQuotaText();
   }
   $("adminLink").classList.toggle("hidden", !signedIn || !sync.isAdmin);
   $("adminLink").textContent = t("Panel de administración") +
