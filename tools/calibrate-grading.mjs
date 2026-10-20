@@ -31,7 +31,7 @@ const limit = Number(flag("--limit", Infinity)), delay = Number(flag("--delay", 
 const KINDS = ["perfect", "paraphrase", "partial", "wrong"];
 const EXPECTED = { perfect: "correct", paraphrase: "correct", partial: "partial", wrong: "incorrect" };
 const VERDICTS = ["correct", "mostly", "partial", "incorrect"];
-const CONTENT_OUT = new Set(["particle", "auxiliary", "punctuation", "symbol", "number", "proper_noun"]);
+const { UNCOUNTED_POS: CONTENT_OUT } = require("../ja-core.js");
 
 const sentences = JSON.parse(fs.readFileSync(path.join(ROOT, "tools/calibration/sentences.json"), "utf8"));
 const cases = [];

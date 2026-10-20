@@ -23,7 +23,8 @@ const server = http.createServer((req, res) => {
 await new Promise((resolve) => server.listen(0, resolve));
 const url = `http://localhost:${server.address().port}/`;
 
-const browser = await puppeteer.launch({ executablePath: CHROME, headless: true });
+// En la integración continua (GitHub Actions) Chrome no puede usar su sandbox
+const browser = await puppeteer.launch({ executablePath: CHROME, headless: true, args: process.env.CI ? ["--no-sandbox"] : [] });
 const page = await browser.newPage();
 const errors = [];
 page.on("pageerror", (error) => errors.push(`pageerror: ${error.message}`));

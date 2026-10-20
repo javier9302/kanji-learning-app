@@ -21,8 +21,8 @@
    etiqueta lleva los dos: 今日|きょう.
    ========================================= */
 
-const scHiragana = (text) => String(text).normalize("NFKC")
-  .replace(/[ァ-ヶ]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0x60));
+// toHiragana está en ja-core.js (en Node se pide con require)
+const scHiragana = typeof module !== "undefined" ? require("./ja-core.js").toHiragana : toHiragana;
 const scIsKanji = (c) => c !== "々" && /\p{Script=Han}/u.test(c);
 const scIsKanaChar = (c) => /[ぁ-ゖァ-ヺー]/.test(c);
 
@@ -155,8 +155,8 @@ const unpackTags = (packed) => packed ? packed.split(",").map((part) => {
    ========================================= */
 
 const SC_LEVELS = ["N5", "N4", "N3", "N2", "N1"];
-/* Unidades que no son vocabulario: no hace falta conocerlas ni resolverlas */
-const SC_UNCOUNTED = new Set(["particle", "auxiliary", "punctuation", "symbol", "number", "proper_noun"]);
+/* Unidades que no son vocabulario: la lista está en ja-core.js (en Node se pide con require) */
+const SC_UNCOUNTED = typeof module !== "undefined" ? require("./ja-core.js").UNCOUNTED_POS : UNCOUNTED_POS;
 const scIsContent = (token) => !SC_UNCOUNTED.has(token.pos);
 const scIsPunct = (token) => token.pos === "punctuation" || token.pos === "symbol";
 const scHasKanji = (text) => /\p{Script=Han}/u.test(text);

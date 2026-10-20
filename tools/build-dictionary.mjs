@@ -23,7 +23,7 @@ const entries = [];
 for (const match of xml.matchAll(/<entry>([\s\S]*?)<\/entry>/g)) entries.push(parseEntry(match[1]));
 
 const BANK = loadBank();
-const hiragana = (text) => text.replace(/[ァ-ヶ]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0x60));
+const { toHiragana: hiragana } = require("../ja-core.js");
 const rows = buildRows(entries, (w, r) => BANK.words.has(BANK.id(w, hiragana(r))));
 
 const out = path.join(ROOT, `vendor/jmdict/common-${VERSION}.json`);

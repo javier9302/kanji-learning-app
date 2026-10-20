@@ -136,11 +136,9 @@ function shuffle(array) {
   return r;
 }
 
-/* katakana -> hiragana, sin puntos/guiones/espacios, para comparar lecturas */
+/* katakana -> hiragana (toHiragana, ja-core.js), sin puntos/guiones/espacios, para comparar lecturas */
 function normalizeReading(value) {
-  return normalizeText(value)
-    .replace(/[ァ-ヶ]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0x60))
-    .replace(/[.\-\s・]/g, "");
+  return toHiragana(normalizeText(value)).replace(/[.\-\s・]/g, "");
 }
 
 const plural = (n, one, many) => `${n} ${t(n === 1 ? one : many)}`;

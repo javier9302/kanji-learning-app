@@ -19,10 +19,11 @@ const DICT_LIMIT = 50;
 
 const dictHasJapanese = (text) => /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u.test(text);
 const dictIsKana = (text) => /^[\p{Script=Hiragana}\p{Script=Katakana}ー]+$/u.test(text);
-const dictHiragana = (text) => String(text).normalize("NFKC")
-  .replace(/[ァ-ヶ]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0x60)).replace(/[.\-\s・~]/g, "");
+// toHiragana está en ja-core.js (en Node se pide con require: así lo prueban los tests)
+const dictToKana = typeof module !== "undefined" ? require("./ja-core.js").toHiragana : toHiragana;
+const dictHiragana = (text) => dictToKana(text).replace(/[.\-\s・~]/g, "");
 /* Para comparar significados: minúsculas y sin acentos (cafe = café) */
-const dictFold = (text) => String(text).normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
+const dictFold = (text) => String(text).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
 /* "(someone else's) older brother (formal)" -> "older brother";  "to drink" -> "drink" */
 const dictGloss = (text) => dictFold(text).replace(/\([^)]*\)/g, " ").replace(/\s+/g, " ").trim().replace(/^to /, "");
 

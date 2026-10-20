@@ -327,6 +327,18 @@ npm run smoke      # la app en Chrome sin ventana: un repaso, una lectura y el d
 
 `npm run smoke` no inicia sesión: la cuenta y la sincronización con Supabase se prueban a mano.
 
+GitHub Actions (`.github/workflows/test.yml`) ejecuta las dos cosas en cada `git push`; el resultado
+se ve en la pestaña **Actions** del repositorio. No necesita ningún secreto.
+
+Si cambias el prompt de los textos en `reading.js` (`renderPromptSeg`), cópialo a la función con
+`node tools/sync-prompt.mjs` y vuelve a desplegar `generate-text`; una prueba avisa si no coinciden.
+
+Organización del código: los scripts se cargan en el orden de `index.html` y comparten nombres
+globales. La lectura está en cuatro archivos: `texts.js` (validar, resolver y guardar textos,
+biblioteca), `reading.js` (nivel, crear textos, lector, evaluación), `reading-stats.js` y
+`reading-sync.js`. Las reglas sin navegador, que también usan las herramientas y las pruebas, están
+en `ja-core.js`, `sentences-core.js` y `translate-core.js`.
+
 ## Avisos al administrador por correo (opcional)
 
 Para recibir un correo cada vez que alguien sube un texto que espera aprobación:

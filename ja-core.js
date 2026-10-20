@@ -7,6 +7,14 @@
    ========================================= */
 
 const isKana = (value) => /^[぀-ヿー]+$/.test(value);
+/* Katakana -> hiragana (y formas de ancho completo normalizadas). La única
+   versión: la usan app.js, dictionary.js, sentences-core.js y las herramientas. */
+const toHiragana = (text) => String(text ?? "").normalize("NFKC")
+  .replace(/[ァ-ヶ]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0x60));
+/* Tipos de unidad que no son vocabulario: no cuentan para la cobertura, no
+   hace falta conocerlos ni resolverlos y no se preguntan. La ÚNICA lista: la
+   usan la app (texts.js, sentences-core.js, translate-core.js) y las herramientas. */
+const UNCOUNTED_POS = new Set(["particle", "auxiliary", "punctuation", "symbol", "number", "proper_noun"]);
 const PUNCTUATION = /^[\s\p{P}\p{S}]+$/u;
 
 const KUROMOJI_POS = {
@@ -21,7 +29,7 @@ const isContentPiece = (piece) => ["動詞", "形容詞", "名詞", "副詞", "�
   piece.pos_detail_1 !== "非自立" && piece.pos_detail_1 !== "接尾";
 const pieceBase = (piece) => piece.basic_form && piece.basic_form !== "*" ? piece.basic_form : piece.surface_form;
 const pieceReading = (piece) => piece.reading && piece.reading !== "*"
-  ? piece.reading.replace(/[ァ-ヶ]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0x60))
+  ? toHiragana(piece.reading)
   : isKana(piece.surface_form) ? piece.surface_form : null;
 
 /* Partículas habituales: una unidad que sea exactamente una de estas lo es siempre */
@@ -167,7 +175,7 @@ const segmentSentence = (tokenizer, text) =>
 /* Para tools/ y las pruebas (Node); en el navegador son globales */
 if (typeof module !== "undefined") {
   module.exports = {
-    isKana, PUNCTUATION, KUROMOJI_POS, PARTICLES, piecePos, isContentPiece, pieceBase, pieceReading,
+    isKana, toHiragana, UNCOUNTED_POS, PUNCTUATION, KUROMOJI_POS, PARTICLES, piecePos, isContentPiece, pieceBase, pieceReading,
     unitOf, analyseUnits, splitSentences, groupPieces, segmentSentence, kanaFormWord, onlyHomophone
   };
 }

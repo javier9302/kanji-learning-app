@@ -18,7 +18,7 @@ const VERSION = process.env.JMDICT_FURIGANA_VERSION || "2.3.1+2026-09-25";
 const URL = `https://github.com/Doublevil/JmdictFurigana/releases/download/${encodeURIComponent(VERSION)}/JmdictFurigana.txt`;
 
 const BANK = loadBank();
-const hiragana = (text) => text.replace(/[ァ-ヶ]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0x60));
+const { toHiragana: hiragana } = require("../ja-core.js");
 const kanjiInfo = (c) => BANK.kanji.get(c);
 
 /* Cada línea: escritura|lectura|0:がっ;1:こう  (o 0-1:きょう para varios caracteres) */

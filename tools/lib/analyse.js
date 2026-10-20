@@ -1,12 +1,12 @@
 /* De una frase segmentada con "|" a la frase completa que usa la app, en Node:
    kuromoji pone lema, lectura y tipo, y el banco dice qué palabra es cada unidad. */
-const { analyseUnits, isKana } = require("../../ja-core.js");
+const { analyseUnits, isKana, UNCOUNTED_POS } = require("../../ja-core.js");
 const core = require("../../sentences-core.js");
 const { loadBank } = require("./bank.js");
 const { loadReadings } = require("./sentences.js");
 const { loadTokenizer } = require("./tokenizer.js");
 
-const hiragana = (text) => text.replace(/[ァ-ヶ]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0x60));
+const hiragana = (text) => require("../../ja-core.js").toHiragana(text);
 let readings = null;
 
 /* Lo que se sabe de una palabra por su clave: nivel y si casi siempre va en kana */
@@ -22,7 +22,7 @@ async function tokensFor(ja) {
   const tokenizer = await loadTokenizer();
   return analyseUnits(tokenizer, ja).map((unit) => {
     const token = { surface: unit.surface, lemma: unit.punct ? unit.surface : unit.basic, reading: unit.reading, pos: unit.pos, key: "" };
-    if (unit.punct || ["particle", "auxiliary", "symbol", "number", "proper_noun"].includes(unit.pos)) return token;
+    if (unit.punct || UNCOUNTED_POS.has(unit.pos)) return token;
     // Si ninguna lectura coincide: la única palabra con esa escritura, o la propia palabra en kana
     const senses = BANK.byWriting.get(token.lemma) || BANK.byWriting.get(token.surface) || [];
     const fallback = senses[0]?.id || (isKana(token.lemma) ? `${token.lemma}|${hiragana(token.lemma)}` : "");

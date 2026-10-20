@@ -13,7 +13,9 @@
    1. ELEGIR LA FRASE
    ========================================= */
 
-const trIsContent = (token) => !["particle", "auxiliary", "punctuation", "symbol", "number", "proper_noun"].includes(token.pos);
+/* Unidades que no son vocabulario: la lista está en ja-core.js (en Node se pide con require) */
+const TR_UNCOUNTED = typeof module !== "undefined" ? require("./ja-core.js").UNCOUNTED_POS : UNCOUNTED_POS;
+const trIsContent = (token) => !TR_UNCOUNTED.has(token.pos);
 const trIsPunct = (token) => token.pos === "punctuation" || token.pos === "symbol";
 /* Caracteres japoneses de la frase, sin la puntuación */
 const trLength = (sentence) => [...sentence.tokens.filter((token) => !trIsPunct(token)).map((token) => token.surface).join("")].length;
