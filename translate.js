@@ -6,9 +6,10 @@
 
    Almacén de IndexedDB:
      translations  un registro por frase respondida:
-                   { id, sentenceId, textId, at, answer, answerKey, source, verdict, score, result }
+                   { id, sentenceId, textId, at, answer, answerKey, source, verdict, score, result, updatedAt }
                    Sirve para no repetir frases, para reutilizar una corrección
-                   ya hecha y para el resumen. Se queda en el dispositivo.
+                   ya hecha y para la regla de "frases distintas". Se sincroniza
+                   (tabla user_translations) para que sea igual en todos los dispositivos.
    ========================================= */
 
 let translationLog = [];   // registros de translations, del más antiguo al más reciente
@@ -408,7 +409,7 @@ async function contestTranslation() {
   session.scores[session.scores.length - 1] = contested.score;
   // 3. El registro de la frase y el reporte
   const entry = translationLog[translationLog.length - 1];
-  Object.assign(entry, { source: "contested", verdict: "correct", score: contested.score, result: contested, contested: true });
+  Object.assign(entry, { source: "contested", verdict: "correct", score: contested.score, result: contested, contested: true, updatedAt: Date.now() });
   await putRecords("translations", [entry]);
   reportGrade(sentence, answer, result);
   translating.result = contested;
@@ -516,6 +517,7 @@ async function finishTranslation(result) {
   };
   translationLog.push(entry);
   await putRecords("translations", [entry]);
+  scheduleSync();
   if (translating?.result === result) renderTranslate();
 }
 
@@ -531,6 +533,64 @@ async function skipTranslation() {
 function nextTranslation() {
   translating = null;
   renderTranslate();
+}
+
+/* =========================================
+   3. SINCRONIZACIÓN (tabla user_translations)
+   -----------------------------------------
+   Se suben las frases respondidas y se bajan las de otros dispositivos. Si la
+   tabla aún no existe (falta volver a ejecutar supabase/schema.sql), se quedan
+   en el dispositivo sin dar error.
+   ========================================= */
+
+const translationPrint = (entry) => `${entry.updatedAt || entry.at}:${entry.source}`;
+
+async function pullTranslations(userId) {
+  const cursors = sync.config.cursors, pushed = sync.pushed.translations ??= {};
+  let rows;
+  try {
+    rows = await fetchChanged("user_translations", "id", userId, cursors.user_translations);
+  } catch (error) {
+    if (tableMissing(error)) return;
+    throw error;
+  }
+  const known = new Map(translationLog.map((entry) => [entry.id, entry]));
+  const fresh = [];
+  for (const row of rows) {
+    const stamp = Number(row.client_updated_at);
+    const mine = known.get(row.id);
+    const entry = {
+      id: row.id, sentenceId: row.sentence_id, textId: row.text_id || "", at: msOf(row.at) || stamp,
+      source: row.source, verdict: row.verdict, score: row.score, answer: row.answer || "", answerKey: row.answer_key || "",
+      lookups: row.lookups || [], result: row.result || null, ...(row.contested ? { contested: true } : {}), updatedAt: stamp
+    };
+    pushed[row.id] = translationPrint(entry);
+    if (mine && (mine.updatedAt || mine.at) >= stamp) continue;
+    if (mine) Object.assign(mine, entry); else translationLog.push(entry);
+    fresh.push(mine || entry);
+  }
+  if (fresh.length) {
+    translationLog.sort((a, b) => a.at - b.at);
+    await putRecords("translations", fresh);
+  }
+  if (rows.length) cursors.user_translations = rows[rows.length - 1].updated_at;
+}
+
+async function pushTranslations(userId) {
+  const pushed = sync.pushed.translations ??= {};
+  const changed = translationLog.filter((entry) => pushed[entry.id] !== translationPrint(entry));
+  try {
+    await pushRows("user_translations", "user_id,id", changed.map((entry) => ({
+      user_id: userId, id: entry.id, sentence_id: entry.sentenceId || null, text_id: entry.textId || null,
+      at: isoOf(entry.at), source: entry.source, verdict: entry.verdict || null, score: Number.isFinite(entry.score) ? entry.score : null,
+      answer: entry.answer ? entry.answer.slice(0, 200) : null, answer_key: entry.answerKey || null,
+      lookups: entry.lookups || [], result: entry.result || null, contested: !!entry.contested,
+      client_updated_at: Math.round(entry.updatedAt || entry.at)
+    })), changed.map((entry) => [entry.id, translationPrint(entry)]), pushed);
+  } catch (error) {
+    if (!tableMissing(error)) throw error;
+    console.warn("Falta la tabla user_translations: ejecuta supabase/schema.sql.");
+  }
 }
 
 function bindTranslate() {

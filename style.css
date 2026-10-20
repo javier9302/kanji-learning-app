@@ -2648,3 +2648,19 @@ body[data-view="dict"] .intro {
 .translate-card .row-actions {
   flex-wrap: wrap;
 }
+
+.guest-notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-color: var(--gold);
+  background: var(--hard-bg);
+}
+
+.guest-notice p {
+  margin: 0;
+  flex: 1 1 280px;
+  font-size: 13px;
+}

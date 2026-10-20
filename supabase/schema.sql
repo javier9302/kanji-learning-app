@@ -770,3 +770,113 @@ create trigger text_reports_daily_limit before insert on public.text_reports
 drop trigger if exists words_to_review_daily_limit on public.words_to_review;
 create trigger words_to_review_daily_limit before insert on public.words_to_review
   for each row execute function public.limit_daily_inserts('1000');
+
+-- =========================================
+-- RELOJES DE LOS DISPOSITIVOS
+-- =========================================
+
+-- Al sincronizar gana la versión con la fecha (client_updated_at) más reciente,
+-- y esa fecha la pone el reloj del dispositivo. Un reloj adelantado haría que su
+-- versión ganara siempre. Aquí se limita: como mucho 5 minutos por delante del servidor.
+create or replace function public.clamp_client_clock()
+returns trigger
+language plpgsql
+set search_path = ''
+as $$
+begin
+  new.client_updated_at := least(new.client_updated_at, (extract(epoch from now()) * 1000)::bigint + 300000);
+  return new;
+end;
+$$;
+
+do $$
+declare tbl text;
+begin
+  foreach tbl in array array['user_words', 'user_kanji', 'profiles', 'user_sentences'] loop
+    execute format('drop trigger if exists %I on public.%I', tbl || '_clamp_clock', tbl);
+    execute format('create trigger %I before insert or update on public.%I
+      for each row execute function public.clamp_client_clock()', tbl || '_clamp_clock', tbl);
+  end loop;
+end $$;
+
+-- =========================================
+-- TRADUCIR: FRASES RESPONDIDAS
+-- =========================================
+
+-- Cada frase respondida en Traducir, para que la regla de "frases distintas",
+-- la reutilización de correcciones y el resumen sean los mismos en todos los
+-- dispositivos del usuario. result: la corrección (veredicto, palabras, comentario).
+create table if not exists public.user_translations (
+  user_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  id text not null,
+  sentence_id text,
+  text_id text,
+  at timestamptz,
+  source text,                      -- ai | local | self | unknown | contested | skip
+  verdict text,
+  score integer,
+  answer text,
+  answer_key text,
+  lookups jsonb not null default '[]'::jsonb,
+  result jsonb,
+  contested boolean not null default false,
+  client_updated_at bigint not null default 0,
+  updated_at timestamptz not null default now(),
+  primary key (user_id, id),
+  constraint user_translations_size_check check (char_length(coalesce(answer, '')) <= 200 and octet_length(coalesce(result::text, '')) <= 20000)
+);
+
+create index if not exists user_translations_user_updated_idx on public.user_translations (user_id, updated_at);
+
+drop trigger if exists user_translations_set_updated_at on public.user_translations;
+create trigger user_translations_set_updated_at
+  before insert or update on public.user_translations
+  for each row execute function public.set_updated_at();
+
+alter table public.user_translations enable row level security;
+revoke all on public.user_translations from anon;
+grant select, insert, update, delete on public.user_translations to authenticated;
+
+drop policy if exists "user_translations_select_own" on public.user_translations;
+create policy "user_translations_select_own" on public.user_translations
+  for select to authenticated using ((select auth.uid()) = user_id);
+drop policy if exists "user_translations_insert_own" on public.user_translations;
+create policy "user_translations_insert_own" on public.user_translations
+  for insert to authenticated with check ((select auth.uid()) = user_id);
+drop policy if exists "user_translations_update_own" on public.user_translations;
+create policy "user_translations_update_own" on public.user_translations
+  for update to authenticated
+  using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);
+drop policy if exists "user_translations_delete_own" on public.user_translations;
+create policy "user_translations_delete_own" on public.user_translations
+  for delete to authenticated using ((select auth.uid()) = user_id);
+
+-- =========================================
+-- DICCIONARIO: BÚSQUEDA POR SIGNIFICADO MÁS RÁPIDA
+-- =========================================
+
+-- search_dictionary busca el significado con "contiene" (like '%…%'). Con unas
+-- 22.500 palabras basta recorrer la tabla; con el JMdict completo hace falta un
+-- índice de trigramas (pg_trgm). Si la extensión no está disponible no pasa nada:
+-- la búsqueda funciona igual, solo que más lenta.
+do $$
+begin
+  create extension if not exists pg_trgm with schema extensions;
+exception when others then
+  begin
+    create extension if not exists pg_trgm;
+  exception when others then
+    raise notice 'pg_trgm no está disponible: la búsqueda por significado no tendrá índice';
+  end;
+end $$;
+
+do $$
+declare ops text;
+begin
+  select format('%I.gin_trgm_ops', n.nspname) into ops
+  from pg_opclass c join pg_namespace n on n.oid = c.opcnamespace where c.opcname = 'gin_trgm_ops' limit 1;
+  if ops is not null then
+    execute format('create index if not exists dictionary_meanings_trgm_idx on public.dictionary using gin (lower(meanings::text) %s)', ops);
+    execute format('create index if not exists dictionary_meanings_es_trgm_idx on public.dictionary using gin (lower(meanings_es::text) %s)', ops);
+  end if;
+end $$;

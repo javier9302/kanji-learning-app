@@ -10,6 +10,7 @@ const SCHEMA = fs.readFileSync(path.join(__dirname, "../supabase/schema.sql"), "
 const SUPABASE_STUB = `
   create role anon; create role authenticated;
   create schema auth;
+  create schema extensions;
   create table auth.users (id uuid primary key default gen_random_uuid(), email text);
   create function auth.uid() returns uuid language sql stable as $$ select null::uuid $$;
   create function auth.jwt() returns jsonb language sql stable as $$ select '{}'::jsonb $$;
@@ -18,7 +19,8 @@ const SUPABASE_STUB = `
 let dbPromise = null;
 const database = () => dbPromise ??= (async () => {
   const { PGlite } = await import("@electric-sql/pglite");
-  const db = new PGlite();
+  const { pg_trgm } = await import("@electric-sql/pglite/contrib/pg_trgm");
+  const db = new PGlite({ extensions: { pg_trgm } });
   await db.exec(SUPABASE_STUB);
   await db.exec(SCHEMA);
   return db;
@@ -114,4 +116,25 @@ test("límites: tamaño máximo y filas nuevas al día por usuario", async () =>
   // Sin el rol de usuario (Edge Functions, panel) no hay límite
   await db.query("insert into public.texts (id, user_id, title, data) values ('t-servicio', $1, 't', '{}')", [USER]);
   await db.exec(SCHEMA); // y el archivo se sigue pudiendo ejecutar otra vez
+});
+
+test("relojes: una fecha del dispositivo muy adelantada se limita a 5 minutos sobre el servidor", async () => {
+  const db = await database();
+  const USER = "00000000-0000-0000-0000-000000000001";
+  await db.exec(`insert into auth.users (id) values ('${USER}') on conflict do nothing; delete from public.user_kanji;`);
+  const future = Date.now() + 365 * 86400000, ok = Date.now() - 1000;
+  await db.query("insert into public.user_kanji (user_id, id, client_updated_at) values ($1, '日', $2), ($1, '月', $3)", [USER, future, ok]);
+  const { rows } = await db.query("select id, client_updated_at::text as stamp from public.user_kanji order by id");
+  const byId = Object.fromEntries(rows.map((row) => [row.id, Number(row.stamp)]));
+  assert.ok(byId["日"] < Date.now() + 301000, "no se limitó");
+  assert.equal(byId["月"], ok);
+});
+
+test("Traducir: frases respondidas, e índices de trigramas en el diccionario", async () => {
+  const db = await database();
+  const USER = "00000000-0000-0000-0000-000000000001";
+  await db.query("insert into public.user_translations (user_id, id, sentence_id, source, verdict, score, answer, result) values ($1, 'a1', 's1', 'ai', 'correct', 95, 'Bebo café', '{}')", [USER]);
+  await assert.rejects(db.query("insert into public.user_translations (user_id, id, answer) values ($1, 'a2', $2)", [USER, "x".repeat(201)]), /user_translations_size_check/);
+  const { rows } = await db.query("select indexname from pg_indexes where tablename = 'dictionary' and indexname like '%trgm%' order by 1");
+  assert.deepEqual(rows.map((row) => row.indexname), ["dictionary_meanings_es_trgm_idx", "dictionary_meanings_trgm_idx"]);
 });

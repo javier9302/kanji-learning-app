@@ -455,7 +455,7 @@ const SYNC_BATCH = 500;  // filas por subida
 const SYNC_DEFAULT = { userId: "", cursor: "", daysCursor: "", cursors: {}, lastSync: 0 };
 // Huellas de lo que ya está en el servidor (las de lectura las usa reading.js)
 const blankPushed = () =>
-  ({ days: {}, texts: {}, states: {}, words: {}, kanji: {}, sessions: {}, sentences: {}, profile: "" });
+  ({ days: {}, texts: {}, states: {}, words: {}, kanji: {}, sessions: {}, sentences: {}, translations: {}, profile: "" });
 
 const accountsReady = typeof SUPABASE_CONFIG === "object" &&
   /^https:\/\/.+/.test(SUPABASE_CONFIG.url) &&
@@ -620,6 +620,8 @@ async function syncNow() {
       // Frases de ejemplo: después de los textos, de los que salen
       if (sync.user?.id === userId) await pullSentences(userId);
       if (sync.user?.id === userId) await pushSentences(userId);
+      if (sync.user?.id === userId) await pullTranslations(userId);
+      if (sync.user?.id === userId) await pushTranslations(userId);
     }
 
     sync.config.lastSync = Date.now();

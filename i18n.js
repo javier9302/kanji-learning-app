@@ -9,6 +9,9 @@
 const LANGS = ["es", "en"];
 
 const EN = {
+  "Sin cuenta, tu progreso se guarda solo en este navegador, y algunos (sobre todo Safari en iPhone) lo borran si no abres la app durante unas semanas.": "Without an account, your progress is stored only in this browser, and some browsers (especially Safari on iPhone) delete it if you do not open the app for a few weeks.",
+  "Crea una cuenta gratuita para no perderlo; instalar la app también ayuda.": "Create a free account so you do not lose it; installing the app also helps.",
+  "Instalar la app ayuda a que no se borre.": "Installing the app helps keep it from being deleted.",
   "Hoy ya has subido el máximo de textos. Los que faltan se subirán mañana; en este dispositivo ya están.": "You have uploaded the maximum number of texts today. The rest will upload tomorrow; they are already on this device.",
   "Pega un texto en japonés o el JSON que te devolvió la IA.": "Paste a Japanese text or the JSON the AI returned.",
   /* ---------- Traducir ---------- */

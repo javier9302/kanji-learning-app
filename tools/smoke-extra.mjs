@@ -466,4 +466,46 @@ export default async function extra({ page, step, check }) {
     rec = await page.evaluate(() => userWords.get("水|みず"));
     check(rec.studied && rec.interval === STUDY_CONFIG_DAYS, `tras Ya la domino: ${rec.interval}`);
   });
+
+  await step("sincronización: las frases de Traducir se suben, y sin la tabla no hay error", async () => {
+    const result = await page.evaluate(async () => {
+      const real = window.pushRows, sent = [];
+      try {
+        window.pushRows = async (table, conflict, rows, marks, pushed) => {
+          if (rows.length) sent.push([table, rows.length, Object.keys(rows[0]).sort().join(",")]);
+          for (const [k, v] of marks) pushed[k] = v;
+        };
+        sync.pushed.translations = {};
+        await pushTranslations("u");
+        const first = sent.length;
+        await pushTranslations("u"); // ya subidas: no se repiten
+        window.pushRows = async () => { throw { code: "PGRST205" }; };
+        sync.pushed.translations = {};
+        await pushTranslations("u"); // tabla que falta: no lanza
+        return { first, again: sent.length, rows: sent[0] };
+      } finally { window.pushRows = real; }
+    });
+    check(result.first === 1 && result.again === 1 && result.rows[0] === "user_translations" && result.rows[1] > 0, JSON.stringify(result));
+    check(result.rows[2].includes("answer_key") && !result.rows[2].includes("email"), result.rows[2]);
+  });
+
+  await step("lectura: al recargar en mitad de un texto se vuelve a él, con lo consultado", async () => {
+    const before = await page.evaluate(async () => {
+      const text = texts.find((x) => !x.readAt && !x.hiddenAt && x.data.sentences.length) || texts[0];
+      if (text.readAt) text.readAt = null;
+      await openText(text.id);
+      const tok = document.querySelector("#readArea .tok");
+      tok?.click();
+      return { id: text.id, clicks: reader.clicks.size, toks: document.querySelectorAll("#readArea .tok").length, view: document.body.dataset.view };
+    });
+    await page.reload({ waitUntil: "networkidle2" });
+    await page.waitForFunction(() => typeof reader !== "undefined" && reader, { timeout: 15000 });
+    const after = await page.evaluate(() => ({ id: reader.text.id, clicks: reader.clicks.size }));
+    check(after.id === before.id && after.clicks === before.clicks && before.clicks > 0, JSON.stringify({ before, after }));
+    // "Salir" deja de volver a abrirlo solo
+    await page.evaluate(() => $("readerCloseBtn").click());
+    await page.reload({ waitUntil: "networkidle2" });
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    check(await page.evaluate(() => !reader), "se volvió a abrir tras salir");
+  });
 }

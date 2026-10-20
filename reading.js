@@ -82,6 +82,7 @@ async function clearReadingData() {
   sentenceStats = new Map();
   translationLog = [];
   translating = null;
+  clearReaderState();
   forgetSentenceIndex();
 }
 
@@ -1394,6 +1395,31 @@ SEGMENTATION RULES
 // La app pide siempre el formato nuevo; el antiguo se sigue aceptando al pegar
 const buildPrompt = (options) => renderPromptSeg(promptParams(options));
 
+/* Sin cuenta, todo vive solo en este navegador, y algunos (Safari en iPhone,
+   sobre todo) borran los datos de una web que no se usa durante semanas. Se
+   avisa cuando ya hay progreso que perder; "Ahora no" lo calla dos semanas. */
+const GUEST_NOTICE_DAYS = 14;
+function guestNoticeHTML() {
+  if (sync.user || userWords.size < 10 || Date.now() - (prefs.guestNoticeAt || 0) < GUEST_NOTICE_DAYS * 86400000) return "";
+  return `
+    <div class="panel guest-notice" role="note">
+      <p>${t("Sin cuenta, tu progreso se guarda solo en este navegador, y algunos (sobre todo Safari en iPhone) lo borran si no abres la app durante unas semanas.")}
+        ${sb ? t("Crea una cuenta gratuita para no perderlo; instalar la app también ayuda.") : t("Instalar la app ayuda a que no se borre.")}</p>
+      <div class="import-actions">
+        <button id="guestLaterBtn" class="button button-quiet" type="button">${t("Ahora no")}</button>
+        ${sb ? `<button id="guestAccountBtn" class="button button-primary" type="button">${t("Crear cuenta")}</button>` : ""}
+      </div>
+    </div>`;
+}
+function bindGuestNotice() {
+  if ($("guestLaterBtn")) $("guestLaterBtn").onclick = () => {
+    prefs.guestNoticeAt = Date.now();
+    saveLocal("kanji-prefs", prefs);
+    document.querySelector(".guest-notice")?.remove();
+  };
+  if ($("guestAccountBtn")) $("guestAccountBtn").onclick = () => openAuth("signup");
+}
+
 async function renderReadHome() {
   const skips = await skipsUsed();
   if (reader || placement || evaluation || document.body.dataset.view !== "read") return;
@@ -1406,6 +1432,7 @@ async function renderReadHome() {
     `<option value="${escapeHTML(String(value))}">${t(label)}</option>`).join("");
 
   $("readArea").innerHTML = `
+    ${guestNoticeHTML()}
     ${candidate ? `
     <div class="panel read-next">
       <div>
@@ -1473,6 +1500,7 @@ async function renderReadHome() {
       <div id="promptMessage" class="message" role="status"></div>
     </div>`}`;
 
+  bindGuestNotice();
   if (candidate) {
     $("readNextBtn").onclick = () => openText(candidate.text.id);
     if (canSkip) $("readSkipBtn").onclick = async () => {
@@ -1614,6 +1642,31 @@ const CLASSES = {
   new: "Nueva", kanji: "Conocía la palabra, no el kanji", check: "La conocía, solo comprobaba"
 };
 
+/* La lectura en curso se guarda en el dispositivo (localStorage "kanji-reader")
+   cada vez que se toca o se marca una palabra: si la página se recarga, o se
+   sale y se vuelve al mismo texto, se sigue donde se estaba.
+     { textId, clicks: [[clave, clasificación]], startedAt, closed }
+   closed: se salió con "Salir"; no se vuelve a abrir solo al recargar. */
+const READER_KEY = "kanji-reader";
+const savedReader = () => loadLocal(READER_KEY, {});
+
+function saveReaderState(closed = false) {
+  if (!reader) return;
+  saveLocal(READER_KEY, { textId: reader.text.id, clicks: [...reader.clicks], startedAt: reader.startedAt, closed });
+}
+function clearReaderState() {
+  try { localStorage.removeItem(READER_KEY); } catch { /* modo privado */ }
+}
+
+/* Al abrir la app: si se recargó en mitad de una lectura, se vuelve a ella */
+async function restoreReader() {
+  const saved = savedReader();
+  const text = saved.textId && texts.find((x) => x.id === saved.textId);
+  if (!text || text.readAt || text.hiddenAt || saved.closed) return false;
+  await openText(text.id);
+  return true;
+}
+
 async function openText(id) {
   const text = texts.find((x) => x.id === id);
   if (!text) return;
@@ -1624,7 +1677,15 @@ async function openText(id) {
     Object.assign(dictionary, sentence.dictionary);
     Object.assign(entries, sentence.entries);
   }
-  reader = { text, dictionary, entries, canSkip, clicks: new Map(), panel: null, startedAt: Date.now() };
+  // Abrir otro texto deja la evaluación pendiente para otro momento (como "Ahora no"):
+  // si no, la evaluación tapaba el texto que se acababa de abrir
+  evaluation = null;
+  // Lo que ya se había consultado en este mismo texto (antes de recargar o de salir)
+  const saved = savedReader();
+  const resume = saved.textId === id && !text.readAt;
+  reader = { text, dictionary, entries, canSkip, clicks: new Map(resume ? saved.clicks : []), panel: null,
+    startedAt: resume && saved.startedAt || Date.now() };
+  saveReaderState();
   switchView("read");
 }
 
@@ -1753,7 +1814,7 @@ function renderReader() {
       </div>
     </div>`;
 
-  $("readerCloseBtn").onclick = () => { reader = null; renderRead(); };
+  $("readerCloseBtn").onclick = () => { saveReaderState(true); reader = null; renderRead(); };
   $("reportBtn").onclick = openReport;
   $("readerFinishBtn").onclick = () => finishReading(false);
   if (canSkip) $("readerDiscardBtn").onclick = () => finishReading(true);
@@ -1803,6 +1864,7 @@ function showPanel(panel) {
   if (panel?.kind === "word") {
     const key = tokenKey(reader.text.data.sentences[panel.s].tokens[panel.t]);
     if (!reader.clicks.has(key)) reader.clicks.set(key, "looked");
+    saveReaderState();
   }
   refreshReader();
 }
@@ -1823,6 +1885,7 @@ async function classifyWord(cls) {
   if (cls === "check" && mine.status !== "mastered") mine.status = "pre_known";
 
   reader.clicks.set(key, cls);
+  saveReaderState();
   await saveUserWord(mine);
   if (reader) refreshReader(); // el panel sigue abierto, con la opción elegida marcada
 }
@@ -1855,6 +1918,7 @@ async function finishReading(discarded) {
   // Un texto descartado no se leyó: sus palabras no cambian de estado
   const candidates = discarded ? [] : await markSeenWords(text, clicks);
   reader = null;
+  clearReaderState();
   scheduleSync();
   if (candidates.length) startEvaluation(candidates, summary);
   else renderReadSummary(summary);
@@ -2074,8 +2138,14 @@ function renderRead() {
   if (evaluation && meta.reading.placedAt) return renderEvaluation();
   if (!meta.reading.placedAt) return renderOnboarding();
   if (reader) return renderReader();
+  // Una sola vez al abrir la app: la lectura que quedó a medias al recargar
+  if (!restoreTried) {
+    restoreTried = true;
+    return restoreReader().then((restored) => { if (!restored) renderReadHome(); });
+  }
   renderReadHome();
 }
+let restoreTried = false;
 
 function bindReader() {
   const area = $("readArea");
