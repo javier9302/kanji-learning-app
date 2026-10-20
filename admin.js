@@ -19,7 +19,7 @@ const sb = configured && window.supabase
   ? window.supabase.createClient(new URL(SUPABASE_CONFIG.url).origin, SUPABASE_CONFIG.anonKey)
   : null;
 
-let status = "pending";
+let textStatus = "pending"; // no "status": así se llama una propiedad del propio navegador
 let rows = [];
 let openId = "";
 let section = "texts"; // texts | words
@@ -66,8 +66,8 @@ async function loadTexts() {
   $("adminList").innerHTML = `<p class="message">Cargando…</p>`;
   const { data, error } = await sb.from("texts")
     .select("id, title, title_es, title_en, topic, level, source, status, data, total, created_at, user_id")
-    .eq("status", status).is("deleted_at", null)
-    .order("created_at", { ascending: status === "pending" }).limit(PAGE);
+    .eq("status", textStatus).is("deleted_at", null)
+    .order("created_at", { ascending: textStatus === "pending" }).limit(PAGE);
   if (error) {
     $("adminList").innerHTML = "";
     return say(`No se pudieron cargar los textos (${error.message}).`, true);
@@ -78,7 +78,7 @@ async function loadTexts() {
 
 function render() {
   $("adminCount").textContent = `${rows.length}${rows.length === PAGE ? "+" : ""} ${
-    STATUS_LABEL[status].toLowerCase()}${rows.length === 1 ? "" : "s"}`;
+    STATUS_LABEL[textStatus].toLowerCase()}${rows.length === 1 ? "" : "s"}`;
   if (!rows.length) {
     $("adminList").innerHTML = `<div class="no-items">No hay textos en este estado.</div>`;
     return;
@@ -97,8 +97,8 @@ function render() {
           </div>
         </div>
         <button class="button button-outline" type="button" data-open="${escapeHTML(row.id)}">${open ? "Ocultar" : "Ver texto"}</button>
-        ${status !== "approved" ? `<button class="button button-good" type="button" data-set="approved" data-id="${escapeHTML(row.id)}">Aprobar</button>` : ""}
-        ${status !== "rejected" ? `<button class="button button-wrong" type="button" data-set="rejected" data-id="${escapeHTML(row.id)}">Rechazar</button>` : ""}
+        ${textStatus !== "approved" ? `<button class="button button-good" type="button" data-set="approved" data-id="${escapeHTML(row.id)}">Aprobar</button>` : ""}
+        ${textStatus !== "rejected" ? `<button class="button button-wrong" type="button" data-set="rejected" data-id="${escapeHTML(row.id)}">Rechazar</button>` : ""}
       </div>
       ${open ? `
       <div class="admin-body">
@@ -440,7 +440,7 @@ function bind() {
   document.querySelector(".subtabs").addEventListener("click", (event) => {
     const tab = event.target.closest("[data-status]");
     if (!tab) return;
-    status = tab.dataset.status;
+    textStatus = tab.dataset.status;
     openId = "";
     document.querySelectorAll(".subtab").forEach((t) => t.classList.toggle("active", t === tab));
     loadTexts();

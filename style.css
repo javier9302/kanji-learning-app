@@ -158,6 +158,9 @@ a {
   display: inline-flex;
   align-items: center;
   gap: 8px;
+  min-height: 40px; /* objetivo cómodo para el dedo */
+  min-width: 40px;
+  justify-content: center;
 }
 
 .sync-dot {

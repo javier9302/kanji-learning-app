@@ -410,6 +410,11 @@ export default async function extra({ page, step, check }) {
     check(/^to become/.test(result.text) && /^to become/.test(result.word) && result.flag === 1, JSON.stringify(result));
   });
 
+  await step("escritura: los trazos de un kanji llegan de KanjiVG (versión fija)", async () => {
+    const strokes = await page.evaluate(async () => (await fetchStrokes("日")).length);
+    check(strokes === 4, `日 tiene ${strokes} trazos`);
+  });
+
   await step("diccionario: buscar en romaji abre la vista con resultados", async () => {
     await page.type("#dictInput", "mizu");
     await page.waitForSelector(".dict-row", { timeout: 5000 });

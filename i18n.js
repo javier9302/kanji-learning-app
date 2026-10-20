@@ -9,6 +9,7 @@
 const LANGS = ["es", "en"];
 
 const EN = {
+  "Pega un texto en japonés o el JSON que te devolvió la IA.": "Paste a Japanese text or the JSON the AI returned.",
   /* ---------- Traducir ---------- */
   "entendida": "understood",
   "no entendida": "missed",
@@ -174,7 +175,6 @@ const EN = {
   "Tu espacio de estudio japonés": "Your Japanese study space",
   "Idioma": "Language",
   "Sincronización": "Sync",
-  "Solo en este dispositivo": "This device only",
   "ESTUDIO PERSONAL DE JAPONÉS": "PERSONAL JAPANESE STUDY",
   "Un paso más cerca": "One step closer",
   "de dominar el japonés.": "to mastering Japanese.",
@@ -360,7 +360,7 @@ const EN = {
   "Palabras vistas": "Words seen",
   "Sabes leer": "You can read",
   "Entiendes": "You understand",
-  "Sabes escribir": "You can write",
+  "Kanjis que escribes": "Kanji you can write",
   "Próximamente": "Coming soon",
   "Textos leídos": "Texts read",
   "Racha de lectura": "Reading streak",
@@ -600,7 +600,6 @@ const EN = {
   "No se pudo obtener la lectura ({error}).": "Could not get the reading ({error}).",
   "sin datos": "no data",
   "Reintentar": "Retry",
-  "Saltar": "Skip",
   "Escribe la lectura (hiragana o katakana)": "Type the reading (hiragana or katakana)",
   "Escribe la lectura de la palabra (hiragana)": "Type the reading of the word (hiragana)",
   "Esa lectura existe, pero aquí se pide la más común del kanji solo.":

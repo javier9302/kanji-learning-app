@@ -654,6 +654,7 @@ async function validateText(raw) {
   for (const word of flagged.values()) if (word.source === "kana_fix") repairs.push(`kanji for a kana word: ${word.lemma}`);
   return {
     errors: [],
+    segmented,
     repairs,
     flagged: [...flagged.values()],
     text: {
@@ -671,8 +672,10 @@ async function validateText(raw) {
 /* Comprueba, guarda y anota las palabras por revisar. Lanza la lista de
    errores si el texto está roto. Lo usan las tres formas de agregar un texto. */
 async function addText(raw, source = "manual", origin = {}) {
-  const { errors, text, flagged, repairs, partial } = await validateText(raw);
+  const { errors, text, flagged, repairs, partial, segmented } = await validateText(raw);
   if (errors.length) throw Object.assign(errors, { partial });
+  // Pegado en el modo manual: la versión es la del prompt del formato que llegó
+  if (!origin.promptVersion) origin = { ...origin, promptVersion: segmented ? SEGMENTED_VERSION : PROMPT_VERSION };
   if (origin.topic) text.topic = origin.topic; // el formato nuevo no trae tema ni nivel: los pone la app
   if (origin.level) text.level = origin.level;
   const record = await saveText(text, source, origin);
@@ -776,7 +779,7 @@ async function saveText(data, source = "manual", origin = {}) {
     topic: data.topic, level: data.level,
     source,
     // De qué generación salió, para poder relacionar un reporte con su registro
-    requestId: origin.requestId || "", promptVersion: origin.promptVersion || PROMPT_VERSION, model: origin.model || "",
+    requestId: origin.requestId || "", promptVersion: origin.promptVersion ?? PROMPT_VERSION, model: origin.model || "",
     owner: "",         // se rellena al subirlo con la sesión iniciada
     status: "private", // al subirlo pasa a "pending"; un administrador lo aprueba
     // Un texto pegado tal cual (un artículo) se queda en este dispositivo: nunca se sube
@@ -954,7 +957,7 @@ async function addArticle(raw) {
   text.title_en = text.title_es = t("Texto pegado");
   text.topic = "article";
   for (const sentence of text.sentences) sentence.en = sentence.es = ""; // sin traducción
-  return saveText(text, "paste", { local: true });
+  return saveText(text, "paste", { local: true, promptVersion: "" }); // no lo escribió ninguna IA
 }
 
 async function addTextFromInput() {
@@ -963,6 +966,10 @@ async function addTextFromInput() {
     $("textMessage").className = "message";
     $("textMessage").textContent = t("Pega primero el texto.");
     return;
+  }
+  // Ni japonés ni el JSON de un texto (empieza por { o [): mejor decirlo que hablar de JSON
+  if (!/^\s*(```|[{[])/.test(raw) && !isPlainJapanese(raw)) {
+    return showTextErrors([t("Pega un texto en japonés o el JSON que te devolvió la IA.")]);
   }
   if (isPlainJapanese(raw)) {
     $("textMessage").className = "message";
@@ -1329,81 +1336,8 @@ function promptParams({ type, topic, length }) {
    generación para saber con qué versión salió cada error. */
 const PROMPT_VERSION = "2026-10-08.1";
 
-/* El prompt en sí. IMPORTANTE: supabase/functions/generate-text/index.ts lleva
-   una copia de esta función (allí se genera el texto con la IA); si cambias
-   una, cambia la otra. No usa nada de fuera salvo TOKEN_POS. */
-function renderPrompt({ level, type, topic, length, known, assumedLevels, learning }) {
-  const fresh = Math.round(length * 0.1);
-  // Las IA cuentan mal "palabras": se da un mínimo de tokens y su equivalente en oraciones
-  const minTokens = Math.round(length * 0.9), maxTokens = Math.round(length * 1.25);
-  const minSentences = Math.ceil(length / 9), maxSentences = Math.ceil(length / 6.5);
-  const knownLine = assumedLevels.length
-    ? `Known words: all standard JLPT ${assumedLevels.join(", ")} vocabulary` +
-      (known.length ? `, plus: ${known.join("、")}` : ".")
-    : known.length
-      ? `Known words (the learner can read these): ${known.join("、")}`
-      : "Known words: none yet. Use only the most basic beginner vocabulary.";
-
-  return `You are writing a graded Japanese reading text for a learner.
-
-LEARNER
-- Target level: JLPT ${level}.
-- ${knownLine}
-${learning.length ? `- Words the learner is still learning (reuse a few of them): ${learning.join("、")}\n` : ""}- A word written with its reading in brackets, like 角(かど), has several readings: use it ONLY with that reading and its meaning (角(かど) is "corner", never つの "horn").
-
-TEXT
-- Type: ${type}. Topic: ${topic}.
-- LENGTH (strict): across all sentences, the "tokens" arrays must contain between ${minTokens} and ${maxTokens} tokens that are not punctuation. That is about ${minSentences}-${maxSentences} sentences. Count the tokens before answering: a text with fewer than ${minTokens} is rejected. If you are short, continue the story with more sentences; do not pad with filler.
-- Natural Japanese with grammar no harder than JLPT ${level}.
-- Make it enjoyable to read: one concrete situation with a small story arc, a surprise or a touch of humour. Sentences must connect with each other; never a list of unrelated textbook sentences.
-- Split it into short paragraphs (in a dialogue, one paragraph per speaker turn).
-- About 90% of the content words must be known words. Introduce at most ${fresh} new words (about 10%), useful ones at level ${level}.
-- Write with the kanji a normal text of this level would use. Words that Japanese normally writes in kana must stay in kana (ある, いる, する, できる, ください, たくさん, かわいい, おいしい): never use rare kanji spellings such as 有る, 居る, 為る, 出来る, 下さい or 沢山.
-
-OUTPUT
-Return ONLY one JSON object (no explanations, no markdown), as compact JSON without indentation or line breaks, with exactly this structure (shown indented here only for readability):
-
-{
-  "title": "毎朝のコーヒー",
-  "title_en": "Morning coffee",
-  "title_es": "El café de cada mañana",
-  "topic": "${topic}",
-  "level": "${level}",
-  "sentences": [
-    {
-      "id": 1,
-      "paragraph": 1,
-      "jp": "私は毎朝コーヒーを飲みます。",
-      "en": "I drink coffee every morning.",
-      "es": "Bebo café todas las mañanas.",
-      "tokens": [
-        { "surface": "私", "lemma": "私", "reading": "わたし", "pos": "pronoun" },
-        { "surface": "は", "lemma": "は", "reading": "は", "pos": "particle" },
-        { "surface": "毎朝", "lemma": "毎朝", "reading": "まいあさ", "pos": "noun" },
-        { "surface": "コーヒー", "lemma": "コーヒー", "reading": "コーヒー", "pos": "noun" },
-        { "surface": "を", "lemma": "を", "reading": "を", "pos": "particle" },
-        { "surface": "飲みます", "lemma": "飲む", "reading": "のみます", "pos": "verb" },
-        { "surface": "。", "lemma": "。", "reading": "。", "pos": "punctuation" }
-      ],
-      "dictionary": {
-        "私": { "reading": "わたし", "meanings": ["I", "me"], "meanings_es": ["yo"], "pos": "pronoun" },
-        "毎朝": { "reading": "まいあさ", "meanings": ["every morning"], "meanings_es": ["todas las mañanas"], "pos": "noun" },
-        "コーヒー": { "reading": "コーヒー", "meanings": ["coffee"], "meanings_es": ["café"], "pos": "noun" },
-        "飲む": { "reading": "のむ", "meanings": ["to drink"], "meanings_es": ["beber"], "pos": "godan verb" }
-      }
-    }
-  ]
-}
-
-RULES
-1. "tokens" splits the sentence into words. Joining every "surface" in order must reproduce "jp" exactly, punctuation included.
-2. Keep a conjugated verb or adjective together with its endings as ONE token (飲みます, 食べました, 高くない).
-3. "surface" is the word as written; "lemma" is its dictionary form (飲みます → 飲む); the token "reading" is the reading of the surface as written, in hiragana (katakana words stay in katakana).
-4. Token "pos" must be one of: ${TOKEN_POS.join(", ")}.
-5. "dictionary" has one entry, keyed by lemma, for every token of the sentence except particle, auxiliary, punctuation, symbol, number and proper_noun. Each entry has "reading" (of the lemma, in kana), "meanings" (1-3, English), "meanings_es" (1-3, Spanish) and "pos" (free text).
-6. "en" and "es" are natural translations of the sentence. "title_en" and "title_es" translate the title.
-7. Sentence ids start at 1 and increase by 1. "paragraph" is the number of the paragraph the sentence belongs to, starting at 1.`;
-}
+/* El prompt del formato antiguo (con tokens y diccionario) ya no lo usa la app;
+   la función generate-text conserva su copia para versiones anteriores de la app. */
 
 /* Versión del prompt segmentado (formato nuevo): súbela al cambiar su texto. */
 const SEGMENTED_VERSION = "2026-10-09.2-seg";
@@ -2238,6 +2172,7 @@ async function renderReadingStats() {
   $("statWords").textContent = mine.length;
   $("statWordsRead").textContent = count((w) => w.canReadKanji);
   $("statWordsMeaning").textContent = count((w) => w.knowsMeaning);
+  $("statKanjiWrite").textContent = [...userKanji.values()].filter((k) => k.canWrite).length;
   $("statTexts").textContent = texts.filter((x) => x.readAt).length;
   $("statReadStreak").textContent = plural(readingStreak(sessions), "día", "días");
 

@@ -94,8 +94,8 @@ const isDue = (record) => record.studied && record.nextReview <= today();
 
 const RATING = { again: 1, hard: 2, good: 3, easy: 4 };
 const DAY_MS = 86400000;
-let scheduler = null;
-const fsrsScheduler = () => scheduler ??= FSRS.fsrs(FSRS.generatorParameters(STUDY_CONFIG.fsrs));
+let fsrsInstance = null; // no "scheduler": así se llama una API del propio navegador
+const fsrsScheduler = () => fsrsInstance ??= FSRS.fsrs(FSRS.generatorParameters(STUDY_CONFIG.fsrs));
 
 /* Tarjeta FSRS de un registro. Lo repasado antes de FSRS se convierte: el
    intervalo que tenía pasa a ser su estabilidad y la facilidad, su dificultad. */
@@ -1007,7 +1007,6 @@ async function nextDraw() {
    ========================================= */
 
 const isKanaText = (text) => /^[\p{Script=Hiragana}\p{Script=Katakana}ー・]+$/u.test(text);
-const ORIGIN_LABEL = () => ({ manual: t("a mano"), diccionario: t("diccionario"), traducir: t("Traducir"), lectura: t("lectura"), frecuencia: t("lista de frecuencia") });
 
 /* La entrada del banco para lo escrito: por escritura y, si hay varias, por lectura */
 function bankMatch(writing, reading) {

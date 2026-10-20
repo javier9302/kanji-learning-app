@@ -5,7 +5,6 @@
 const DB_NAME = "kanji-learning-app";
 const DB_VERSION = 6; // 5: almacenes sentences y sentenceStats (frases de ejemplo); 6: translations (Traducir)
 const LEVELS = ["N5", "N4", "N3", "N2", "N1"];
-const PAGE_SIZE = 150;
 
 let db;
 // Historial diario, borrados, perfil de lectura y lecturas de kanji practicadas en frases
@@ -76,8 +75,6 @@ function writeItems(toSave = [], toDelete = []) {
     tx.onabort = () => reject(tx.error);
   });
 }
-const saveItems = (list) => writeItems(Array.isArray(list) ? list : [list]);
-const saveItem = saveItems;
 
 async function loadMeta() {
   for (const row of await getAll("meta")) {
@@ -123,11 +120,6 @@ const prefs = loadLocal("kanji-prefs", {
 
 const normalizeText = (v) => String(v ?? "").trim().normalize("NFKC");
 const isKanji = (c) => /\p{Script=Han}/u.test(c);
-const splitKanji = (word) => [...new Set([...word].filter(isKanji))];
-
-function splitInput(value) {
-  return [...new Set(value.split(/[,，、;；\n\r]+/).map(normalizeText).filter(Boolean))];
-}
 
 function escapeHTML(value) {
   return String(value).replace(/[&<>"']/g, (c) => ({
@@ -367,12 +359,12 @@ function renderHardest(items) {
    ESCRITURA (trazos de KanjiVG)
    -----------------------------------------
    Cada kanji es un SVG de 109 × 109 con un <path> por trazo, en orden.
-   Se busca primero en la carpeta kanjivg/ de la app y, si no está,
-   en el repositorio de KanjiVG. El nombre es el código Unicode del
+   Se descargan del repositorio de KanjiVG, en una versión fija. El nombre es el código Unicode del
    kanji en hexadecimal con 5 cifras: 日 (U+65E5) -> 065e5.svg
    ========================================= */
 
-const KVG_SOURCES = ["kanjivg/", "https://cdn.jsdelivr.net/gh/KanjiVG/kanjivg@master/kanji/"];
+// Versión fija de KanjiVG (r20260714): un archivo con versión no cambia y el service worker lo guarda
+const KVG_SOURCES = ["https://cdn.jsdelivr.net/gh/KanjiVG/kanjivg@r20260714/kanji/"];
 const KVG_SIZE = 109;
 const STROKE_SAMPLES = 12;
 const STROKE_TOLERANCE = 15; // distancia media admitida, en unidades del SVG
