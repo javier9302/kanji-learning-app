@@ -72,6 +72,28 @@ function analyseUnits(tokenizer, ja) {
 }
 
 /* =========================================
+   UNA PALABRA ESCRITA EN KANA
+   -----------------------------------------
+   En un texto llega en kana (いる, なる, いう) y en el banco está con kanji.
+   Varias palabras pueden leerse igual: いる es 居る "estar", pero también
+   要る "necesitar", 炒る "tostar"… Elegir la primera que coincide daba
+   significados equivocados. Reglas:
+     1. una palabra del banco que casi siempre se escribe en kana (有る -> ある)
+        es esa palabra;
+     2. si no, manda el diccionario general (JMdict), que sabe qué palabra se
+        escribe normalmente así;
+     3. solo si no la tiene y en el banco hay UNA sola palabra con esa lectura
+        (いう -> 言う), es esa;
+     4. si hay varias, no se adivina: queda sin resolver.
+   candidates: las palabras del banco con esa lectura.
+   ========================================= */
+
+/* Regla 1 */
+const kanaFormWord = (candidates) => (candidates || []).find((word) => word.kana) || null;
+/* Regla 3: la única palabra del banco que se lee así (o null si hay varias o ninguna) */
+const onlyHomophone = (candidates) => (candidates || []).length === 1 ? candidates[0] : null;
+
+/* =========================================
    TEXTO SIN SEGMENTAR (un artículo pegado tal cual)
    ========================================= */
 
@@ -144,6 +166,6 @@ const segmentSentence = (tokenizer, text) =>
 if (typeof module !== "undefined") {
   module.exports = {
     isKana, PUNCTUATION, KUROMOJI_POS, PARTICLES, piecePos, isContentPiece, pieceBase, pieceReading,
-    unitOf, analyseUnits, splitSentences, groupPieces, segmentSentence
+    unitOf, analyseUnits, splitSentences, groupPieces, segmentSentence, kanaFormWord, onlyHomophone
   };
 }

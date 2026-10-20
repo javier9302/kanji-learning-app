@@ -361,25 +361,39 @@ async function exportGrades() {
 
 async function dictionaryCount() {
   const { count, error } = await sb.from("dictionary").select("id", { count: "exact", head: true });
-  if (!error) $("dictInfo").textContent = `El diccionario tiene ${count} palabras. Importar de nuevo no duplica nada ni pisa lo que hayas aprobado.`;
+  if (!error) $("dictInfo").textContent = `El diccionario tiene ${count} palabras. Importar de nuevo no duplica nada: actualiza los significados de JMdict y no toca lo que hayas aprobado.`;
 }
 
-/* Sube supabase/dictionary.json a la tabla "dictionary", por tandas */
+/* El mismo archivo que usa la app en el dispositivo (lo genera tools/build-dictionary.mjs) */
+const JMDICT_FILE = "vendor/jmdict/common-2026-10-20.json";
+
+/* Sube el diccionario general a la tabla "dictionary", por tandas. Si una
+   palabra ya estaba, se actualiza (así se corrigen los significados de una
+   versión anterior); las que aprobó un administrador no se tocan. */
 async function importDictionary() {
   const button = $("dictImportBtn");
   button.disabled = true;
   try {
     say("Descargando el diccionario…");
-    const entries = await (await fetch("supabase/dictionary.json")).json();
-    const BATCH = 500;
-    for (let i = 0; i < entries.length; i += BATCH) {
-      const rows = entries.slice(i, i + BATCH).map(([lemma, reading, meanings, meanings_es, uk]) =>
-        ({ lemma, reading, meanings, meanings_es, uk: !!uk, source: "jmdict" }));
-      const { error } = await sb.from("dictionary").upsert(rows, { onConflict: "lemma,reading", ignoreDuplicates: true });
+    const entries = await (await fetch(JMDICT_FILE)).json();
+    // Lo aprobado a mano manda: esas palabras no se pisan
+    const approved = new Set();
+    for (let from = 0; ; from += 1000) {
+      const { data, error } = await sb.from("dictionary").select("lemma, reading").eq("source", "approved").range(from, from + 999);
       if (error) throw error;
-      say(`Importando el diccionario… ${Math.min(i + BATCH, entries.length)} / ${entries.length}`);
+      data.forEach((row) => approved.add(`${row.lemma}\u0000${row.reading}`));
+      if (data.length < 1000) break;
     }
-    say(`Diccionario importado: ${entries.length} palabras.`);
+    const list = entries.filter(([lemma, reading]) => !approved.has(`${lemma}\u0000${reading}`));
+    const BATCH = 500;
+    for (let i = 0; i < list.length; i += BATCH) {
+      const rows = list.slice(i, i + BATCH).map(([lemma, reading, meanings, meanings_es, uk]) =>
+        ({ lemma, reading, meanings, meanings_es, uk: !!uk, source: "jmdict" }));
+      const { error } = await sb.from("dictionary").upsert(rows, { onConflict: "lemma,reading" });
+      if (error) throw error;
+      say(`Importando el diccionario… ${Math.min(i + BATCH, list.length)} / ${list.length}`);
+    }
+    say(`Diccionario importado: ${list.length} palabras${approved.size ? ` (${approved.size} aprobadas a mano, sin tocar)` : ""}.`);
     dictionaryCount();
   } catch (error) {
     say(`No se pudo importar el diccionario (${error.message}). Puedes volver a pulsar el botón: continúa donde se quedó.`, true);

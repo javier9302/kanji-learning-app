@@ -137,7 +137,8 @@ const searchBank = () => [...BANK.words.values()].map((word) => dictBankEntry(wo
 const dictKatakana = (text) => text.replace(/[ぁ-ゖ]/g, (c) => String.fromCharCode(c.charCodeAt(0) + 0x60));
 const dictRemoteEntry = (row) => ({
   id: wordKey(row.lemma, row.reading || row.lemma), w: row.lemma, r: row.reading || row.lemma,
-  en: row.meanings || [], es: row.meanings_es || [], alt: [], level: null, rank: 0, kana: !!row.uk, source: "dict"
+  en: row.meanings || [], es: row.meanings_es || [], alt: [], level: null, rank: 0, kana: !!row.uk, source: "dict",
+  approved: row.source === "approved"
 });
 
 /* Diccionario general (tabla dictionary de Supabase, unas 29.000 palabras de
@@ -175,17 +176,20 @@ async function searchRemote(query) {
 }
 
 /* De dónde salen los resultados: sin sesión hay que decir claro que solo es el banco */
+/* De dónde salen los resultados. El diccionario general (JMdict) está en el
+   dispositivo; Supabase solo añade lo aprobado por un administrador. */
 function dictNoteText() {
-  const notes = {
-    loading: t("Buscando también en el diccionario general…"),
-    ok: t("Resultados del banco de la app y del diccionario general."),
-    guest: sb
-      ? t("Sin sesión iniciada solo se busca en el banco de la app (unas 6.700 palabras). Inicia sesión para buscar también en el diccionario general.")
-      : t("Solo se busca en el banco de la app (unas 6.700 palabras)."),
-    offline: t("Sin conexión: solo se busca en el banco de la app."),
-    error: t("No se pudo consultar el diccionario general: solo se muestran las palabras del banco.")
-  };
-  return notes[dictState.remote] || "";
+  if (dictState.remote === "loading") return t("Buscando también en el diccionario general…");
+  if (!dictState.local) {
+    return t("Solo se busca en el banco de la app: el diccionario general aún no se ha descargado (la primera vez hace falta conexión).");
+  }
+  const base = t("Resultados del banco de la app y del diccionario general (JMdict).");
+  const extra = {
+    guest: sb ? t("Sin sesión no aparecen las palabras que haya añadido el administrador.") : "",
+    offline: t("Sin conexión no aparecen las palabras que haya añadido el administrador."),
+    error: t("No se pudieron consultar las palabras que haya añadido el administrador.")
+  }[dictState.remote] || "";
+  return extra ? `${base} ${extra}` : base;
 }
 
 /* Estado de la palabra para el usuario: lo que dice su progreso, o que aún no la tiene */
@@ -301,18 +305,23 @@ async function runDictSearch(text) {
   const query = parseDictQuery(text, dictToHiragana);
   const id = ++dictSearchId;
   dictState = { text: query ? query.raw : "", results: [], open: "", remote: query ? "loading" : "" };
-  const show = (remote = []) => {
-    dictState.results = rankResults([...searchBank(), ...remote], query, lang);
+  // Orden de las fuentes: el banco, lo aprobado por un administrador, el diccionario
+  // del dispositivo y el resto de Supabase (una misma palabra se queda con la primera)
+  const show = (remote = [], local = []) => {
+    const approved = remote.filter((entry) => entry.approved);
+    dictState.results = rankResults([...searchBank(), ...approved, ...local, ...remote], query, lang);
     if (document.body.dataset.view !== "dict") switchView("dict"); else renderDictionary();
   };
   if (!query) return document.body.dataset.view === "dict" ? renderDictionary() : switchView("dict");
   show();
 
   const bankLoaded = BANK.LEVELS.every((level) => BANK.loaded(level));
-  const [found] = await Promise.all([searchRemote(query), BANK.loadUpTo("N1").catch(() => {})]);
+  const [found, local] = await Promise.all([searchRemote(query), loadLocalDictionary(), BANK.loadUpTo("N1").catch(() => {})]);
   if (id !== dictSearchId) return; // ya se buscó otra cosa
   dictState.remote = found.state;
-  if (found.entries.length || !bankLoaded) show(found.entries); else renderDictionary();
+  dictState.local = local.rows.length > 0;
+  const localEntries = local.rows.map(dictRemoteEntry);
+  if (found.entries.length || localEntries.length || !bankLoaded) show(found.entries, localEntries); else renderDictionary();
 }
 
 /* Una palabra de fuera del banco necesita su entrada en el diccionario propio

@@ -361,6 +361,35 @@ export default async function extra({ page, step, check }) {
     await page.evaluate(() => { translating = null; switchView("read"); });
   });
 
+  await step("significados: las palabras en kana salen con su significado, también sin sesión", async () => {
+    const meanings = await page.evaluate(async () => {
+      const { text } = await validateText(JSON.stringify({ title: "かな", sentences: [{ p: 1, ja: "猫|が|います|。|この|ケーキ|は|とても|おいしく|なる|。", en: "x", es: "x" }] }));
+      const dict = text.sentences[0].dictionary;
+      return Object.fromEntries(["いる", "この", "ケーキ", "とても", "なる"].map((lemma) => [lemma, dict[lemma]?.meanings?.[0] || ""]));
+    });
+    check(/^to be/.test(meanings["いる"]) && meanings["この"] === "this" && meanings["ケーキ"] === "cake" &&
+      meanings["とても"] === "very" && /^to become/.test(meanings["なる"]), JSON.stringify(meanings));
+  });
+
+  await step("significados: se reparan los guardados por una versión anterior", async () => {
+    const result = await page.evaluate(async () => {
+      // Un texto y una palabra como los dejaba la versión anterior: なる con el significado de 鳴る
+      const wrong = BANK.words.get("鳴る|なる");
+      const text = { id: "viejo-1", title: "viejo", titleEn: "", titleEs: "", topic: "x", level: "N5", source: "manual", status: "private",
+        createdAt: 1, updatedAt: 1, readAt: null, lemmas: {}, total: 0,
+        data: { sentences: [{ id: 1, jp: "なる", en: "", es: "", tokens: [{ surface: "なる", lemma: "なる", reading: "なる", pos: "verb" }],
+          dictionary: { "なる": { reading: "なる", meanings: wrong.en, meanings_es: wrong.es, pos: "" } } }] } };
+      texts.push(text);
+      words.set("なる|なる", { id: "なる|なる", lemma: "なる", reading: "なる", meanings: wrong.en, meaningsEs: wrong.es, pos: "", source: "ai", updatedAt: 1 });
+      prefs.kanaRepair = 0;
+      await repairKanaMeanings();
+      const after = { text: text.data.sentences[0].dictionary["なる"].meanings[0], word: words.get("なる|なる").meanings[0], flag: prefs.kanaRepair };
+      texts = texts.filter((x) => x !== text);
+      return after;
+    });
+    check(/^to become/.test(result.text) && /^to become/.test(result.word) && result.flag === 1, JSON.stringify(result));
+  });
+
   await step("diccionario: buscar en romaji abre la vista con resultados", async () => {
     await page.type("#dictInput", "mizu");
     await page.waitForSelector(".dict-row", { timeout: 5000 });
@@ -369,6 +398,11 @@ export default async function extra({ page, step, check }) {
     // Como invitado tiene que decir claro que solo se busca en el banco
     await page.waitForFunction(() => dictState.remote === "guest" && $("dictNote").textContent.length > 20, { timeout: 30000 });
     check(await page.evaluate(() => BANK.loaded("N1")), "no se cargaron todos los niveles del banco");
+    // Sin sesión también se busca en el diccionario general del dispositivo
+    await page.evaluate(() => runDictSearch("ケーキ"));
+    await page.waitForFunction(() => dictState.results.some((entry) => entry.w === "ケーキ") && dictState.local, { timeout: 30000 });
+    await page.evaluate(() => runDictSearch("mizu"));
+    await page.waitForFunction(() => dictState.remote === "guest", { timeout: 30000 });
   });
 
   await step("diccionario: la ficha de un resultado", async () => {

@@ -159,7 +159,7 @@ La versión del prompt es la constante `PROMPT_VERSION`, que está en `reading.j
 Cuando un texto trae una palabra que no está en el banco de la app, el texto se muestra igualmente y la palabra se resuelve así: primero en el diccionario general (tabla `dictionary`) y, si no está, con lo que explicó la IA. Esas palabras quedan anotadas para que las revises.
 
 1. Ejecuta `supabase/schema.sql` (crea las tablas `dictionary` y `words_to_review`).
-2. Abre `admin.html`, pestaña **Palabras por revisar**, y pulsa **Importar diccionario** una vez. Sube unas 29.000 palabras comunes de JMdict que no están en el banco; tarda alrededor de un minuto.
+2. Abre `admin.html`, pestaña **Palabras por revisar**, y pulsa **Importar diccionario**. Sube unas 22.500 palabras comunes de JMdict que no están en el banco; tarda alrededor de un minuto. **Si ya lo importaste con una versión anterior, vuelve a pulsarlo**: corrige significados equivocados (いる salía como «necesitar», なる como «dar fruto») y no toca lo que hayas aprobado.
 3. En esa misma pestaña aparecen las palabras por revisar:
    - **Aprobar** la guarda en el diccionario tal como se ve. Desde entonces la app la usa y no vuelve a aparecer en la lista.
    - **Editar** permite corregir lectura y significados antes de aprobar.
@@ -167,7 +167,11 @@ Cuando un texto trae una palabra que no está en el banco de la app, el texto se
 
 Cada palabra indica de dónde salió: del diccionario JMdict, solo de la IA, o si la IA la escribió con kanji y la app la pasó a kana (por ejemplo 有りました → ありました).
 
-Sin sesión iniciada no se consulta el diccionario general ni se anotan palabras: se usa lo que explique la IA.
+El mismo diccionario está también en la app (`vendor/jmdict/common-2026-10-20.json`, unos 740 kB comprimido): se descarga la primera vez que hace falta y se guarda para siempre, así que funciona sin sesión y sin conexión. Con sesión, además, se consultan en Supabase las palabras aprobadas por un administrador, que mandan sobre JMdict.
+
+Para regenerarlo con una versión nueva de JMdict: `node tools/build-dictionary.mjs` (descarga JMdict de EDRDG; cambia `VERSION` en el script y la ruta en `reading.js` y `admin.js`). Una palabra escrita en kana se resuelve así: la del banco que casi siempre va en kana (有る → ある), la de JMdict, y solo si en el banco hay una única palabra con esa lectura (いう → 言う), esa; si hay varias no se adivina. Las reglas están en `ja-core.js` y en `tools/lib/jmdict.js`.
+
+Sin sesión no se anotan palabras por revisar.
 
 ## Repaso espaciado y palabras nuevas
 

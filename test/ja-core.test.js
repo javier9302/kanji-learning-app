@@ -79,3 +79,14 @@ test("segmentSentence: las mismas unidades que se le piden a la IA", async () =>
     assert.ok(!seg(text).split("|").includes(""));
   }
 });
+
+test("palabras en kana: la que se escribe en kana, o la única que se lee así; nunca la primera que coincide", () => {
+  const { kanaFormWord, onlyHomophone } = require("../ja-core.js");
+  const 有る = { w: "有る", kana: true }, 在る = { w: "在る", kana: true }, 要る = { w: "要る", kana: false }, 炒る = { w: "炒る", kana: false };
+  assert.equal(kanaFormWord([要る, 有る, 在る]), 有る);
+  assert.equal(kanaFormWord([要る, 炒る]), null);          // いる: ninguna se escribe en kana -> que decida el diccionario
+  assert.equal(kanaFormWord(undefined), null);
+  assert.equal(onlyHomophone([要る]), 要る);                // いう -> 言う: solo hay una
+  assert.equal(onlyHomophone([要る, 炒る]), null);          // varias: no se adivina
+  assert.equal(onlyHomophone([]), null);
+});

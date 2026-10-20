@@ -162,7 +162,8 @@ const WORD_SUFFIXES = [
   ["目", "め"], ["屋", "や"], ["者", "しゃ"], ["用", "よう"], ["性", "せい"], ["化", "か"]
 ];
 
-/* Palabras del banco por su lectura, para encontrar ある -> 有る */
+/* Palabras del banco por su lectura: lectura -> [palabras] (para encontrar ある -> 有る).
+   Ver en ja-core.js las reglas para elegir cuando hay varias. */
 const bankByReading = (() => {
   let size = -1, index;
   return () => {
@@ -170,13 +171,15 @@ const bankByReading = (() => {
       index = new Map();
       for (const word of BANK.words.values()) {
         const key = normalizeReading(word.r);
-        if (!index.has(key)) index.set(key, word);
+        if (!index.has(key)) index.set(key, []);
+        index.get(key).push(word);
       }
       size = BANK.words.size;
     }
     return index;
   };
 })();
+const readingCandidates = (lemma) => bankByReading().get(normalizeReading(lemma)) || [];
 
 /* a. En el banco: tal cual, con el prefijo de cortesía escrito de otra forma
    (御飯 / ご飯 / お茶) o, si llega en kana, por su lectura */
@@ -189,19 +192,32 @@ function bankLookup(lemma, reading) {
   let word = pick(lemma);
   if (!word && lemma.startsWith("御")) word = pick("ご" + lemma.slice(1)) || pick("お" + lemma.slice(1));
   if (!word && /^[ごお]/.test(lemma) && lemma.length > 1) word = pick("御" + lemma.slice(1));
-  if (!word && isKana(lemma)) word = bankByReading().get(normalizeReading(lemma)) || null;
+  // En kana: solo una palabra que casi siempre se escribe así (regla 1 de ja-core.js)
+  if (!word && isKana(lemma)) word = kanaFormWord(readingCandidates(lemma));
   return word;
 }
 
 const bankEntry = (word, pos) => ({ reading: word.r, meanings: word.en, meanings_es: word.es, pos: pos || "" });
 
-/* Devuelve { entry, source, word } con source: bank | parts | approved | jmdict | ai | none */
+/* Devuelve { entry, source, word } con source: bank | parts | approved | jmdict | ai | none.
+   Orden: banco, diccionario general, compuesto con sufijo, lo que explicó la IA
+   y, en kana, la única palabra del banco con esa lectura. */
 function resolveWord(lemma, given, extra) {
   const reading = isText(given?.reading) ? normalizeText(given.reading) : "";
   const word = bankLookup(lemma, reading);
   if (word) return { entry: bankEntry(word, given?.pos), source: "bank", word };
 
-  // b. Compuesto con sufijo: el significado sale de la primera parte
+  // b. Diccionario general (JMdict): antes que las partes, porque sabe leer 一日中 (いちにちじゅう)
+  const found = extra.get(lemma);
+  if (found) {
+    return {
+      entry: { reading: found.reading, meanings: found.meanings || [], meanings_es: found.meanings_es || [], pos: given?.pos || "" },
+      // Una palabra ya aprobada es de fiar: no vuelve a la lista de revisión
+      source: found.source === "approved" ? "approved" : "jmdict", word: null, uk: found.uk
+    };
+  }
+
+  // c. Compuesto con sufijo: el significado sale de la primera parte
   for (const [suffix, suffixReading] of WORD_SUFFIXES) {
     if (!lemma.endsWith(suffix) || lemma.length <= suffix.length) continue;
     const stem = bankLookup(lemma.slice(0, -suffix.length), "");
@@ -217,16 +233,6 @@ function resolveWord(lemma, given, extra) {
     };
   }
 
-  // c. Diccionario general
-  const found = extra.get(lemma);
-  if (found) {
-    return {
-      entry: { reading: found.reading, meanings: found.meanings || [], meanings_es: found.meanings_es || [], pos: given?.pos || "" },
-      // Una palabra ya aprobada es de fiar: no vuelve a la lista de revisión
-      source: found.source === "approved" ? "approved" : "jmdict", word: null, uk: found.uk
-    };
-  }
-
   // d. Lo que explicó la IA
   if (given && typeof given === "object") {
     return {
@@ -239,14 +245,50 @@ function resolveWord(lemma, given, extra) {
       }
     };
   }
+  // e. En kana, la única palabra del banco que se lee así (いう -> 言う)
+  const only = isKana(lemma) ? onlyHomophone(readingCandidates(lemma)) : null;
+  if (only) return { entry: bankEntry(only, given?.pos), source: "bank", word: only };
   return { entry: { reading: "", meanings: [], meanings_es: [], pos: "" }, source: "none", word: null };
 }
 
-/* c. Consulta en el diccionario general las palabras que no están en el banco.
-   Devuelve Map(lemma -> { reading, meanings, meanings_es, uk }). */
+/* Diccionario general en el propio dispositivo: las palabras comunes de JMdict
+   que no están en el banco (vendor/jmdict, unos 740 kB comprimido). Se descarga
+   la primera vez que hace falta y el service worker lo guarda para siempre.
+   Así funciona sin sesión y sin conexión. Lo genera tools/build-dictionary.mjs. */
+const JMDICT_FILE = "vendor/jmdict/common-2026-10-20.json";
+let localDictionary = null; // promesa de Map(lemma -> fila); el Map lleva también .rows, todas las filas
+
+function loadLocalDictionary() {
+  return localDictionary ??= fetch(JMDICT_FILE)
+    .then((response) => response.ok ? response.json() : Promise.reject(new Error(String(response.status))))
+    .then((list) => {
+      const map = new Map(), rows = [];
+      // Las filas vienen de la más común a la menos: para cada escritura vale la primera
+      for (const [lemma, reading, meanings, meanings_es, uk] of list) {
+        const row = { lemma, reading, meanings, meanings_es, uk: !!uk, source: "jmdict" };
+        rows.push(row);
+        if (!map.has(lemma)) map.set(lemma, row);
+      }
+      map.rows = rows;
+      return map;
+    })
+    .catch((error) => {
+      console.error("No se pudo cargar el diccionario general:", error);
+      localDictionary = null; // sin conexión la primera vez: se reintenta la próxima
+      return Object.assign(new Map(), { rows: [] });
+    });
+}
+
+/* Consulta en el diccionario general las palabras que no están en el banco.
+   Primero en el dispositivo; con sesión, además, en la tabla dictionary de
+   Supabase: lo aprobado por un administrador manda, y lo que el archivo no
+   tenga se completa desde ahí. Devuelve Map(lemma -> { reading, meanings, meanings_es, uk, source }). */
 async function lookupDictionary(lemmas) {
   const found = new Map();
-  if (!lemmas.length || !sb || !sync.user) return found; // sin sesión se usa lo que explique la IA
+  if (!lemmas.length) return found;
+  const local = await loadLocalDictionary();
+  for (const lemma of lemmas) if (local.has(lemma)) found.set(lemma, local.get(lemma));
+  if (!sb || !sync.user || !navigator.onLine) return found;
   try {
     for (let i = 0; i < lemmas.length; i += 100) {
       const { data, error } = await sb.from("dictionary")
@@ -254,13 +296,89 @@ async function lookupDictionary(lemmas) {
       if (error) throw error;
       for (const row of data) {
         // Lo aprobado por un administrador manda sobre la entrada de JMdict
-        if (!found.has(row.lemma) || row.source === "approved") found.set(row.lemma, row);
+        if (row.source === "approved" || !found.has(row.lemma)) found.set(row.lemma, row);
       }
     }
   } catch (error) {
     console.error("No se pudo consultar el diccionario:", error); // la lectura sigue con lo que haya
   }
   return found;
+}
+
+/* ---------- Reparar significados de una versión anterior ----------
+   Antes, una palabra escrita en kana tomaba el significado de la primera
+   palabra del banco que se leyera igual: なる salía como 鳴る "sonar" y いる
+   como 要る "necesitar". Esos significados quedaron guardados en los textos y
+   en el diccionario del usuario. Aquí se detectan (el significado es justo el
+   de una de esas palabras) y se sustituyen por el bueno, o se dejan vacíos si
+   no se sabe cuál es. */
+
+const sameList = (a, b) => Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((x, i) => x === b[i]);
+
+/* El significado bueno de una palabra en kana, o null si no se sabe */
+function kanaMeaning(lemma, local) {
+  const candidates = readingCandidates(lemma);
+  const word = kanaFormWord(candidates);
+  if (word) return { reading: word.r, meanings: word.en, meanings_es: word.es };
+  const row = local.get(lemma);
+  if (row) return { reading: row.reading, meanings: row.meanings, meanings_es: row.meanings_es };
+  const only = onlyHomophone(candidates);
+  return only ? { reading: only.r, meanings: only.en, meanings_es: only.es } : null;
+}
+
+/* Cambia en su sitio una entrada con el significado equivocado. Devuelve si cambió. */
+function repairKanaEntry(lemma, entry, local) {
+  if (!entry || !isKana(lemma) || BANK.byWriting.has(lemma)) return false;
+  const wrong = readingCandidates(lemma).find((word) => !word.kana && sameList(entry.meanings, word.en));
+  if (!wrong) return false;
+  const right = kanaMeaning(lemma, local);
+  if (right && sameList(right.meanings, wrong.en)) return false; // era la buena
+  entry.meanings = right?.meanings || [];
+  entry.meanings_es = right?.meanings_es || [];
+  if (right && "meaningsEs" in entry) { entry.meaningsEs = right.meanings_es; delete entry.meanings_es; }
+  return true;
+}
+
+/* Repara unos textos (en su sitio). Devuelve los que cambiaron. */
+async function repairTexts(list) {
+  if (!list.length) return [];
+  await BANK.loadUpTo("N1").catch(() => {});
+  const local = await loadLocalDictionary();
+  const changed = [];
+  for (const text of list) {
+    let touched = false;
+    for (const sentence of text.data?.sentences || []) {
+      for (const [lemma, entry] of Object.entries(sentence.dictionary || {})) {
+        if (repairKanaEntry(lemma, entry, local)) touched = true;
+      }
+    }
+    if (touched) changed.push(text);
+  }
+  return changed;
+}
+
+/* Una sola vez por dispositivo: textos guardados y diccionario del usuario */
+async function repairKanaMeanings() {
+  if (prefs.kanaRepair === 1 || !texts.length && !words.size) {
+    prefs.kanaRepair = 1;
+    return saveLocal("kanji-prefs", prefs);
+  }
+  const local = await loadLocalDictionary();
+  if (!local.size) return; // sin el diccionario no se sabe el significado bueno: se reintenta otro día
+  const fixedTexts = await repairTexts(texts);
+  const fixedWords = [];
+  for (const entry of words.values()) {
+    const shaped = { meanings: entry.meanings, meaningsEs: entry.meaningsEs };
+    if (repairKanaEntry(entry.lemma, shaped, local)) {
+      Object.assign(entry, { meanings: shaped.meanings, meaningsEs: shaped.meaningsEs, updatedAt: Date.now() });
+      fixedWords.push(entry);
+    }
+  }
+  await putRecords("texts", fixedTexts);
+  await putRecords("words", fixedWords);
+  if (fixedTexts.length || fixedWords.length) console.info(`Significados reparados: ${fixedTexts.length} textos, ${fixedWords.length} palabras.`);
+  prefs.kanaRepair = 1;
+  saveLocal("kanji-prefs", prefs);
 }
 
 /* Una respuesta cortada a medias (pasa al pegar en el móvil o cuando la IA no
@@ -2332,9 +2450,12 @@ async function pullReading(userId) {
     if (mine) texts[texts.indexOf(mine)] = record; else texts.push(record);
     if (mine && reader?.text === mine) reader.text = record;
     saved.push(record);
-    freshWords.push(...wordsFromText(row.data));
   }
   if (saved.length || removed.length) {
+    // Un texto subido por una versión anterior puede traer significados equivocados:
+    // se reparan antes de guardarlo y de sacar sus palabras
+    await repairTexts(saved);
+    for (const text of saved) freshWords.push(...wordsFromText(text.data));
     await putRecords("texts", saved, removed);
     await putRecords("words", freshWords);
     for (const id of removed) await dropTextSentences(id);
