@@ -53,6 +53,7 @@
       <button class="tab" data-admin="logs" type="button">Registros</button>
       <button class="tab" data-admin="grades" type="button">Traducciones</button>
       <button class="tab" data-admin="users" type="button">Usuarios</button>
+      <button class="tab" data-admin="sentences" type="button">Frases</button>
     </nav>
 
     <!-- Palabras por revisar -->
@@ -141,6 +142,24 @@
         (premium, 30 por defecto) de la función generate-text. Sin fecha de fin, premium no caduca.
       </p>
       <div id="usersList" class="items-list"></div>
+    </section>
+
+    <!-- Frases compartidas -->
+    <section id="sentencesPanel" class="hidden">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">FRASES COMPARTIDAS</p>
+          <h2>Frases</h2>
+        </div>
+        <span id="sentencesCount" class="pill"></span>
+      </div>
+      <p class="helper admin-help">
+        Frases que la app añadió para todos al repasar «En una frase»: las de una historia que se usó
+        porque no había ninguna común, y las que escribió la IA (función generate-sentences) para
+        palabras sin ninguna. Ya pasaron la comprobación automática. Al borrar una, desaparece de todos
+        los dispositivos en su siguiente repaso con frases.
+      </p>
+      <div id="sentencesList" class="items-list"></div>
     </section>
 
     <!-- Panel -->

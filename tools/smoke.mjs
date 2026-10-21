@@ -97,10 +97,10 @@ await step("administración: la página carga con todas sus pestañas", async ()
   await page.goto(`${url}admin.html`, { waitUntil: "networkidle2" });
   const state = await page.evaluate(() => ({
     tabs: [...document.querySelectorAll("[data-admin]")].map((tab) => tab.dataset.admin),
-    panels: ["adminPanel", "wordsPanel", "logsPanel", "gradesPanel", "usersPanel"].every((id) => !!document.getElementById(id)),
-    functions: [loadGrades, exportGrades, loadLogs, loadUsers, savePlan].every((fn) => typeof fn === "function")
+    panels: ["adminPanel", "wordsPanel", "logsPanel", "gradesPanel", "usersPanel", "sentencesPanel"].every((id) => !!document.getElementById(id)),
+    functions: [loadGrades, exportGrades, loadLogs, loadUsers, savePlan, loadSentences, deleteSentence].every((fn) => typeof fn === "function")
   }));
-  check(state.tabs.join() === "texts,words,logs,grades,users" && state.panels && state.functions, JSON.stringify(state));
+  check(state.tabs.join() === "texts,words,logs,grades,users,sentences" && state.panels && state.functions, JSON.stringify(state));
 });
 
 await browser.close();

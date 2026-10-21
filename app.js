@@ -3,7 +3,7 @@
    ========================================= */
 
 const DB_NAME = "kanji-learning-app";
-const DB_VERSION = 6; // 5: almacenes sentences y sentenceStats (frases de ejemplo); 6: translations (Traducir)
+const DB_VERSION = 7; // 5: almacenes sentences y sentenceStats (frases de ejemplo); 6: translations (Traducir); 7: sharedSentences
 const LEVELS = ["N5", "N4", "N3", "N2", "N1"];
 
 let db;

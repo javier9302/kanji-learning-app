@@ -1,21 +1,24 @@
 /* =========================================
    KANJI LEARNING APP - sentences.js
-   Frases de ejemplo: las del usuario (salen de sus textos), las comunes de la
-   app (bank/sentences/<nivel>.json) y su uso al repasar.
+   Frases de ejemplo: las del usuario (salen de sus textos, las "historias"),
+   las comunes de la app (bank/sentences/<nivel>.json), las compartidas por
+   todos (tabla shared_sentences) y su uso al repasar.
    Las reglas (qué frase vale, cuál se elige) están en sentences-core.js; aquí
    solo va lo que toca al navegador. Se carga después de study.js.
 
    Almacenes de IndexedDB:
-     sentences      frases del usuario, con la forma de sentences-core.js más
-                    { updatedAt, local }. local: su texto no se sube (texto
-                    pegado), así que la frase tampoco.
-     sentenceStats  { id, shown, lastShown, updatedAt }: veces que se ha enseñado
-                    cada frase, sea del usuario o común.
+     sentences        frases del usuario, con la forma de sentences-core.js más
+                      { updatedAt, local }. local: su texto no se sube (texto
+                      pegado), así que la frase tampoco.
+     sentenceStats    { id, shown, lastShown, updatedAt }: veces que se ha enseñado
+                      cada frase, sea del usuario o común.
+     sharedSentences  copia de las frases compartidas (sección 6).
    Las frases se pueden reconstruir siempre a partir de los textos.
    ========================================= */
 
-let userSentences = new Map(); // id -> frase del usuario
-let sentenceStats = new Map(); // id -> { id, shown, lastShown, updatedAt }
+let userSentences = new Map();   // id -> frase del usuario
+let sentenceStats = new Map();   // id -> { id, shown, lastShown, updatedAt }
+let sharedSentences = new Map(); // id -> frase compartida
 
 /* =========================================
    1. ALMACENAMIENTO
@@ -24,6 +27,7 @@ let sentenceStats = new Map(); // id -> { id, shown, lastShown, updatedAt }
 async function loadSentenceData() {
   userSentences = new Map((await getAll("sentences")).map((s) => [s.id, s]));
   sentenceStats = new Map((await getAll("sentenceStats")).map((s) => [s.id, s]));
+  sharedSentences = new Map((await getAll("sharedSentences")).map((s) => [s.id, s]));
 }
 
 /* Anota que una frase se ha enseñado en un repaso */
@@ -62,8 +66,9 @@ const sentenceTagsOf = (key) => {
   return alignReading(lemma, reading, (c) => BANK.kanji.get(c)) || [];
 };
 
-/* Frases válidas de un texto (sin guardar nada) */
-function sentencesOfText(text) {
+/* Frases válidas de un texto (sin guardar nada). source: el de las frases;
+   también lo usan las que escribe la IA ("ai", sección 6) */
+function sentencesOfText(text, source = text.source === "paste" ? "article" : "text") {
   const dictionary = {};
   for (const sentence of text.data.sentences) Object.assign(dictionary, sentence.dictionary);
   const list = [];
@@ -78,7 +83,7 @@ function sentencesOfText(text) {
     });
     const built = buildSentence({
       id: `${text.id}:${sentence.id ?? index + 1}`, tokens, en: sentence.en || "", es: sentence.es || "",
-      source: text.source === "paste" ? "article" : "text", sourceId: text.id, attribution: "",
+      source, sourceId: text.id, attribution: "",
       wordOf: sentenceWordOf, tagsOf: sentenceTagsOf, fallbackLevel: text.level || "N5"
     });
     const [minUnits, maxUnits] = USER_SENTENCE_UNITS;
@@ -180,31 +185,45 @@ function forgetSentenceIndex() {
   kanjiSentenceIndex = null;
 }
 
-/* Todas las frases que sirven para preguntar una palabra */
-function sentencesFor(wordId) {
+/* Cada frase disponible con su grupo: "common" (las comunes: bank/sentences y
+   las compartidas) o "stories" (las de las historias del usuario). Una frase de
+   una historia que ya se compartió cuenta como común. */
+function eachSentence(add) {
+  for (const list of staticSentences.values()) list.forEach((sentence) => add(sentence, "common"));
+  for (const sentence of sharedSentences.values()) add(sentence, "common");
+  for (const sentence of userSentences.values()) if (!sharedSentences.has(sentence.id)) add(sentence, "stories");
+}
+const blankGroups = () => ({ common: [], stories: [] });
+
+/* Las frases que sirven para preguntar una palabra, por grupos */
+function sentenceGroupsFor(wordId) {
   if (!sentenceIndex) {
     sentenceIndex = new Map();
-    const add = (sentence) => {
+    eachSentence((sentence, group) => {
       for (const target of sentence.targets || []) {
-        if (!sentenceIndex.has(target)) sentenceIndex.set(target, []);
-        sentenceIndex.get(target).push(sentence);
+        if (!sentenceIndex.has(target)) sentenceIndex.set(target, blankGroups());
+        sentenceIndex.get(target)[group].push(sentence);
       }
-    };
-    for (const sentence of userSentences.values()) add(sentence);
-    for (const list of staticSentences.values()) list.forEach(add);
+    });
   }
-  return sentenceIndex.get(wordId) || [];
+  return sentenceIndex.get(wordId) || blankGroups();
 }
+
+/* Todas las frases que sirven para preguntar una palabra */
+const sentencesFor = (wordId) => {
+  const { common, stories } = sentenceGroupsFor(wordId);
+  return [...common, ...stories];
+};
 
 /* Dónde sale un kanji dentro de las palabras preguntables de las frases y cómo
    suena allí (kanjiSounds, con las lecturas de bank/readings.js: hace falta
    BANK.loadReadings()). Solo vale si el kanji tiene su propia lectura: en
-   今日 (きょう) no se puede separar la de 今. */
-function kanjiSentencesFor(c) {
+   今日 (きょう) no se puede separar la de 今. Por grupos, como sentenceGroupsFor. */
+function kanjiSentenceGroupsFor(c) {
   // Se rehace también cuando llegan las lecturas: sin ellas el reparto es peor
   if (!kanjiSentenceIndex || kanjiSentenceIndex.readings !== BANK.readings) {
     kanjiSentenceIndex = Object.assign(new Map(), { readings: BANK.readings });
-    const add = (sentence) => sentence.tokens.forEach((token, target) => {
+    eachSentence((sentence, group) => sentence.tokens.forEach((token, target) => {
       if (!token.key || !(sentence.targets || []).includes(token.key)) return;
       const [lemma, reading] = token.key.split("|");
       if (!readingMatches(token, lemma, reading)) return;
@@ -216,27 +235,42 @@ function kanjiSentencesFor(c) {
         if (!sounds[char] || sounds[char + 1] === null || chars.indexOf(kanji) !== char) return;
         const tag = tags.find((tag) => tag.split("|")[0] === kanji);
         if (!tag) return;
-        if (!kanjiSentenceIndex.has(kanji)) kanjiSentenceIndex.set(kanji, []);
-        kanjiSentenceIndex.get(kanji).push({ sentence, target, char, sound: sounds[char], sounds, tag });
+        if (!kanjiSentenceIndex.has(kanji)) kanjiSentenceIndex.set(kanji, blankGroups());
+        kanjiSentenceIndex.get(kanji)[group].push({ sentence, target, char, sound: sounds[char], sounds, tag });
       });
-    });
-    for (const sentence of userSentences.values()) add(sentence);
-    for (const list of staticSentences.values()) list.forEach(add);
+    }));
   }
-  return kanjiSentenceIndex.get(c) || [];
+  return kanjiSentenceIndex.get(c) || blankGroups();
 }
 
-/* La frase para una tarjeta (palabra o kanji) según lo que el usuario conoce, o null */
-function sentenceForCard(card) {
-  const candidates = card.kind === "kanji" ? kanjiSentencesFor(card.id) : sentencesFor(card.id);
-  if (!candidates.length) return null;
+const kanjiSentencesFor = (c) => {
+  const { common, stories } = kanjiSentenceGroupsFor(c);
+  return [...common, ...stories];
+};
+
+/* La frase para una tarjeta (palabra o kanji) según lo que el usuario conoce:
+   primero entre las comunes y, si ninguna vale, entre las de sus historias.
+   Devuelve { pick, story } (story: salió de una historia); pick es null si no hay. */
+function findSentence(card) {
+  const groups = card.kind === "kanji" ? kanjiSentenceGroupsFor(card.id) : sentenceGroupsFor(card.id);
+  if (!groups.common.length && !groups.stories.length) return { pick: null, story: false };
   const known = knownLemmas();
-  const state = {
-    candidates,
-    isKnown: (key) => isKnownKey(key, known),
-    statsOf: (id) => sentenceStats.get(id)
+  const choose = (candidates) => {
+    if (!candidates.length) return null;
+    const state = { candidates, isKnown: (key) => isKnownKey(key, known), statsOf: (id) => sentenceStats.get(id) };
+    return card.kind === "kanji" ? chooseKanjiSentence(state) : chooseSentence({ id: card.id }, state);
   };
-  return card.kind === "kanji" ? chooseKanjiSentence(state) : chooseSentence({ id: card.id }, state);
+  const common = choose(groups.common);
+  return common ? { pick: common, story: false } : { pick: choose(groups.stories), story: true };
+}
+
+/* La frase que se enseña al repasar, o null. La de una historia pasa a las
+   compartidas; si no hay ninguna, se pide a la IA para la próxima vez (sección 6). */
+function sentenceForCard(card) {
+  const { pick, story } = findSentence(card);
+  if (pick && story) shareSentence(pick.sentence);
+  if (!pick) requestSentences([card]);
+  return pick;
 }
 
 /* =========================================
@@ -404,4 +438,200 @@ async function pushSentences(userId) {
     if (!tableMissing(error)) throw error;
     console.warn("Falta la tabla user_sentences: ejecuta supabase/schema.sql.");
   }
+}
+
+/* =========================================
+   6. LAS FRASES QUE FALTAN: COMPARTIDAS Y CON IA
+   -----------------------------------------
+   Al buscar la frase de una tarjeta (findSentence):
+     1. las comunes: bank/sentences/<nivel>.json y las compartidas (tabla
+        shared_sentences, que todos leen, también sin sesión);
+     2. las de las historias del usuario (sus textos y los de la comunidad). La
+        que se usa se copia a las compartidas, para todos (nunca la de un texto
+        pegado, que no sale del dispositivo);
+     3. ninguna: se pide a la IA en segundo plano (función generate-sentences,
+        con sesión). Cada frase que escribe se analiza como un texto y se
+        comprueba como las de las historias; las que valen se comparten y sirven
+        desde la siguiente vez que salga la palabra (en la misma sesión, si vuelve).
+   Compartir y pedir frases necesita sesión; sin ella se usa lo que ya hay.
+   ========================================= */
+
+const SHARED_PULL_EVERY = 10 * 60000; // como mucho una descarga de las compartidas cada 10 minutos
+const SENTENCE_BATCH = 10;            // palabras por llamada a la IA (el máximo de la función)
+const SENTENCE_RETRY_DAYS = 3;        // una palabra ya pedida no se vuelve a pedir hasta pasados estos días
+let sharedPulledAt = 0;
+const sentenceWanted = new Map();     // id de palabra -> palabra, a la espera de pedirse
+let sentenceAsking = null;            // la llamada en curso
+let sentenceTimer = null;
+
+/* Huella de una frase para su id: la misma frase escrita dos veces es una sola */
+function textHash(text) {
+  let a = 0x811c9dc5, b = 0x01000193;
+  for (const c of text) {
+    a = Math.imul(a ^ c.codePointAt(0), 0x01000193) >>> 0;
+    b = Math.imul(b ^ c.codePointAt(0), 0x5bd1e995) >>> 0;
+  }
+  return a.toString(36) + b.toString(36);
+}
+
+/* Las compartidas las escribe cualquier usuario: solo se aceptan con la forma
+   que esperan el repaso y la pantalla (sentences-core.js) */
+const isStrings = (list) => Array.isArray(list) && list.every((item) => typeof item === "string");
+const sharedShapeOk = (sentence) => !!sentence && Array.isArray(sentence.tokens) &&
+  sentence.tokens.length > 0 && sentence.tokens.length <= 60 &&
+  sentence.tokens.every((token) => token && ["surface", "lemma", "reading", "pos", "key"].every((field) => typeof token[field] === "string")) &&
+  isStrings(sentence.targets) && isStrings(sentence.kanjiReadings || []) &&
+  ["en", "es", "attribution"].every((field) => typeof (sentence[field] ?? "") === "string");
+
+/* Descarga las frases compartidas nuevas o borradas desde la última vez. Sin la
+   tabla (falta ejecutar supabase/schema.sql) o sin conexión se sigue con lo que haya. */
+async function pullSharedSentences() {
+  if (!sb || !navigator.onLine || Date.now() - sharedPulledAt < SHARED_PULL_EVERY) return;
+  sharedPulledAt = Date.now();
+  // Sin ninguna guardada (primera vez, o se vació el dispositivo) se descargan todas
+  const cursor = sharedSentences.size ? loadLocal("kanji-shared-sentences", { cursor: "" }).cursor : "";
+  let rows;
+  try {
+    rows = await fetchChanged("shared_sentences", "id", null, cursor, false);
+  } catch (error) {
+    if (!tableMissing(error)) console.warn("No se pudieron descargar las frases compartidas:", error.message);
+    return;
+  }
+  if (!rows.length) return;
+  const saved = [], removed = [];
+  for (const row of rows) {
+    if (row.deleted_at || !sharedShapeOk(row.data)) {
+      sharedSentences.delete(row.id);
+      removed.push(row.id);
+      continue;
+    }
+    const sentence = { ...row.data, id: row.id, source: row.source };
+    sharedSentences.set(row.id, sentence);
+    saved.push(sentence);
+  }
+  await putRecords("sharedSentences", saved, removed);
+  saveLocal("kanji-shared-sentences", { cursor: rows[rows.length - 1].updated_at });
+  forgetSentenceIndex();
+}
+
+/* Sube frases a las compartidas. Si otro usuario ya subió la misma, no pasa nada.
+   keep: guardarlas aquí aunque no se puedan subir (las de la IA: ya están hechas). */
+async function uploadShared(list, keep = false) {
+  let ok = !!(sb && sync.user);
+  if (ok) {
+    const { error } = await sb.from("shared_sentences").upsert(list.map((sentence) => ({
+      id: sentence.id, source: sentence.source, level: sentence.level, words: sentence.targets.slice(0, 20), data: sentence
+    })), { onConflict: "id", ignoreDuplicates: true });
+    if (error) {
+      ok = false;
+      if (!tableMissing(error)) console.warn("No se pudieron compartir las frases:", error.message);
+    }
+  }
+  if (!ok && !keep) return false;
+  for (const sentence of list) sharedSentences.set(sentence.id, sentence);
+  await putRecords("sharedSentences", list);
+  forgetSentenceIndex();
+  return ok;
+}
+
+/* La frase de una historia que se acaba de usar pasa a las compartidas. Si no
+   se puede subir, sigue siendo de la historia y se intentará la próxima vez. */
+function shareSentence(sentence) {
+  if (!sb || !sync.user || sentence.local || sentence.source !== "text" || sharedSentences.has(sentence.id)) return;
+  const { updatedAt, local, ...data } = sentence;
+  uploadShared([data]).catch((error) => console.warn("No se pudo compartir la frase:", error.message));
+}
+
+/* La palabra que hace falta para una tarjeta: la suya o, para un kanji, su palabra de ejemplo */
+const wordForSentence = (card) => card.kind === "kanji" ? exampleWord(card.entry) : card.entry;
+
+/* Anota las palabras de estas tarjetas para pedir sus frases a la IA. Se juntan
+   las de un momento en una sola llamada. */
+function requestSentences(cards) {
+  if (!sb || !sync.user) return;
+  const asked = loadLocal("kanji-sentence-asked", {});
+  for (const card of cards) {
+    const word = wordForSentence(card);
+    if (!word || word.custom || word.kana || !word.kanji?.length || sentenceWanted.has(word.id)) continue;
+    if (Date.now() - (asked[word.id] || 0) < SENTENCE_RETRY_DAYS * DAY_MS) continue;
+    sentenceWanted.set(word.id, word);
+  }
+  clearTimeout(sentenceTimer);
+  if (sentenceWanted.size) sentenceTimer = setTimeout(askSentences, 1500);
+}
+
+/* Pide a la IA las frases de las palabras anotadas: una llamada por nivel (el
+   prompt pide la gramática de ese nivel) y de una en una. */
+function askSentences() {
+  if (sentenceAsking || !sentenceWanted.size || !sb || !sync.user) return;
+  const level = sentenceWanted.values().next().value.level || userLevel();
+  const words = [...sentenceWanted.values()].filter((word) => (word.level || userLevel()) === level).slice(0, SENTENCE_BATCH);
+  words.forEach((word) => sentenceWanted.delete(word.id));
+  // Se anota ya, para no pedirlas dos veces; las de los días anteriores se olvidan
+  const asked = Object.fromEntries(Object.entries(loadLocal("kanji-sentence-asked", {}))
+    .filter(([, at]) => Date.now() - at < SENTENCE_RETRY_DAYS * DAY_MS));
+  for (const word of words) asked[word.id] = Date.now();
+  saveLocal("kanji-sentence-asked", asked);
+
+  sentenceAsking = generateSentences(words, level)
+    .catch((error) => {
+      // Límite del día: no se pide nada más hoy. Un fallo de la red o de la IA: se podrán volver a pedir
+      if (["limit", "busy"].includes(error.code)) sentenceWanted.clear();
+      else {
+        const marks = loadLocal("kanji-sentence-asked", {});
+        for (const word of words) delete marks[word.id];
+        saveLocal("kanji-sentence-asked", marks);
+      }
+      console.warn("No se pudieron crear frases:", error.message);
+    })
+    .finally(() => {
+      sentenceAsking = null;
+      if (sentenceWanted.size) askSentences();
+    });
+}
+
+/* La llamada a la función de Supabase, aparte para poder imitarla en las pruebas */
+function invokeSentences(body) {
+  return sb.functions.invoke("generate-sentences", { body });
+}
+
+/* Una llamada a la función generate-sentences. Devuelve las frases que valían, ya compartidas. */
+async function generateSentences(words, level) {
+  const { data, error } = await invokeSentences({
+    level, known: [...knownLemmas()].slice(0, 1500),
+    words: words.map((word) => ({ w: word.w, r: word.r, meaning: (word.en || []).slice(0, 2).join("; ") }))
+  });
+  if (error) {
+    const info = await error.context?.json?.().catch(() => ({})) || {};
+    throw Object.assign(new Error(info.error || error.message), { code: info.error || "" });
+  }
+  const fresh = await sentencesFromAI(data?.text, words.map((word) => word.id), level);
+  if (fresh.length) await uploadShared(fresh, true);
+  return fresh;
+}
+
+/* Las frases que escribió la IA que valen. Cada una se analiza como un texto
+   (validateText: kuromoji y el diccionario) y se comprueba como las de las
+   historias (sentencesOfText), y además tiene que servir para preguntar alguna
+   de las palabras pedidas, leída como se pidió. */
+async function sentencesFromAI(raw, ids, level) {
+  let list;
+  try {
+    const data = JSON.parse(extractJSON(String(raw ?? "")));
+    list = Array.isArray(data) ? data : data?.sentences;
+  } catch {
+    return [];
+  }
+  if (!Array.isArray(list)) return [];
+  await ensureSentenceData();
+  const fresh = new Map();
+  for (const item of list.slice(0, ids.length * 3)) {
+    if (!item || typeof item.ja !== "string" || item.ja.length > 200) continue;
+    const { errors, text } = await validateText(JSON.stringify({ sentences: [{ p: 1, ja: item.ja, en: item.en, es: item.es }] }));
+    if (errors.length || !text) continue;
+    const jp = text.sentences[0].tokens.map((token) => token.surface).join("");
+    const [sentence] = sentencesOfText({ id: `ai:${textHash(jp)}`, level, data: { sentences: text.sentences } }, "ai");
+    if (sentence && sentence.targets.some((id) => ids.includes(id))) fresh.set(sentence.id, sentence);
+  }
+  return [...fresh.values()];
 }

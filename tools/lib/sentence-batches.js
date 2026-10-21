@@ -2,6 +2,11 @@
    y la lectura de la respuesta pegada. Sin archivos ni banco: solo texto, para
    poder probarlo. */
 
+/* Versión del prompt de frases: súbela cada vez que cambies su texto. La función
+   generate-sentences lleva una copia de renderSentencePrompt y de esta versión
+   (node tools/sync-prompt.mjs); se guarda con cada generación. */
+const SENTENCE_PROMPT_VERSION = "2026-10-21.1";
+
 /* El prompt de una tanda.
      batch       nombre de la tanda ("n5-001")
      level       "N5"…
@@ -66,4 +71,4 @@ function parseResponse(raw) {
   return list;
 }
 
-module.exports = { renderSentencePrompt, parseResponse, promptTargets };
+module.exports = { renderSentencePrompt, SENTENCE_PROMPT_VERSION, parseResponse, promptTargets };

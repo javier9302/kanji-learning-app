@@ -40,7 +40,12 @@ Scripts clásicos (no módulos) que comparten variables globales. El orden de ca
   `readings.js` (lectura de cada kanji por palabra, generado desde JmdictFurigana con
   `tools/build-readings.mjs`; no se edita a mano).
 - **`supabase/`**: `schema.sql` (tablas y Row Level Security) y Edge Functions
-  (`generate-text`, `grade-translation`, `notify-admin`). `admin.html` / `admin.js`: moderación.
+  (`generate-text`, `generate-sentences`, `grade-translation`, `notify-admin`). No hay CLI de
+  Supabase: el usuario ejecuta `schema.sql` y despliega las funciones desde el panel (pasos en
+  `SETUP.md`). `admin.html` / `admin.js`: moderación.
+- **Prompts con copia en una función**: la fuente de los textos es `reading.js` y la de las frases,
+  `tools/lib/sentence-batches.js`. Tras cambiar uno, `node tools/sync-prompt.mjs` (una prueba falla
+  si las copias no coinciden).
 - **`vendor/`**: kuromoji (análisis del japonés) y ts-fsrs, con versión fija.
 - **`sw.js`**: service worker; red primero para la app y caché permanente para `vendor/`.
 
@@ -80,9 +85,10 @@ cambiado. En el mismo commit de cada cambio:
 
 ## Restricciones del proyecto
 
-- Sin API de IA de pago para generar contenido. Las frases comunes se generan por tandas con
-  `tools/generate-sentences.mjs` (copiar el prompt en un chat y pegar la respuesta), con Gemini
-  gratuito como alternativa y revisión del administrador.
+- IA solo con Gemini (claves gratuitas, en los secretos de las Edge Functions). Las frases comunes
+  se generan por tandas con `tools/generate-sentences.mjs` (copiar el prompt en un chat y pegar la
+  respuesta); las que faltan al repasar las pide la app a `generate-sentences` y se comparten al
+  momento, con revisión posterior en admin.html.
 - `bank/sentences/` está en elaboración y sin seguimiento en git: no lo incluyas en commits
   salvo que se pida.
 - Rama de trabajo: `desarrollo`; `main` es la publicada. No hagas push sin que se pida.

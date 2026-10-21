@@ -250,8 +250,35 @@ sale la tarjeta de siempre con el aviso «Sin frase disponible». La corrección
 repasos no cambian. Sustituye al antiguo ajuste «Repasar con frases»: quien lo tenía activado
 empieza en «En una frase».
 
-- Las frases salen de tus textos: al guardar uno (escrito por la IA, de la comunidad o pegado) se
-  quedan sus frases de 4 a 20 unidades con todas las palabras resueltas. No se usa ninguna IA.
+- **De dónde sale la frase de cada palabra**, en este orden:
+  1. Las comunes: `bank/sentences/<nivel>.json` y las **compartidas** (tabla `shared_sentences`,
+     que lee cualquiera, también sin sesión).
+  2. Las de las **historias**: al guardar un texto (escrito por la IA, de la comunidad o pegado) se
+     quedan sus frases de 4 a 20 unidades con todas las palabras resueltas. La que se usa al
+     repasar se copia a las compartidas, para todos. Las de un texto pegado nunca se comparten.
+  3. Si no hay ninguna, la app la **pide a la IA en segundo plano** (función `generate-sentences`)
+     y enseña la palabra sola con «Sin frase disponible». Cada frase de la IA se analiza y se
+     comprueba en la app con la misma regla que las demás; las que valen se comparten y salen
+     desde la siguiente vez que aparezca la palabra. Una palabra ya pedida no se vuelve a pedir
+     en 3 días. Al empezar una sesión se piden de una vez las de todas sus tarjetas sin frase.
+- **Para que funcionen las frases compartidas y las de la IA:**
+  1. **Vuelve a ejecutar `supabase/schema.sql`**: crea `shared_sentences` y `sentence_generations`
+     (el registro de cada llamada a la IA). Sin ellas la app sigue funcionando con las frases
+     comunes y las de las historias.
+  2. **Despliega la función.** En **Edge Functions → Deploy a new function → Via Editor**, ponle el
+     nombre exacto `generate-sentences`, pega el contenido de
+     [`supabase/functions/generate-sentences/index.ts`](supabase/functions/generate-sentences/index.ts)
+     y despliega. **Deja activada la verificación de JWT** (solo la llaman usuarios con sesión).
+  3. **Secretos:** usa las mismas claves de Gemini que `generate-text`; si aquella funciona no hay
+     que añadir nada. Opcionales: `SENTENCE_DAILY_WORDS` (palabras con frases nuevas por usuario y
+     día, 40 por defecto) y `SENTENCE_DAILY_CALLS` (llamadas al día, 20 por defecto). No gasta la
+     cuota de textos del usuario.
+- **Revisar las frases compartidas:** `admin.html`, pestaña **Frases**. Al borrar una desaparece de
+  todos los dispositivos en su siguiente repaso con frases. Cada usuario puede añadir como mucho
+  200 frases compartidas al día.
+- El prompt de las frases tiene una sola fuente, `tools/lib/sentence-batches.js`; la función lleva
+  una copia. Si lo cambias, ejecuta `node tools/sync-prompt.mjs` y vuelve a desplegar la función
+  (`npm test` avisa si las copias no coinciden).
 - En **Biblioteca** se puede pegar cualquier texto en japonés tal cual. Se analiza en el
   dispositivo con kuromoji, **no se sube ni se propone a la comunidad** y no tiene traducción.
 - **Vuelve a ejecutar `supabase/schema.sql`**: crea la tabla `user_sentences`, donde se guardan las

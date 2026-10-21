@@ -230,6 +230,118 @@ export default async function extra({ page, step, check }) {
     check(await page.evaluate(() => !Object.keys(meta.practice).some((tag) => tag.startsWith("友"))), "un fallo contó como practicado");
   });
 
+  /* Con sesión imitada: la tabla shared_sentences y la función generate-sentences
+     no se tocan de verdad, y no se sincroniza nada. restoreAccount lo deshace
+     todo, también si el paso falla, para no arrastrar a los siguientes. */
+  const fakeAccount = () => page.evaluate(async () => {
+    window.realFrom = sb.from;
+    window.realInvokeSentences = window.invokeSentences;
+    window.realSchedule = window.scheduleSync;
+    window.scheduleSync = () => {};
+    window.sharedRows = [];
+    window.invoked = [];
+    window.invokeSentences = async (body) => { invoked.push(body); return { error: { message: "sin respuesta" } }; };
+    sb.from = (table) => table === "shared_sentences"
+      ? { upsert: async (rows) => { sharedRows.push(...rows); return { error: null }; } }
+      : table === "dictionary" // el diccionario del servidor: sin sesión de verdad no se puede leer
+        ? { select: () => ({ in: async () => ({ data: [], error: null }) }) }
+        : realFrom.call(sb, table);
+    sync.user = { id: "smoke" };
+    meta.reading.assumed = "N5";
+    try { localStorage.removeItem("kanji-sentence-asked"); } catch { /* sin almacenamiento */ }
+  });
+  const restoreAccount = () => page.evaluate(async () => {
+    if (!window.realSchedule) return;
+    sb.from = realFrom;
+    window.invokeSentences = realInvokeSentences;
+    window.scheduleSync = realSchedule;
+    window.realSchedule = null;
+    sync.user = null;
+    sentenceWanted.clear();
+    await putRecords("sharedSentences", [], [...sharedSentences.keys()]);
+    sharedSentences.clear();
+    forgetSentenceIndex();
+    session = null;
+    document.body.classList.remove("studying");
+    meta.reading.assumed = "";
+    await saveMeta();
+  });
+
+  await step("frases: primero las comunes; si no hay, la de una historia, que pasa a las compartidas", async () => {
+    try {
+      await fakeAccount();
+      const state = await page.evaluate(async () => {
+        const all = [...userSentences.values()];
+        // Una palabra que solo sale en una historia (no en el texto pegado, que nunca se comparte)
+        const inPasted = (id) => all.some((s) => s.source === "article" && s.targets.includes(id));
+        const story = all.find((s) => s.source === "text" && s.targets.some((id) => BANK.words.get(id) && !inPasted(id)));
+        const id = story.targets.find((target) => BANK.words.get(target) && !inPasted(target));
+        const card = { kind: "word", id, entry: BANK.words.get(id) };
+        const before = findSentence(card);
+        const pick = sentenceForCard(card);
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        const after = findSentence(card);
+        // Un texto pegado nunca se comparte
+        shareSentence(all.find((s) => s.source === "article"));
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        // Una frase común gana a la de una historia
+        const other = all.find((s) => s.source === "article" && s.targets.includes("学校|がっこう"));
+        await uploadShared([{ ...other, id: "ai:prueba", source: "ai" }], true);
+        const common = findSentence({ kind: "word", id: "学校|がっこう", entry: BANK.words.get("学校|がっこう") });
+        return {
+          id, story: story.id, before: [before.story, before.pick?.sentence.id], picked: pick?.sentence.id,
+          after: [after.story, after.pick?.sentence.id], rows: sharedRows.map((row) => [row.id, row.source, row.words.includes(id)]),
+          common: [common.story, common.pick?.sentence.id]
+        };
+      });
+      check(state.before[0] === true && state.picked === state.story, JSON.stringify(state));
+      check(state.rows.length === 2 && state.rows[0][0] === state.story && state.rows[0][1] === "text" && state.rows[0][2] &&
+        state.rows[1][0] === "ai:prueba", JSON.stringify(state.rows));
+      check(state.after[0] === false && state.after[1] === state.story, `después: ${JSON.stringify(state.after)}`);
+      check(state.common[0] === false && state.common[1] === "ai:prueba", `común: ${JSON.stringify(state.common)}`);
+    } finally {
+      await restoreAccount();
+    }
+  });
+
+  await step("frases: sin ninguna, se piden a la IA en segundo plano y las que valen se comparten", async () => {
+    try {
+      await fakeAccount();
+      await setSelect("studyPresentation", "sentence");
+      const word = await page.evaluate(() => ["山|やま", "川|かわ", "花|はな", "水|みず"].find((id) => !sentencesFor(id).length));
+      await page.evaluate((id) => {
+        const w = BANK.words.get(id).w;
+        window.invokeSentences = async (body) => {
+          invoked.push(body);
+          return { error: null, data: { text: JSON.stringify({ batch: "app", sentences: [
+            { targets: [id], ja: `私|は|${w}|を|見ました|。`, en: "I saw it.", es: "Lo vi." },
+            { targets: [id], ja: `ABC|は|${w}|です|。`, en: "bad", es: "mala" },                        // letras latinas: no vale
+            { targets: ["猫|ねこ"], ja: "私|は|猫|を|見ました|。", en: "I saw a cat.", es: "Vi un gato." } // no se pidió
+          ] }) } };
+        };
+      }, word);
+      await studyOne(word);
+      check(await page.evaluate(() => !!document.querySelector(".sent-missing")), "sin aviso de que no hay frase");
+      await page.waitForFunction(() => sharedRows.some((row) => row.source === "ai"), { timeout: 60000 });
+      const state = await page.evaluate(() => ({
+        calls: invoked.map((body) => [body.level, body.words.map((w) => `${w.w}|${w.r}`).join(), body.known.length > 0]),
+        rows: sharedRows.map((row) => [row.words, row.data.tokens.map((t) => t.surface).join("")])
+      }));
+      check(state.calls.length === 1 && state.calls[0][1] === word && state.calls[0][2], JSON.stringify(state.calls));
+      check(state.rows.length === 1 && state.rows[0][0].includes(word) && !state.rows[0][1].includes("ABC"), JSON.stringify(state.rows));
+      // La siguiente vez sale en la frase, y no se vuelve a pedir
+      await studyOne(word);
+      check(await page.evaluate((id) => document.querySelector(".sent-target")?.textContent === BANK.words.get(id).w &&
+        !document.querySelector(".sent-missing"), word), "no se usó la frase de la IA");
+      await page.evaluate((id) => requestSentences([{ kind: "word", id, entry: BANK.words.get(id) }]), word);
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+      check(await page.evaluate(() => invoked.length === 1), "se volvió a pedir la misma palabra");
+    } finally {
+      await restoreAccount();
+      await setSelect("studyPresentation", "word");
+    }
+  });
+
   await step("traducir: se propone una frase con traducción, nunca una de un texto pegado", async () => {
     const state = await page.evaluate(() => ({
       all: userSentences.size, candidates: translationCandidates().map((s) => [s.ja, s.source]),

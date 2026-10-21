@@ -43,6 +43,7 @@ function show(view) {
   $("logsPanel").classList.toggle("hidden", view !== "panel" || section !== "logs");
   $("gradesPanel").classList.toggle("hidden", view !== "panel" || section !== "grades");
   $("usersPanel").classList.toggle("hidden", view !== "panel" || section !== "users");
+  $("sentencesPanel").classList.toggle("hidden", view !== "panel" || section !== "sentences");
 }
 
 /* Con sesión: comprueba el permiso y muestra el panel o el motivo */
@@ -403,6 +404,45 @@ async function savePlan(card) {
   loadUsers();
 }
 
+/* ---------- Frases compartidas ---------- */
+
+const SENTENCE_SOURCE = { text: "De una historia", ai: "Escrita por la IA" };
+
+/* Las 200 frases compartidas más recientes */
+async function loadSentences() {
+  $("sentencesList").innerHTML = `<p class="message">Cargando…</p>`;
+  const { data, error } = await sb.from("shared_sentences").select("id, source, level, words, data, created_at")
+    .is("deleted_at", null).order("created_at", { ascending: false }).limit(200);
+  if (error) {
+    $("sentencesList").innerHTML = "";
+    return say(`No se pudieron cargar las frases (${error.message}). ¿Ejecutaste supabase/schema.sql?`, true);
+  }
+  $("sentencesCount").textContent = `${data.length}${data.length === 200 ? "+" : ""} frase${data.length === 1 ? "" : "s"}`;
+  $("sentencesList").innerHTML = data.map((row) => `
+    <article class="item-row" data-sentence="${escapeHTML(row.id)}">
+      <div class="item-info">
+        <div class="item-title" lang="ja">${escapeHTML((row.data?.tokens || []).map((token) => token.surface).join(""))}</div>
+        <div class="item-sub">${escapeHTML(row.data?.es || row.data?.en || "")}</div>
+        <div class="item-sub">${escapeHTML(SENTENCE_SOURCE[row.source] || row.source)} · ${escapeHTML(row.level || "")} ·
+          <span lang="ja">${escapeHTML((row.words || []).map((id) => id.split("|")[0]).join("、"))}</span> · ${escapeHTML(String(row.created_at).slice(0, 10))}</div>
+      </div>
+      <button class="button button-outline" type="button" data-delete-sentence>Borrar</button>
+    </article>`).join("") || `<div class="no-items">Todavía no hay frases compartidas.</div>`;
+}
+
+/* Borrar es marcarla: así los dispositivos que ya la tienen se enteran al sincronizar */
+async function deleteSentence(card) {
+  const button = card.querySelector("[data-delete-sentence]");
+  button.disabled = true;
+  const { error } = await sb.from("shared_sentences").update({ deleted_at: new Date().toISOString() }).eq("id", card.dataset.sentence);
+  if (error) {
+    button.disabled = false;
+    return say(`No se pudo borrar la frase (${error.message}).`, true);
+  }
+  card.remove();
+  say("Frase borrada.");
+}
+
 /* ---------- Diccionario general ---------- */
 
 async function dictionaryCount() {
@@ -456,6 +496,10 @@ function bind() {
     const button = event.target.closest("[data-save-plan]");
     if (button) savePlan(button.closest("[data-user]"));
   });
+  $("sentencesList").addEventListener("click", (event) => {
+    const button = event.target.closest("[data-delete-sentence]");
+    if (button) deleteSentence(button.closest("[data-sentence]"));
+  });
   $("adminTabs").addEventListener("click", (event) => {
     const tab = event.target.closest("[data-admin]");
     if (!tab) return;
@@ -467,6 +511,7 @@ function bind() {
     else if (section === "logs") loadLogs();
     else if (section === "grades") loadGrades();
     else if (section === "users") loadUsers();
+    else if (section === "sentences") loadSentences();
     else loadTexts();
   });
 

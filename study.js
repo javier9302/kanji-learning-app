@@ -423,16 +423,20 @@ async function startSession() {
     sentences: inSentences()
   };
   if (session.sentences) {
-    // Frases comunes de los niveles de estas tarjetas y del usuario (las suyas ya están en memoria).
-    // Para los kanjis, además, cómo se reparte la lectura de cada palabra (bank/readings.js).
+    // Frases comunes de los niveles de estas tarjetas y del usuario, y las compartidas
+    // (las suyas ya están en memoria). Para los kanjis, además, cómo se reparte la
+    // lectura de cada palabra (bank/readings.js).
     const current = session;
     const levels = [...queue.map((card) => card.entry.level).filter(Boolean),
       ...BANK.LEVELS.slice(0, BANK.LEVELS.indexOf(userLevel()) + 1)];
     await Promise.all([
       ensureSentences(levels),
+      pullSharedSentences(),
       queue.some((card) => card.kind === "kanji") ? BANK.loadReadings() : null
     ]).catch(() => {});
     if (session !== current) return;
+    // Lo que no tiene ninguna frase se pide ya a la IA, para que llegue durante la sesión
+    requestSentences(queue.filter((card) => !findSentence(card).pick));
   }
   document.body.classList.add("studying");
   showCard();

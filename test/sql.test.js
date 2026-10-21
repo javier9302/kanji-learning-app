@@ -172,3 +172,28 @@ test("planes: el usuario no puede cambiarse el plan; un administrador sí", asyn
       create or replace function auth.jwt() returns jsonb language sql stable as $$ select '{}'::jsonb $$;`);
   }
 });
+
+test("frases compartidas: tamaño máximo, filas nuevas al día y registro de la IA", async () => {
+  const db = await database();
+  const USER = "00000000-0000-0000-0000-000000000008";
+  await db.exec(`insert into auth.users (id) values ('${USER}') on conflict do nothing`);
+  await db.exec(`
+    create or replace function auth.uid() returns uuid language sql stable as $$ select '${USER}'::uuid $$;
+    create or replace function auth.jwt() returns jsonb language sql stable as $$ select '{"role":"authenticated"}'::jsonb $$;`);
+  try {
+    const share = (id, data = "{}", source = "ai") => db.query(
+      "insert into public.shared_sentences (id, source, words, data) values ($1, $2, '{水|みず}', $3::jsonb)", [id, source, data]);
+    await assert.rejects(share("grande", JSON.stringify({ x: "a".repeat(20001) })), /shared_sentences_size_check/);
+    await assert.rejects(share("otra", "{}", "inventada"), /shared_sentences_source_check/);
+    for (let n = 0; n < 200; n++) await share(`ai:${n}`);
+    await assert.rejects(share("ai:200"), /daily_limit/);
+    const { rows } = await db.query("select user_id from public.shared_sentences where id = 'ai:0'");
+    assert.equal(rows[0].user_id, USER); // el autor lo pone la base de datos
+  } finally {
+    await db.exec(`
+      create or replace function auth.uid() returns uuid language sql stable as $$ select null::uuid $$;
+      create or replace function auth.jwt() returns jsonb language sql stable as $$ select '{}'::jsonb $$;`);
+  }
+  await db.query("insert into public.sentence_generations (user_id, words, ok, result) values ($1, 3, true, 'ok')", [USER]);
+  await db.exec(SCHEMA);
+});

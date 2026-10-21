@@ -976,3 +976,91 @@ grant execute on function public.admin_set_plan(uuid, text, timestamptz) to auth
 -- por última vez cada kanji (para repasar primero el que hace más que no se escribe)
 alter table public.profiles add column if not exists writing_skipped text[] not null default '{}';
 alter table public.user_kanji add column if not exists last_written_at timestamptz;
+
+-- =========================================
+-- FRASES COMPARTIDAS
+-- =========================================
+
+-- Frases de ejemplo para todos los usuarios, además de las de bank/sentences/.
+-- Las añade la app al repasar «En una frase», ya comprobadas con la misma regla
+-- que las comunes (validateSentence, sentences-core.js):
+--   source 'text'  una frase de una historia (un texto propio o de la comunidad)
+--                  que se usó porque no había ninguna común; nunca de un texto pegado.
+--   source 'ai'    escrita por la IA (función generate-sentences) para una palabra
+--                  que no tenía ninguna.
+-- data es la frase completa, con la forma de sentences-core.js; words, las palabras
+-- que sirve para preguntar. La lee cualquiera, también sin sesión. Cada usuario solo
+-- añade (con un límite diario); un administrador la borra desde admin.html (deleted_at).
+create table if not exists public.shared_sentences (
+  id text primary key,                        -- "idDelTexto:n" (historias) o "ai:huella" (IA)
+  user_id uuid default auth.uid() references auth.users (id) on delete set null,
+  source text not null check (source in ('text', 'ai')),
+  level text,
+  words text[] not null default '{}',
+  data jsonb not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  deleted_at timestamptz,
+  constraint shared_sentences_size_check check (
+    char_length(id) <= 120 and cardinality(words) <= 20 and octet_length(data::text) <= 20000)
+);
+
+create index if not exists shared_sentences_updated_idx on public.shared_sentences (updated_at, id);
+create index if not exists shared_sentences_user_created_idx on public.shared_sentences (user_id, created_at);
+
+drop trigger if exists shared_sentences_set_updated_at on public.shared_sentences;
+create trigger shared_sentences_set_updated_at
+  before insert or update on public.shared_sentences
+  for each row execute function public.set_updated_at();
+
+drop trigger if exists shared_sentences_daily_limit on public.shared_sentences;
+create trigger shared_sentences_daily_limit before insert on public.shared_sentences
+  for each row execute function public.limit_daily_inserts('200');
+
+alter table public.shared_sentences enable row level security;
+revoke all on public.shared_sentences from anon, authenticated;
+grant select on public.shared_sentences to anon, authenticated;
+grant insert, update on public.shared_sentences to authenticated;
+
+drop policy if exists "shared_sentences_select_all" on public.shared_sentences;
+create policy "shared_sentences_select_all" on public.shared_sentences
+  for select to anon, authenticated using (true);
+
+drop policy if exists "shared_sentences_insert_own" on public.shared_sentences;
+create policy "shared_sentences_insert_own" on public.shared_sentences
+  for insert to authenticated with check ((select auth.uid()) = user_id and deleted_at is null);
+
+-- Solo un administrador cambia una frase ya compartida (para borrarla, deleted_at)
+drop policy if exists "shared_sentences_update_admin" on public.shared_sentences;
+create policy "shared_sentences_update_admin" on public.shared_sentences
+  for update to authenticated using ((select public.is_admin())) with check ((select public.is_admin()));
+
+-- Registro de cada llamada de la función generate-sentences: el límite diario de
+-- palabras por usuario y lo que respondió la IA. Aparte de generations, para no
+-- gastar la cuota de textos. Solo la función escribe; los administradores leen.
+create table if not exists public.sentence_generations (
+  id bigint generated always as identity primary key,
+  user_id uuid not null references auth.users (id) on delete cascade,
+  created_at timestamptz not null default now(),
+  words integer not null default 0,           -- palabras pedidas en la llamada
+  ok boolean not null default false,
+  result text,                                -- ok | invalid_json | missing_fields | truncated | empty | provider | quota
+  level text,
+  model text,
+  key_label text,
+  attempts text,
+  prompt_version text,
+  prompt_tokens integer,
+  output_tokens integer,
+  error text,
+  raw text
+);
+
+create index if not exists sentence_generations_user_created_idx on public.sentence_generations (user_id, created_at);
+
+alter table public.sentence_generations enable row level security;
+revoke all on public.sentence_generations from anon, authenticated;
+grant select on public.sentence_generations to authenticated;
+drop policy if exists "sentence_generations_admin_select" on public.sentence_generations;
+create policy "sentence_generations_admin_select" on public.sentence_generations
+  for select to authenticated using ((select public.is_admin()));

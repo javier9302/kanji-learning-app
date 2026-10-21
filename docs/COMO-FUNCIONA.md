@@ -15,7 +15,7 @@ mismo commit que cambie cualquiera de estas reglas. Los cambios, con fecha, est�
 | **Diccionario** | Búsqueda por kanji, kana, rōmaji o significado (español o inglés). |
 | **Mis palabras** | Agregar palabras a mano, progreso y estadísticas. |
 | **Cuenta** (opcional) | Sincronización con Supabase, plan gratuito (10 textos de IA al día) o premium (30). |
-| **admin.html** | Aprobar textos de la comunidad, revisar palabras y traducciones, cambiar planes. |
+| **admin.html** | Aprobar textos de la comunidad, revisar palabras, traducciones y frases compartidas, cambiar planes. |
 
 ## Listas y archivos de datos
 
@@ -29,6 +29,7 @@ mismo commit que cambie cualquiera de estas reglas. Los cambios, con fecha, est�
 | `bank/AMBIGUAS.md` | Notas sobre las palabras con varias lecturas y significados | — | Sí |
 | `vendor/jmdict/common-<fecha>.json` | Diccionario general: palabras comunes que no están en el banco | `tools/build-dictionary.mjs` desde JMdict | No |
 | `bank/sentences/<nivel>.json` | Frases comunes de ejemplo, con traducción | IA por tandas: `tools/generate-sentences.mjs` | No |
+| Tabla `shared_sentences` (Supabase) | Frases compartidas por todos: las de historias que se usaron y las que escribió la IA para palabras sin frase | La app, al repasar «En una frase» | Se borran en admin.html → Frases |
 | `kanji-data.js` | Modelo antiguo; ya no se carga, solo sirve para migrar datos viejos | — | No |
 
 Tamaño del banco:
@@ -106,14 +107,29 @@ palabras que ya conoce o está aprendiendo. En «Palabras y kanjis» se alternan
 
 ### 5. Frases de ejemplo (`sentences.js` + `sentences-core.js`)
 
-- **De dónde salen**: de los textos guardados por el usuario (frases de 4 a 20 unidades con todas
-  sus palabras reconocidas) y de `bank/sentences/<nivel>.json`. Una frase solo vale para una palabra
-  si kuromoji la lee igual que el banco.
-- **Cuál se elige** (`chooseSentence`): todo lo demás de la frase ya se conoce, o como mucho UNA
-  palabra desconocida (sale con furigana y se puede tocar). Se evita repetir la última frase
-  enseñada para esa palabra, y van primero las de los textos del usuario, luego Tatoeba y luego las de IA.
-- **Traducciones**: las escribe la misma IA que la frase (Gemini en los textos; el chat que se use
-  en las frases comunes). Nadie las comprueba. Los textos pegados no tienen traducción.
+- **Orden de búsqueda** (`findSentence`, `sentences.js`):
+  1. **Comunes**: `bank/sentences/<nivel>.json` y las **compartidas** (tabla `shared_sentences`,
+     copia local en el almacén `sharedSentences`; se descarga al empezar una sesión con frases,
+     como mucho cada 10 minutos, también sin sesión).
+  2. **Historias**: las frases de los textos guardados por el usuario, propios o de la comunidad
+     (de 4 a 20 unidades con todas sus palabras reconocidas). La que se usa se copia a las
+     compartidas para todos (con sesión). Nunca las de un texto pegado.
+  3. **IA en segundo plano**: si no hay ninguna, la tarjeta sale sola con «Sin frase disponible» y
+     la palabra se pide a la función `generate-sentences` (Gemini, con sesión). Para un kanji se pide
+     su palabra de ejemplo. Al empezar la sesión se piden de una vez todas las que faltan, hasta 10
+     palabras por llamada y una llamada por nivel. Una palabra pedida no se repite en 3 días.
+     Límite por usuario: 40 palabras y 20 llamadas al día (secretos de la función).
+- **Qué frase de la IA vale**: se analiza como un texto (`validateText`: kuromoji y diccionario) y se
+  comprueba como las de las historias (`sentencesOfText` → `validateSentence`); además tiene que
+  servir para preguntar una palabra pedida, leída como se pidió. Las que valen se comparten al
+  momento; un administrador puede borrarlas en admin.html (pestaña Frases).
+- Una frase solo vale para una palabra si kuromoji la lee igual que el banco.
+- **Cuál se elige dentro de cada grupo** (`chooseSentence`): todo lo demás de la frase ya se conoce,
+  o como mucho UNA palabra desconocida (sale con furigana y se puede tocar). Se evita repetir la
+  última frase enseñada para esa palabra, y van primero las de textos, luego Tatoeba y luego las de IA.
+- **Traducciones**: las escribe la misma IA que la frase (Gemini en los textos y en las frases que
+  faltan; el chat que se use en las frases comunes). Nadie las comprueba. Los textos pegados no
+  tienen traducción.
 
 ### 6. Textos para leer (`reading.js`)
 
@@ -141,3 +157,6 @@ días de dominio, reglas de Escribir y de Traducir. Lo que no:
 - 90 % de cobertura de los textos: `COVERAGE_TARGET` en `reading.js`.
 - Tamaño y aprobado de la evaluación inicial: `PLACEMENT_SIZE` y `PLACEMENT_PASS` en `reading.js`.
 - Textos de IA al día: variables `DAILY_TEXTS` y `PREMIUM_DAILY_TEXTS` de la función `generate-text` en Supabase.
+- Frases de IA al día: `SENTENCE_DAILY_WORDS` y `SENTENCE_DAILY_CALLS` de la función `generate-sentences`.
+  Palabras por llamada y días sin volver a pedir una palabra: `SENTENCE_BATCH` y `SENTENCE_RETRY_DAYS`
+  en `sentences.js`. Frases compartidas por usuario y día: 200, en `schema.sql`.
