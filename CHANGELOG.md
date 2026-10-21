@@ -6,7 +6,9 @@ Cómo funciona todo hoy: [docs/COMO-FUNCIONA.md](docs/COMO-FUNCIONA.md).
 
 ## 2026-10-21
 
-- **Frases que faltan** (este commit): al repasar «En una frase» se busca primero en las frases
+- **Frases comunes de N5** publicadas: 132 frases con traducción en `bank/sentences/n5.json`
+  (122 de las 520 palabras de N5 con kanji tienen ya sus 2 frases). Esas palabras ya no necesitan la IA.
+- **Frases que faltan** (`4e63674`): al repasar «En una frase» se busca primero en las frases
   comunes (las del banco y las nuevas compartidas), después en las de tus historias, y la que se
   usa se comparte con todos. Si no hay ninguna, la IA (Gemini) la crea en segundo plano y sale
   desde la siguiente vez. Pestaña **Frases** en admin.html para borrar las malas. Requiere volver

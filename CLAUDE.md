@@ -89,6 +89,6 @@ cambiado. En el mismo commit de cada cambio:
   se generan por tandas con `tools/generate-sentences.mjs` (copiar el prompt en un chat y pegar la
   respuesta); las que faltan al repasar las pide la app a `generate-sentences` y se comparten al
   momento, con revisión posterior en admin.html.
-- `bank/sentences/` está en elaboración y sin seguimiento en git: no lo incluyas en commits
-  salvo que se pida.
+- `bank/sentences/<nivel>.json` se rehace con `node tools/generate-sentences.mjs ingest`; no se
+  edita a mano. Las tandas de prompts y respuestas viven en `tools/cache/`, que no se sube.
 - Rama de trabajo: `desarrollo`; `main` es la publicada. No hagas push sin que se pida.
