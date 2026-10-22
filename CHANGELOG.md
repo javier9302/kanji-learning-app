@@ -6,6 +6,13 @@ Cómo funciona todo hoy: [docs/COMO-FUNCIONA.md](docs/COMO-FUNCIONA.md).
 
 ## 2026-10-22
 
+- **Análisis → Tu hoja de ruta** (solo premium): las metas de la semana. Cuántas palabras, kanjis
+  y estructuras te faltan para completar cada nivel, y cuáles van ahora. Si tus textos te cuestan
+  o estudias pocos días, también te lo dice. Sus palabras salen antes en tu repaso y sus
+  estructuras se usan en los textos que creas con IA (esto último, cuando se vuelva a desplegar
+  `generate-text`).
+- Análisis, fase 2 publicada (`6a3e088`).
+
 - **Análisis → Gramática** (solo premium): 56 estructuras de N5 (partículas, です/ます y sus
   formas, forma て, 〜たい, 〜から…). La app las detecta en lo que lees, repasas y traduces, y te
   dice cuáles has visto, entendido o dominado, con un ejemplo de cada una y tu nivel de gramática.

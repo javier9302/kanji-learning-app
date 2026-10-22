@@ -108,3 +108,52 @@ test("la foto lleva la gramática si se calculó, y su diferencia con la anterio
   assert.equal(P.snapshotGrammar(snap), 7);
   assert.equal(P.progressDelta(snap, { ...snap, grammar: { N5: [1, 1, 0, 55] } }).grammar, 5);
 });
+
+const CONFIG = { weeklyWords: 35, weeklyKanji: 10, weeklyGrammar: 2, weeklyTexts: 3, preview: 8,
+  minCoverage: 85, maxLookups: 8, minActiveDays: 12 };
+const row = (known, total) => ({ mastered: known, assumed: 0, learning: 0, new: total - known, total });
+const dim = (key, estimate, rows, items = []) => ({
+  key, estimate, breakdown: rows, share: (r) => (r.mastered + r.assumed) / r.total, next: () => items
+});
+const calm = { reading: { texts30: 20, coverage: 95, lookups: 2 }, practice: { activeDays: 20 } };
+
+test("missingFor: lo que falta para el 80 % de un nivel", () => {
+  const share = (r) => (r.mastered + r.assumed) / r.total;
+  assert.equal(P.missingFor(row(50, 100), share, 0.8), 30);
+  assert.equal(P.missingFor(row(90, 100), share, 0.8), 0);
+  assert.equal(P.missingFor(row(0, 87), share, 0.8), 70);   // 69,6 -> 70
+  assert.equal(P.missingFor(undefined, share, 0.8), 0);
+});
+
+test("buildRoadmap: cada dimensión en su nivel; primero el nivel más bajo y, en él, la más floja", () => {
+  const roadmap = P.buildRoadmap({
+    dims: [
+      dim("vocab", { done: "N5", current: "N4", percent: 40 }, { N4: row(200, 500) }, ["a", "b"]),
+      dim("kanji", { done: null, current: "N5", percent: 70 }, { N5: row(61, 87) }, ["日", "月"]),
+      dim("grammar", { done: null, current: "N5", percent: 30 }, { N5: row(16, 56) }, ["te-mo-ii", "yori", "tai"])
+    ], ...calm
+  }, CONFIG);
+  assert.equal(roadmap.level, "N5");
+  assert.equal(roadmap.focus, "grammar");
+  assert.deepEqual(roadmap.steps.map((step) => [step.kind, step.level]), [["grammar", "N5"], ["kanji", "N5"], ["vocab", "N4"]]);
+  assert.equal(roadmap.steps[2].missing, 200);  // 80 % de 500 = 400; sabe 200
+  assert.deepEqual(roadmap.steps[0], { kind: "grammar", level: "N5", percent: 30, missing: 29, count: 2, items: ["te-mo-ii", "yori"] });
+  assert.deepEqual(roadmap.steps[1].items, ["日", "月"]);
+  assert.equal(roadmap.steps[1].count, 9);   // le faltan 9 kanjis: no se le piden 10
+});
+
+test("buildRoadmap: lectura y constancia", () => {
+  const vocab = dim("vocab", { done: "N5", current: "N4", percent: 40 }, { N4: row(200, 500) });
+  const kinds = (reading, practice) => P.buildRoadmap({ dims: [vocab], reading, practice }, CONFIG).steps.map((s) => s.kind);
+  assert.deepEqual(kinds({ texts30: 1, coverage: 70, lookups: 3 }, { activeDays: 20 }), ["vocab", "easier"]);
+  assert.deepEqual(kinds({ texts30: 1, coverage: 92, lookups: 12 }, { activeDays: 20 }), ["vocab", "easier"]);
+  assert.deepEqual(kinds({ texts30: 2, coverage: 92, lookups: 3 }, { activeDays: 3 }), ["vocab", "read", "habit"]);
+  assert.deepEqual(kinds({ texts30: 0, coverage: null, lookups: null }, { activeDays: 20 }), ["vocab", "read"]);
+});
+
+test("buildRoadmap: con todo completo no hay nivel objetivo, y sin gramática calculada se sigue con el resto", () => {
+  const done = P.buildRoadmap({ dims: [dim("vocab", { done: "N1", current: null, percent: 100 }, {})], ...calm }, CONFIG);
+  assert.deepEqual(done, { level: null, focus: null, steps: [] });
+  const noGrammar = P.buildRoadmap({ dims: [dim("vocab", { done: null, current: "N5", percent: 10 }, { N5: row(50, 500) }), dim("grammar", null, {})], ...calm }, CONFIG);
+  assert.deepEqual(noGrammar.steps.map((s) => s.kind), ["vocab"]);
+});

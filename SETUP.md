@@ -240,6 +240,11 @@ foto semanal se sincronice entre dispositivos, **vuelve a ejecutar `supabase/sch
 `progress_snapshots`; los administradores pueden leer las de todos). Sin la tabla, el análisis
 funciona igual con las fotos del dispositivo.
 
+**Hoja de ruta:** el análisis propone al alumno premium metas de cada semana. Sus palabras salen
+antes en el repaso y sus estructuras de gramática se piden en los textos de la IA. Para eso último
+**vuelve a desplegar `generate-text`** (el prompt cambió a la versión `2026-10-22.1-seg`). Hasta
+entonces, la función ignora las estructuras y el resto funciona igual.
+
 Un usuario no puede cambiarse el plan a sí mismo: un trigger de la base de datos lo impide aunque
 lo intente sin pasar por la app, y la función lee el plan en el servidor. Todavía no hay pagos:
 cuando los haya, una Edge Function con la clave de servicio llamará a `admin_set_plan` desde el

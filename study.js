@@ -234,8 +234,9 @@ const kanjiGateContext = (known) => ({
 });
 
 /* Puntuación de una palabra nueva (pesos en study-config.js) y su porqué.
-   blocked: kanjis por encima del nivel del usuario que impiden proponerla (ver kanjiGate). */
-function scoreWord(entry, rec, known, gate = kanjiGateContext(known)) {
+   blocked: kanjis por encima del nivel del usuario que impiden proponerla (ver kanjiGate).
+   roadmap: las palabras de la hoja de ruta del estudiante premium (progress.js). */
+function scoreWord(entry, rec, known, gate = kanjiGateContext(known), roadmap = new Set()) {
   const W = STUDY_CONFIG.weights;
   const manual = rec?.origin === "manual";
   // Buscada en el diccionario: no es lo mismo que haberla visto en una lectura
@@ -248,6 +249,7 @@ function scoreWord(entry, rec, known, gate = kanjiGateContext(known)) {
   const coverage = entry.kanji.length ? kanjiKnown / entry.kanji.length : 0;
   const rank = BANK.frequency[entry.id] || 0;
   const frequency = rank ? Math.max(0, 1 - (rank - 1) / STUDY_CONFIG.frequencyMaxRank) : 0;
+  const planned = roadmap.has(entry.id);
 
   const exempt = manual || !!rec?.knowsMeaning; // "Conozco la palabra pero no el kanji"
   const check = exempt ? null : kanjiGate(entry, gate);
@@ -255,8 +257,8 @@ function scoreWord(entry, rec, known, gate = kanjiGateContext(known)) {
 
   return {
     score: manual * W.manual + dictionary * W.dictionary + lookup * W.lookup + meaningFail * W.meaningFail +
-      reading * W.reading + coverage * W.kanji + frequency * W.frequency,
-    manual, dictionary, lookup, meaningFail, reading, kanjiKnown, kanjiTotal: entry.kanji.length, rank, blocked
+      reading * W.reading + planned * W.roadmap + coverage * W.kanji + frequency * W.frequency,
+    manual, dictionary, lookup, meaningFail, reading, planned, kanjiKnown, kanjiTotal: entry.kanji.length, rank, blocked
   };
 }
 
@@ -265,10 +267,10 @@ function scoreWord(entry, rec, known, gate = kanjiGateContext(known)) {
    sus kanjis (kanjiGate), no el de la palabra. excluded: las que llevan kanjis
    por encima del nivel del usuario. */
 function newWordCandidates() {
-  const known = knownKanji(), gate = kanjiGateContext(known);
+  const known = knownKanji(), gate = kanjiGateContext(known), roadmap = roadmapWords();
   const list = [], excluded = [];
   const consider = (entry, rec) => {
-    const info = scoreWord(entry, rec, known, gate);
+    const info = scoreWord(entry, rec, known, gate, roadmap);
     (info.blocked.length ? excluded : list).push({ kind: "word", id: entry.id, entry, rec, group: "new", info });
   };
 
@@ -355,6 +357,7 @@ function debugHTML(fresh, excluded) {
         info.lookup ? t("consulta reciente × {value}", { value: info.lookup.toFixed(2) }) : "",
         info.meaningFail ? t("fallada al traducir") : "",
         info.reading ? t("vista en lecturas") : "",
+        info.planned ? t("en tu hoja de ruta") : "",
         t("kanjis conocidos {known}/{total}", { known: info.kanjiKnown, total: info.kanjiTotal }),
         info.rank ? t("frecuencia n.º {rank}", { rank: info.rank }) : t("sin puesto de frecuencia"),
         info.blocked.length ? t("kanji por encima de tu nivel: {kanji}", { kanji: info.blocked.join("、") }) : ""
@@ -364,7 +367,7 @@ function debugHTML(fresh, excluded) {
   return `
     <details class="debug-panel" open>
       <summary>${t("Depuración: próximas palabras nuevas")}</summary>
-      <p class="helper">${t("Puntuación = a mano × {manual} + diccionario × {dictionary} + consulta reciente × {lookup} + fallada al traducir × {meaningFail} + lectura × {reading} + kanjis conocidos × {kanji} + frecuencia × {frequency}. Los pesos están en study-config.js.", STUDY_CONFIG.weights)}</p>
+      <p class="helper">${t("Puntuación = a mano × {manual} + diccionario × {dictionary} + consulta reciente × {lookup} + fallada al traducir × {meaningFail} + lectura × {reading} + hoja de ruta × {roadmap} + kanjis conocidos × {kanji} + frecuencia × {frequency}. Los pesos están en study-config.js.", STUDY_CONFIG.weights)}</p>
       <div class="table-scroll"><table class="debug-table">
         <thead><tr><th>${t("Palabra")}</th><th>${t("Puntos")}</th><th>${t("Por qué")}</th></tr></thead>
         <tbody>${words.slice(0, 20).map(row).join("")}</tbody>

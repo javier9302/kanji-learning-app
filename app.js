@@ -10,7 +10,8 @@ let db;
 // Historial diario, borrados, perfil de lectura y lecturas de kanji practicadas en frases
 // writing: { skipped: ["N5"] } niveles de Escribir aprobados con la prueba
 // snapshots: { "2026-W43": foto } una foto del progreso por semana (progress.js)
-let meta = { days: {}, deleted: {}, reading: {}, practice: {}, writing: {}, snapshots: {} };
+// roadmap: { level, words, grammar, updatedAt } la hoja de ruta de la semana (progress.js)
+let meta = { days: {}, deleted: {}, reading: {}, practice: {}, writing: {}, snapshots: {}, roadmap: {} };
 let emptyStudyHTML = ""; // mensaje inicial de la pantalla de estudio
 
 const $ = (id) => document.getElementById(id);

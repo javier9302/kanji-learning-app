@@ -18,7 +18,7 @@ export const PROMPTS = {
   text: {
     source: "reading.js", target: "supabase/functions/generate-text/index.ts",
     fn: "renderPromptSeg", version: "SEGMENTED_VERSION",
-    untyped: "prefer = [] })", typed: "prefer = [] }: any)"
+    untyped: "grammar = [] })", typed: "grammar = [] }: any)"
   },
   sentences: {
     source: "tools/lib/sentence-batches.js", target: "supabase/functions/generate-sentences/index.ts",

@@ -39,8 +39,9 @@ después de `learning-core.js`)
 - **`dictionary.js`**: búsqueda por escritura, kana, rōmaji o significado.
 - **`progress.js` / `progress-core.js`**: Mis palabras → Análisis (solo premium, `isPremium`): lo
   demostrado por nivel JLPT, nivel estimado y foto semanal (`meta.snapshots`, tabla
-  `progress_snapshots`). Fases 1 y 2 hechas; faltan la hoja de ruta (fase 3) y la vista del
-  profesor (fase 4).
+  `progress_snapshots`). Fases 1 a 3 hechas (la hoja de ruta, `buildRoadmap`, guarda `meta.roadmap`:
+  sus palabras suben en el repaso con el peso `roadmap` y sus estructuras van al prompt de los
+  textos); falta la fase 4 (vista del profesor y resumen con IA).
 - **`grammar-core.js`**: catálogo de gramática (`GRAMMAR`, hoy solo N5), detector sobre las piezas
   de kuromoji de la frase entera (`detectGrammar`) y medición (`grammarStates`). Una estructura
   nueva lleva su regla, su ejemplo y, si se parece a otra, un caso en «no confunde» de

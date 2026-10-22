@@ -297,7 +297,9 @@ function promptParams({ type, topic, length }) {
     level: meta.reading.level, type, topic, length, prefer,
     known: all, assumedLevels: [],
     // Las que está aprendiendo; primero las que buscó en el diccionario, para que salgan en sus textos
-    learning: promptLearning([...userWords.values()], 60).map((w) => label(w.lemma, w.reading))
+    learning: promptLearning([...userWords.values()], 60).map((w) => label(w.lemma, w.reading)),
+    // Las estructuras de su hoja de ruta (premium): { ja, en }
+    grammar: roadmapGrammar()
   };
   if (all.length > PROMPT_WORD_LIMIT) {
     params.known = [...userWords.values()].filter((w) => KNOWN_STATUS.has(w.status))
@@ -315,13 +317,13 @@ const PROMPT_VERSION = "2026-10-08.1";
    la función generate-text conserva su copia para versiones anteriores de la app. */
 
 /* Versión del prompt segmentado (formato nuevo): súbela al cambiar su texto. */
-const SEGMENTED_VERSION = "2026-10-09.2-seg";
+const SEGMENTED_VERSION = "2026-10-22.1-seg";
 
 /* Prompt del formato nuevo: la IA solo escribe el texto separado en unidades
    con "|" y la traducción de cada oración. Lemas, lecturas y significados los
    pone la app (kuromoji + diccionario). IMPORTANTE: la función generate-text
    lleva una copia de esta función; si cambias una, cambia la otra. */
-function renderPromptSeg({ level, type, topic, length, known, assumedLevels, learning, prefer = [] }) {
+function renderPromptSeg({ level, type, topic, length, known, assumedLevels, learning, prefer = [], grammar = [] }) {
   const fresh = Math.round(length * 0.1);
   const minUnits = Math.round(length * 0.9), maxUnits = Math.round(length * 1.25);
   const minSentences = Math.ceil(length / 9), maxSentences = Math.ceil(length / 6.5);
@@ -337,7 +339,7 @@ function renderPromptSeg({ level, type, topic, length, known, assumedLevels, lea
 LEARNER
 - Target level: JLPT ${level}.
 - ${knownLine}
-${learning.length ? `- Words the learner is still learning (reuse a few of them): ${learning.join("、")}\n` : ""}${prefer.length ? `- Common words written in kana, most frequent first. Prefer them when they fit naturally; they do not count as new words: ${prefer.join("、")}\n` : ""}- A word written with its reading in brackets, like 角(かど), has several readings: use it ONLY with that reading and its meaning (角(かど) is "corner", never つの "horn"). Never write the brackets in the text.
+${learning.length ? `- Words the learner is still learning (reuse a few of them): ${learning.join("、")}\n` : ""}${prefer.length ? `- Common words written in kana, most frequent first. Prefer them when they fit naturally; they do not count as new words: ${prefer.join("、")}\n` : ""}${grammar.length ? `- Grammar the learner is practising: use each of these at least once, naturally: ${grammar.map((point) => `${point.ja} (${point.en})`).join("; ")}\n` : ""}- A word written with its reading in brackets, like 角(かど), has several readings: use it ONLY with that reading and its meaning (角(かど) is "corner", never つの "horn"). Never write the brackets in the text.
 
 TEXT
 - Type: ${type}. Topic: ${topic}.

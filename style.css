@@ -2790,3 +2790,35 @@ body[data-view="dict"] .intro {
   flex-basis: 100%;
   font-size: 12px;
 }
+
+/* Hoja de ruta: pasos numerados, el título en negrita y su explicación debajo */
+.roadmap-steps {
+  margin: 12px 0 0;
+  padding-left: 22px;
+  display: grid;
+  gap: 12px;
+}
+
+.roadmap-steps li {
+  padding-left: 4px;
+}
+
+.roadmap-steps li::marker {
+  font-weight: 700;
+  color: var(--green);
+}
+
+.roadmap-steps strong {
+  display: block;
+  font-size: 14px;
+}
+
+.roadmap-steps span {
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.roadmap-steps span span {
+  color: var(--ink);
+}

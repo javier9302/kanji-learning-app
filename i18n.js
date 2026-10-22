@@ -59,7 +59,8 @@ const EN = {
   "frase": "sentence",
   "frases": "sentences",
   "fallada al traducir": "missed when translating",
-  "Puntuación = a mano × {manual} + diccionario × {dictionary} + consulta reciente × {lookup} + fallada al traducir × {meaningFail} + lectura × {reading} + kanjis conocidos × {kanji} + frecuencia × {frequency}. Los pesos están en study-config.js.": "Score = added by hand × {manual} + dictionary × {dictionary} + recent lookup × {lookup} + missed when translating × {meaningFail} + reading × {reading} + known kanji × {kanji} + frequency × {frequency}. The weights are in study-config.js.",
+  "Puntuación = a mano × {manual} + diccionario × {dictionary} + consulta reciente × {lookup} + fallada al traducir × {meaningFail} + lectura × {reading} + hoja de ruta × {roadmap} + kanjis conocidos × {kanji} + frecuencia × {frequency}. Los pesos están en study-config.js.": "Score = added by hand × {manual} + dictionary × {dictionary} + recent lookup × {lookup} + missed when translating × {meaningFail} + reading × {reading} + roadmap × {roadmap} + known kanji × {kanji} + frequency × {frequency}. The weights are in study-config.js.",
+  "en tu hoja de ruta": "in your roadmap",
   "Corrigiendo…": "Grading…",
   "Una traducción natural": "A natural translation",
   "Inicia sesión para que la IA corrija tus traducciones. Mientras tanto, compárala tú con la referencia.": "Sign in to have the AI grade your translations. Meanwhile, compare it with the reference yourself.",
@@ -141,6 +142,34 @@ const EN = {
   "Análisis": "Analysis",
   "TU PROGRESO POR NIVEL": "YOUR PROGRESS BY LEVEL",
   "{done} completo": "{done} complete",
+  "Tu hoja de ruta": "Your roadmap",
+  "Objetivo: completar {level}. Lo que más te falta ahora es {focus} ({percent} % de {level}).":
+    "Goal: complete {level}. What you need most right now is {focus} ({percent} % of {level}).",
+  "Has completado todos los niveles que mide el análisis. Sigue leyendo y repasando para no olvidarlo.":
+    "You have completed every level the analysis measures. Keep reading and reviewing so you do not forget it.",
+  "el vocabulario": "vocabulary",
+  "los kanjis": "kanji",
+  "la gramática": "grammar",
+  "Vocabulario de {level}: {n} palabras nuevas esta semana": "{level} vocabulary: {n} new words this week",
+  "Te faltan {missing} para completar {level}. Ya salen primero en tu repaso; las siguientes:":
+    "You need {missing} more to complete {level}. They already come first in your reviews; next up:",
+  "Kanjis de {level}: {n} nuevos esta semana": "{level} kanji: {n} new ones this week",
+  "Te faltan {missing} para completar {level}. Repásalos en Repasar con el contenido «Kanjis» o escríbelos en Escribir. Los siguientes:":
+    "You need {missing} more to complete {level}. Review them in Review with the “Kanji” content, or write them in Write. Next up:",
+  "Gramática de {level}: {n} estructuras esta semana": "{level} grammar: {n} grammar points this week",
+  "Los textos que crees con IA las incluirán; tradúcelos en Traducir para que cuenten. Te faltan {missing} para completar {level}.":
+    "The texts you create with AI will include them; translate them in Translate so they count. You need {missing} more to complete {level}.",
+  "Tus textos te cuestan": "Your texts are hard for you",
+  "Conoces el {coverage} % de las palabras de tus últimos textos. Lee textos de un nivel más bajo (Ajustes → Lectura) hasta pasar del {min} %.":
+    "You know {coverage} % of the words in your latest texts. Read texts of a lower level (Settings → Reading) until you go above {min} %.",
+  "Consultas {lookups} palabras de cada 100 que lees. Lee textos de un nivel más bajo (Ajustes → Lectura) o más cortos.":
+    "You look up {lookups} words out of every 100 you read. Read texts of a lower level (Settings → Reading) or shorter ones.",
+  "Lee {n} textos esta semana": "Read {n} texts this week",
+  "Leer es lo que más vocabulario y gramática te da en contexto, y cada texto cuenta para tu gramática.":
+    "Reading gives you the most vocabulary and grammar in context, and every text counts towards your grammar.",
+  "Estudia más días": "Study on more days",
+  "Has estudiado {days} de los últimos 30 días. Mejor un poco cada día: al menos {n} días al mes.":
+    "You have studied on {days} of the last 30 days. A little every day is better: at least {n} days a month.",
   "Entendidas": "Understood",
   "Vistas": "Seen",
   "Sin ver": "Not seen",

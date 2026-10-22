@@ -83,7 +83,8 @@ aunque sea de un nivel supuesto, y una acertada cuenta aunque sea de un nivel su
 - Las agregadas a mano y las marcadas «Conozco la palabra pero no el kanji» no tienen límite.
 - **Orden** (pesos en `study-config.js`; cada criterio solo desempata al anterior):
   agregada a mano > buscada en el diccionario > consultada hace poco (pierde peso en 14 días) >
-  fallada al traducir > vista en una lectura > proporción de kanjis conocidos > frecuencia.
+  fallada al traducir > vista en una lectura > en la hoja de ruta (solo premium) > proporción de
+  kanjis conocidos > frecuencia.
 - Como mucho **5 nuevas por sesión** (se cambia en Ajustes). Los repasos pendientes salen antes y no cuentan.
 - Con «Mostrar por qué sale cada palabra nueva» (Ajustes) se ve la puntuación de cada una.
 
@@ -137,7 +138,8 @@ palabras que ya conoce o está aprendiendo. En «Palabras y kanjis» se alternan
 - Se propone un texto no leído solo si el usuario conoce al menos el **90 %** de sus palabras.
 - Al pedir uno nuevo, la IA (Gemini, función `generate-text`) recibe el nivel de lectura, las palabras
   conocidas, las que está aprendiendo (primero las buscadas en el diccionario) y 40 palabras en
-  kana frecuentes que ha visto poco.
+  kana frecuentes que ha visto poco. Al alumno premium, además, las estructuras de gramática de su
+  hoja de ruta, para que el texto las use al menos una vez.
 
 ### 7. Traducir (`translate.js` + `translate-core.js`)
 
@@ -152,8 +154,8 @@ se escribe. Primero los kanjis de palabras que el usuario ya conoce.
 
 ### 9. Análisis del progreso (`progress.js` + `progress-core.js` + `grammar-core.js`, solo premium)
 
-Fases 1 y 2 de la hoja de ruta: vocabulario, kanjis, gramática, lectura y constancia. La hoja de
-ruta (qué estudiar después) y la vista del profesor llegarán más adelante.
+Fases 1 a 3: vocabulario, kanjis, gramática, lectura y constancia, y la hoja de ruta (qué estudiar
+esta semana). La vista del profesor y un resumen con IA llegarán más adelante.
 
 - **Listas que se miden**: las palabras con kanji de cada nivel del banco (las que casi siempre van
   en kana no se estudian) y todos los kanjis de cada nivel.
@@ -186,6 +188,19 @@ ruta (qué estudiar después) y la vista del profesor llegarán más adelante.
 - **Foto semanal** (`meta.snapshots`, tabla `progress_snapshots`): se guarda para todos los
   usuarios, premium o no, en cada sincronización y al abrir el análisis; la última de cada semana
   gana. Con ella se ven las diferencias con la semana anterior y la tabla de evolución (8 semanas).
+- **Hoja de ruta** (`buildRoadmap`, al principio del análisis): reglas, no IA.
+  - Cada dimensión sin completar (vocabulario, kanjis, gramática) tiene su meta de la semana en su
+    propio nivel: 35 palabras nuevas, 10 kanjis o 2 estructuras, con cuántos le faltan para
+    completar el nivel y los siguientes elementos concretos. Van primero las de nivel más bajo y,
+    en el mismo nivel, la más floja; el «objetivo» es el nivel de la primera.
+  - Palabras: las nuevas de ese nivel en el orden del repaso. Kanjis: los de ese nivel sin estudiar
+    ni aparecer en palabras que conoce. Gramática: las no entendidas, primero las ya vistas.
+  - Detrás, la lectura: si conoce menos del 85 % de sus últimos textos o consulta más de 8 palabras
+    de cada 100, que lea textos más fáciles; si ha leído menos de 12 textos en 30 días, que lea 3
+    esta semana. Y la constancia: si ha estudiado menos de 12 de los últimos 30 días, se le avisa.
+  - Se guarda en `meta.roadmap` al abrir el análisis y tiene efecto: sus palabras de la semana
+    suben en el orden del repaso (peso `roadmap`) y sus estructuras se piden en los textos de la IA.
+    Solo para premium: sin premium no cambia nada.
 - **Quién lo ve**: con sesión y plan premium sin caducar (`isPremium`). Sin premium se ve un aviso.
 
 ## Dónde cambiar cada número
@@ -195,8 +210,9 @@ días de dominio, reglas de Escribir y de Traducir. Lo que no:
 
 - 90 % de cobertura de los textos: `COVERAGE_TARGET` en `reading.js`.
 - Análisis: umbral para dar un nivel por completo (80 %), textos recientes que se miran (5) y
-  cuándo una estructura cuenta como entendida (3 lecturas sin consultar) o dominada (2 días):
-  `STUDY_CONFIG.analysis` en `study-config.js`.
+  cuándo una estructura cuenta como entendida (3 lecturas sin consultar) o dominada (2 días), y las
+  metas y avisos de la hoja de ruta: `STUDY_CONFIG.analysis` en `study-config.js`. El peso de la
+  hoja de ruta en el orden del repaso: `STUDY_CONFIG.weights.roadmap`.
 - Tamaño y aprobado de la evaluación inicial: `PLACEMENT_SIZE` y `PLACEMENT_PASS` en `reading.js`.
 - Textos de IA al día: variables `DAILY_TEXTS` y `PREMIUM_DAILY_TEXTS` de la función `generate-text` en Supabase.
 - Frases de IA al día: `SENTENCE_DAILY_WORDS` y `SENTENCE_DAILY_CALLS` de la función `generate-sentences`.

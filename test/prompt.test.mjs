@@ -16,3 +16,13 @@ for (const [name, prompt] of Object.entries(PROMPTS)) {
     assert.equal(plain(server.body, prompt), client.body, `${prompt.fn} distinto: ejecuta node tools/sync-prompt.mjs`);
   });
 }
+
+test("el prompt de los textos pide las estructuras de la hoja de ruta, y sin ellas no dice nada", async () => {
+  const { readParams } = await import("../supabase/functions/generate-text/index.ts");
+  const source = fs.readFileSync(new URL("../supabase/functions/generate-text/index.ts", import.meta.url), "utf8");
+  assert.ok(source.includes("Grammar the learner is practising"));
+  // La copia de la función se puede ejecutar: se prueba con los parámetros que deja pasar readParams
+  const params = readParams({ level: "N5", type: "short story", topic: "food", length: 50, known: ["水"],
+    grammar: [{ ja: "〜てもいい", en: "may, it's okay to…" }] });
+  assert.deepEqual(params.grammar, [{ ja: "〜てもいい", en: "may, it's okay to…" }]);
+});

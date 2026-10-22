@@ -168,13 +168,13 @@ RULES
 
 // Copia de SEGMENTED_VERSION y renderPromptSeg de reading.js: si cambias una, cambia la otra.
 /* Versión del prompt segmentado (formato nuevo): súbela al cambiar su texto. */
-const SEGMENTED_VERSION = "2026-10-09.2-seg";
+const SEGMENTED_VERSION = "2026-10-22.1-seg";
 
 /* Prompt del formato nuevo: la IA solo escribe el texto separado en unidades
    con "|" y la traducción de cada oración. Lemas, lecturas y significados los
    pone la app (kuromoji + diccionario). IMPORTANTE: la función generate-text
    lleva una copia de esta función; si cambias una, cambia la otra. */
-function renderPromptSeg({ level, type, topic, length, known, assumedLevels, learning, prefer = [] }: any) {
+function renderPromptSeg({ level, type, topic, length, known, assumedLevels, learning, prefer = [], grammar = [] }: any) {
   const fresh = Math.round(length * 0.1);
   const minUnits = Math.round(length * 0.9), maxUnits = Math.round(length * 1.25);
   const minSentences = Math.ceil(length / 9), maxSentences = Math.ceil(length / 6.5);
@@ -190,7 +190,7 @@ function renderPromptSeg({ level, type, topic, length, known, assumedLevels, lea
 LEARNER
 - Target level: JLPT ${level}.
 - ${knownLine}
-${learning.length ? `- Words the learner is still learning (reuse a few of them): ${learning.join("、")}\n` : ""}${prefer.length ? `- Common words written in kana, most frequent first. Prefer them when they fit naturally; they do not count as new words: ${prefer.join("、")}\n` : ""}- A word written with its reading in brackets, like 角(かど), has several readings: use it ONLY with that reading and its meaning (角(かど) is "corner", never つの "horn"). Never write the brackets in the text.
+${learning.length ? `- Words the learner is still learning (reuse a few of them): ${learning.join("、")}\n` : ""}${prefer.length ? `- Common words written in kana, most frequent first. Prefer them when they fit naturally; they do not count as new words: ${prefer.join("、")}\n` : ""}${grammar.length ? `- Grammar the learner is practising: use each of these at least once, naturally: ${grammar.map((point) => `${point.ja} (${point.en})`).join("; ")}\n` : ""}- A word written with its reading in brackets, like 角(かど), has several readings: use it ONLY with that reading and its meaning (角(かど) is "corner", never つの "horn"). Never write the brackets in the text.
 
 TEXT
 - Type: ${type}. Topic: ${topic}.
@@ -257,9 +257,18 @@ const words = (value: unknown, max: number): string[] =>
     ? value.filter((w) => typeof w === "string" && JAPANESE.test(w)).slice(0, max)
     : [];
 
+// Estructuras de gramática que practica el estudiante (su hoja de ruta): { ja: "〜てもいい", en: "may, it's okay to…" }
+const GRAMMAR_JA = /^[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}ー々〜・＋]{1,20}$/u;
+const GRAMMAR_EN = /^[\p{Script=Latin}\p{Script=Hiragana}0-9 ,.:;'’()…?\/-]{1,60}$/u;
+// deno-lint-ignore no-explicit-any
+const grammarPoints = (value: unknown): { ja: string; en: string }[] => Array.isArray(value)
+  ? value.filter((point: any) => point && GRAMMAR_JA.test(point.ja) && GRAMMAR_EN.test(point.en))
+    .slice(0, 5).map((point: any) => ({ ja: point.ja, en: point.en }))
+  : [];
+
 // Solo se aceptan datos con forma conocida: la función no es un chat libre
 // deno-lint-ignore no-explicit-any
-function readParams(body: any) {
+export function readParams(body: any) {
   if (!body || !LEVELS.includes(body.level) || !TYPES.includes(body.type) ||
       !LENGTHS.includes(body.length) || typeof body.topic !== "string") return null;
   const topic = body.topic.replace(/[\r\n`{}<>]/g, " ").trim().slice(0, 80);
@@ -271,6 +280,7 @@ function readParams(body: any) {
     assumedLevels: Array.isArray(body.assumedLevels) ? LEVELS.filter((l) => body.assumedLevels.includes(l)) : [],
     learning: words(body.learning, 60),
     prefer: words(body.prefer, 80),
+    grammar: grammarPoints(body.grammar),
   };
 }
 

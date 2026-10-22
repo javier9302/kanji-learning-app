@@ -717,7 +717,7 @@ export default async function extra({ page, step, check }) {
     check(result.rows[2].includes("answer_key") && !result.rows[2].includes("email"), result.rows[2]);
   });
 
-  await step("análisis: sin premium, el aviso; con premium, cada nivel, la gramática, la foto de la semana y su sincronización", async () => {
+  await step("análisis: sin premium, el aviso; con premium, cada nivel, la gramática, la hoja de ruta, la foto de la semana y su sincronización", async () => {
     const locked = await page.evaluate(() => {
       switchView("analysis");
       return { lock: $("analysisArea").textContent.includes(t("El análisis de tu progreso es parte del plan premium")),
@@ -770,6 +770,22 @@ export default async function extra({ page, step, check }) {
       });
       check(grammar.last === "incorrect" && grammar.before.every((state) => state === "seen") &&
         grammar.after.every((state) => state === "understood"), JSON.stringify(grammar));
+      // La hoja de ruta: se dibuja, se guarda, sus palabras salen antes en el repaso y sus estructuras van al prompt
+      const roadmap = await page.evaluate(() => {
+        const candidates = newWordCandidates().list;
+        const planned = candidates.filter((card) => card.info.planned).map((card) => card.id);
+        return {
+          panel: !!document.querySelector("#analysisArea .roadmap-panel"),
+          steps: document.querySelectorAll("#analysisArea .roadmap-steps li").length,
+          level: meta.roadmap.level, words: meta.roadmap.words.length, grammar: meta.roadmap.grammar,
+          planned: planned.length && planned.every((id) => meta.roadmap.words.includes(id)),
+          first: meta.roadmap.words.includes(candidates[0]?.id),
+          prompt: promptParams({ type: "short story", topic: "food", length: 50 }).grammar.map((point) => point.ja),
+          rendered: buildPrompt({ type: "short story", topic: "food", length: 50 }).includes("Grammar the learner is practising")
+        };
+      });
+      check(roadmap.panel && roadmap.steps > 0 && roadmap.level && roadmap.words > 0 && roadmap.planned && roadmap.first &&
+        roadmap.prompt.length === roadmap.grammar.length && roadmap.rendered === roadmap.grammar.length > 0, JSON.stringify(roadmap));
       await shot(page, "analisis");
       // La foto se sube con lo que espera progress_snapshots
       const sent = await page.evaluate(async () => {
@@ -783,13 +799,14 @@ export default async function extra({ page, step, check }) {
       });
       check(sent.length === 2 && sent[0][0] === "progress_snapshots" && sent[0][2] === "client_updated_at,data,user_id,week" &&
         sent[1].length === 2, JSON.stringify(sent)); // la segunda vez ya no hay nada que subir
-      // Premium caducado: vuelve el aviso
+      // Premium caducado: vuelve el aviso, y la hoja de ruta ya no toca ni el repaso ni los textos
       const expired = await page.evaluate(() => {
         sync.config.plan = { plan: "premium", until: "2020-01-01T00:00:00Z" };
         switchView("analysis");
-        return !document.querySelector("#analysisArea .stat-card");
+        return !document.querySelector("#analysisArea .stat-card") && !newWordCandidates().list.some((card) => card.info.planned) &&
+          !promptParams({ type: "short story", topic: "food", length: 50 }).grammar.length;
       });
-      check(expired, "con el premium caducado se ve el análisis");
+      check(expired, "con el premium caducado se ve el análisis o sigue la hoja de ruta");
     } finally {
       await page.evaluate(() => {
         if (window.realSchedule) window.scheduleSync = window.realSchedule;

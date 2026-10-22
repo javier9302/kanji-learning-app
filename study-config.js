@@ -19,9 +19,10 @@ const STUDY_CONFIG = {
                   hasta 0 en lookupDecayDays días
        meaningFail falló su significado en Traducir y aún no lo ha demostrado
        reading    apareció en una lectura del usuario
+       roadmap    está en la hoja de ruta del estudiante premium (Análisis)
        kanji      proporción de sus kanjis que el usuario ya conoce
        frequency  puesto en la lista de frecuencia (1 = la más frecuente) */
-  weights: { manual: 1000, dictionary: 300, lookup: 200, meaningFail: 150, reading: 100, kanji: 10, frequency: 1 },
+  weights: { manual: 1000, dictionary: 300, lookup: 200, meaningFail: 150, reading: 100, roadmap: 50, kanji: 10, frequency: 1 },
 
   /* Días que tarda en apagarse la ventaja de una consulta reciente al diccionario */
   lookupDecayDays: 14,
@@ -63,7 +64,17 @@ const STUDY_CONFIG = {
        grammar      cuándo una estructura cuenta como entendida (cleanReads
                     frases leídas sin consultar nada) o dominada (traducciones
                     buenas en masteredDays días distintos); grammar-core.js */
-  analysis: { levelDone: 0.8, recentTexts: 5, grammar: { cleanReads: 3, masteredDays: 2 } },
+  analysis: {
+    levelDone: 0.8, recentTexts: 5, grammar: { cleanReads: 3, masteredDays: 2 },
+    /* Hoja de ruta (progress-core.js, buildRoadmap): metas de cada semana
+         weeklyWords, weeklyKanji, weeklyGrammar, weeklyTexts  cuánto se propone
+         preview        cuántas palabras o kanjis siguientes se enseñan
+         minCoverage    con menos % conocido en sus textos, se le proponen más fáciles
+         maxLookups     …o si consulta más de estas palabras por cada 100
+         minActiveDays  días con estudio en 30 por debajo de los que se avisa */
+    roadmap: { weeklyWords: 35, weeklyKanji: 10, weeklyGrammar: 2, weeklyTexts: 3, preview: 8,
+      minCoverage: 85, maxLookups: 8, minActiveDays: 12 }
+  },
   /* Sección "Traducir": el estudiante escribe la traducción de una frase y una
      IA la corrige. Demuestra que entiende el SIGNIFICADO; no mueve el calendario
      de repaso de la lectura. */

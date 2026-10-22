@@ -204,10 +204,60 @@ function previousSnapshot(snapshots, week) {
   return earlier.length ? snapshots[earlier[earlier.length - 1]] : null;
 }
 
+/* =========================================
+   5. LA HOJA DE RUTA
+   -----------------------------------------
+   Reglas, no IA. Cada dimensión sin completar (vocabulario, kanjis,
+   gramática) tiene su meta de la semana en su propio nivel, con elementos
+   concretos. Van primero las de nivel más bajo y, en el mismo nivel, la más
+   floja: el nivel objetivo es el de la primera. Así ir atrasado en una
+   dimensión no frena las demás. Detrás van la lectura (si sus textos le
+   cuestan o lee poco) y la constancia.
+   Los números vienen de STUDY_CONFIG.analysis.roadmap.
+   ========================================= */
+
+/* Cuántos le faltan de un nivel para darlo por completo (share: la parte que ya sabe) */
+const missingFor = (row, share, threshold) =>
+  row?.total ? Math.max(0, Math.ceil(threshold * row.total - 1e-9) - Math.round(share(row) * row.total)) : 0;
+
+/* dims      [{ key: "vocab" | "kanji" | "grammar", estimate, breakdown, share, next(level) -> ids }]
+             next: los elementos que le faltan de un nivel, en el orden en que conviene aprenderlos
+   reading   readingSummary;  practice  practiceSummary
+   Devuelve { level, focus, steps }: level, el nivel objetivo (null si los ha completado todos);
+   focus, la dimensión que va primero; steps, en orden:
+     { kind: "vocab" | "kanji" | "grammar", level, percent, missing, count, items }
+     { kind: "easier", coverage, lookups }   sus textos le cuestan
+     { kind: "read", count }                 lee poco
+     { kind: "habit", activeDays, count }    estudia pocos días */
+function buildRoadmap({ dims, reading, practice }, config, threshold = 0.8) {
+  const open = dims.filter((dim) => dim.estimate?.current).sort((a, b) =>
+    PC_LEVELS.indexOf(a.estimate.current) - PC_LEVELS.indexOf(b.estimate.current) || a.estimate.percent - b.estimate.percent);
+  const weekly = { vocab: config.weeklyWords, kanji: config.weeklyKanji, grammar: config.weeklyGrammar };
+
+  const steps = open.map((dim) => {
+    const level = dim.estimate.current;
+    const missing = missingFor(dim.breakdown[level], dim.share, threshold);
+    const count = Math.min(weekly[dim.key], missing || weekly[dim.key]);
+    return {
+      kind: dim.key, level, percent: dim.estimate.percent, missing, count,
+      items: dim.next(level).slice(0, dim.key === "grammar" ? count : config.preview)
+    };
+  });
+  const hard = reading.coverage !== null && reading.coverage < config.minCoverage ||
+    reading.lookups !== null && reading.lookups > config.maxLookups;
+  if (hard) steps.push({ kind: "easier", coverage: reading.coverage, lookups: reading.lookups });
+  else if (reading.texts30 < config.weeklyTexts * 4) steps.push({ kind: "read", count: config.weeklyTexts });
+  if (practice.activeDays < config.minActiveDays) {
+    steps.push({ kind: "habit", activeDays: practice.activeDays, count: config.minActiveDays });
+  }
+  return { level: open[0]?.estimate.current || null, focus: open[0]?.key || null, steps };
+}
+
 /* Para tools/ y las pruebas (Node); en el navegador son globales */
 if (typeof module !== "undefined") {
   module.exports = {
     PC_LEVELS, PC_STATES, wordState, kanjiState, levelBreakdown, knownShare, estimateLevel,
-    readingSummary, practiceSummary, weekKey, weekStart, snapshotOf, snapshotTotal, snapshotGrammar, progressDelta, previousSnapshot
+    readingSummary, practiceSummary, weekKey, weekStart, snapshotOf, snapshotTotal, snapshotGrammar, progressDelta, previousSnapshot,
+    missingFor, buildRoadmap
   };
 }

@@ -152,7 +152,7 @@ const GRAMMAR = [
     match: (pieces, i) => gcIs(pieces[i], { b: ["ある", "いる"], p: "動詞", d: "自立" }) && gcIs(pieces[i - 1], { s: ["が", "は", "も"], p: "助詞" }) },
 
   // Adjetivos
-  { id: "na-adj", level: "N5", ja: "〜な + sustantivo", es: "adjetivo な delante de un sustantivo", en: "な-adjective before a noun", example: "静かな部屋です。",
+  { id: "na-adj", level: "N5", ja: "〜な＋名詞", es: "adjetivo な delante de un sustantivo", en: "な-adjective before a noun", example: "静かな部屋です。",
     match: gcSeq({ d: "形容動詞語幹" }, { b: "だ", f: "体言接続" }) },
   { id: "i-adj-past", level: "N5", ja: "〜かった", es: "pasado de un adjetivo い", en: "い-adjective past", example: "高かったです。",
     match: gcSeq({ p: "形容詞", f: "連用タ接続" }, TA) },

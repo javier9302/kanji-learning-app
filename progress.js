@@ -9,6 +9,9 @@
 
    meta.snapshots = { "2026-W43": foto (snapshotOf) + updatedAt }: una por
    semana, la última de cada semana. Se sincroniza (tabla progress_snapshots).
+   meta.roadmap = { level, words, grammar, updatedAt }: la hoja de ruta que se
+   calculó al abrir el análisis. Sus palabras salen antes en el repaso
+   (scoreWord) y sus estructuras se piden en los textos de la IA (promptParams).
    ========================================= */
 
 const SNAPSHOT_WEEKS = 104; // fotos que se guardan (dos años)
@@ -43,7 +46,8 @@ async function computeProfile({ grammar = "ifLoaded" } = {}) {
     if (["mastered", "assumed"].includes(wordStates.get(word.id))) word.kanji.forEach((c) => fromWords.add(c));
   }
   const kanjiList = [...BANK.kanji.values()].map((kanji) => ({ id: kanji.c, level: kanji.level }));
-  const kanji = levelBreakdown(kanjiList, (c) => kanjiState(userKanji.get(c), fromWords.has(c)));
+  const kanjiStates = new Map(kanjiList.map(({ id }) => [id, kanjiState(userKanji.get(id), fromWords.has(id))]));
+  const kanji = levelBreakdown(kanjiList, (c) => kanjiStates.get(c));
 
   // Lectura: con lo que conoce hoy
   const known = knownLemmas();
@@ -57,7 +61,7 @@ async function computeProfile({ grammar = "ifLoaded" } = {}) {
   const grammarRows = grammarMap && grammarBreakdown(grammarMap);
 
   return {
-    vocab, kanji, reading, practice: practiceSummary(meta.days),
+    vocab, kanji, reading, practice: practiceSummary(meta.days), kanjiStates,
     vocabLevel: estimateLevel(vocab, config.levelDone), kanjiLevel: estimateLevel(kanji, config.levelDone),
     readLevel: meta.reading.level || "",
     grammar: grammarRows, grammarStates: grammarMap,
@@ -124,7 +128,50 @@ async function grammarEvents(tokenizer) {
 }
 
 /* =========================================
-   3. LA FOTO SEMANAL
+   3. LA HOJA DE RUTA
+   ========================================= */
+
+/* Las palabras de la hoja de ruta, para el repaso (solo premium) */
+const roadmapWords = () => new Set(isPremium() ? meta.roadmap?.words || [] : []);
+
+/* La hoja de ruta de un perfil (buildRoadmap) con lo que le falta de cada dimensión:
+     vocabulario  las palabras nuevas de ese nivel en el orden en que el repaso las propondría
+     kanjis       los de ese nivel sin estudiar ni aparecer en palabras que conoce
+     gramática    las estructuras sin entender; primero las que ya ha visto */
+function roadmapOf(profile) {
+  const config = STUDY_CONFIG.analysis;
+  const candidates = newWordCandidates().list;
+  const order = { seen: 0, unseen: 1 };
+  const dims = [
+    { key: "vocab", estimate: profile.vocabLevel, breakdown: profile.vocab, share: knownShare,
+      next: (level) => candidates.filter((card) => card.entry.level === level).map((card) => card.id) },
+    { key: "kanji", estimate: profile.kanjiLevel, breakdown: profile.kanji, share: knownShare,
+      next: (level) => [...BANK.kanji.values()].filter((kanji) => kanji.level === level && profile.kanjiStates.get(kanji.c) === "new")
+        .map((kanji) => kanji.c) },
+    profile.grammar && { key: "grammar", estimate: profile.grammarLevel, breakdown: profile.grammar, share: grammarShare,
+      next: (level) => GRAMMAR.filter((point) => point.level === level && profile.grammarStates.get(point.id) in order)
+        .sort((a, b) => order[profile.grammarStates.get(a.id)] - order[profile.grammarStates.get(b.id)])
+        .map((point) => point.id) }
+  ].filter(Boolean);
+  const roadmap = buildRoadmap({ dims, reading: profile.reading, practice: profile.practice }, config.roadmap, config.levelDone);
+  // Las palabras de la semana para el repaso: todas las de la meta, no solo las que se enseñan
+  const vocab = roadmap.steps.find((step) => step.kind === "vocab");
+  roadmap.words = vocab ? dims[0].next(vocab.level).slice(0, vocab.count) : [];
+  roadmap.grammar = roadmap.steps.find((step) => step.kind === "grammar")?.items || [];
+  return roadmap;
+}
+
+async function saveRoadmap(roadmap) {
+  meta.roadmap = { level: roadmap.level, words: roadmap.words, grammar: roadmap.grammar, updatedAt: Date.now() };
+  await saveMeta();
+}
+
+/* Las estructuras de la hoja de ruta, como se le piden a la IA en los textos (solo premium) */
+const roadmapGrammar = () => (isPremium() ? meta.roadmap?.grammar || [] : [])
+  .map((id) => GRAMMAR_BY_ID.get(id)).filter(Boolean).map((point) => ({ ja: point.ja, en: point.en }));
+
+/* =========================================
+   4. LA FOTO SEMANAL
    ========================================= */
 
 /* Guarda la foto de esta semana (sustituye la de esta semana si ya había). Si
@@ -185,7 +232,7 @@ async function pushSnapshots(userId) {
 }
 
 /* =========================================
-   4. LA PANTALLA
+   5. LA PANTALLA
    ========================================= */
 
 /* Estado, color y nombre. La barra cuenta como sabido lo de las dos primeras filas */
@@ -238,6 +285,56 @@ function stateLegendHTML(breakdown, style = STATE_STYLE) {
 }
 
 const signed = (n) => n > 0 ? `+${n}` : String(n);
+
+/* Un paso de la hoja de ruta: [título, explicación] (HTML ya escapado) */
+function roadmapStepHTML(step) {
+  const config = STUDY_CONFIG.analysis.roadmap;
+  const list = (items) => `<span lang="ja">${items.map(escapeHTML).join("、")}</span>`;
+  switch (step.kind) {
+    case "vocab": return [
+      escapeHTML(t("Vocabulario de {level}: {n} palabras nuevas esta semana", { level: step.level, n: step.count })),
+      `${escapeHTML(t("Te faltan {missing} para completar {level}. Ya salen primero en tu repaso; las siguientes:", step))} ${
+        list(step.items.map((id) => wordEntry(id)?.w || id.split("|")[0]))}`];
+    case "kanji": return [
+      escapeHTML(t("Kanjis de {level}: {n} nuevos esta semana", { level: step.level, n: step.count })),
+      `${escapeHTML(t("Te faltan {missing} para completar {level}. Repásalos en Repasar con el contenido «Kanjis» o escríbelos en Escribir. Los siguientes:", step))} ${list(step.items)}`];
+    case "grammar": return [
+      escapeHTML(t("Gramática de {level}: {n} estructuras esta semana", { level: step.level, n: step.count })),
+      `${step.items.map((id) => GRAMMAR_BY_ID.get(id)).map((point) =>
+        `<span lang="ja">${escapeHTML(point.ja)}</span> (${escapeHTML(lang === "es" ? point.es : point.en)})`).join(" · ")}. ${
+        escapeHTML(t("Los textos que crees con IA las incluirán; tradúcelos en Traducir para que cuenten. Te faltan {missing} para completar {level}.", step))}`];
+    case "easier": return [
+      escapeHTML(t("Tus textos te cuestan")),
+      escapeHTML(step.coverage !== null && step.coverage < config.minCoverage
+        ? t("Conoces el {coverage} % de las palabras de tus últimos textos. Lee textos de un nivel más bajo (Ajustes → Lectura) hasta pasar del {min} %.", { coverage: step.coverage, min: config.minCoverage })
+        : t("Consultas {lookups} palabras de cada 100 que lees. Lee textos de un nivel más bajo (Ajustes → Lectura) o más cortos.", step))];
+    case "read": return [
+      escapeHTML(t("Lee {n} textos esta semana", { n: step.count })),
+      escapeHTML(t("Leer es lo que más vocabulario y gramática te da en contexto, y cada texto cuenta para tu gramática."))];
+    case "habit": return [
+      escapeHTML(t("Estudia más días")),
+      escapeHTML(t("Has estudiado {days} de los últimos 30 días. Mejor un poco cada día: al menos {n} días al mes.", { days: step.activeDays, n: step.count }))];
+    default: return ["", ""];
+  }
+}
+
+/* La hoja de ruta: el objetivo, lo más flojo y los pasos de la semana */
+function roadmapHTML(roadmap, profile) {
+  const names = { vocab: t("el vocabulario"), kanji: t("los kanjis"), grammar: t("la gramática") };
+  const estimate = { vocab: profile.vocabLevel, kanji: profile.kanjiLevel, grammar: profile.grammarLevel }[roadmap.focus];
+  return `
+    <div class="panel roadmap-panel">
+      <h3>${t("Tu hoja de ruta")}</h3>
+      <p class="helper">${roadmap.level
+        ? escapeHTML(t("Objetivo: completar {level}. Lo que más te falta ahora es {focus} ({percent} % de {level}).",
+          { level: roadmap.level, focus: names[roadmap.focus], percent: estimate.percent }))
+        : escapeHTML(t("Has completado todos los niveles que mide el análisis. Sigue leyendo y repasando para no olvidarlo."))}</p>
+      ${roadmap.steps.length ? `<ol class="roadmap-steps">${roadmap.steps.map((step) => {
+        const [title, body] = roadmapStepHTML(step);
+        return `<li><strong>${title}</strong><span>${body}</span></li>`;
+      }).join("")}</ol>` : ""}
+    </div>`;
+}
 
 /* Las estructuras de gramática agrupadas por estado: qué maneja y qué le falta.
    El grupo dice el estado (no solo el color); al tocar una se ve su ejemplo. */
@@ -329,6 +426,8 @@ async function renderAnalysis() {
   }
   const week = weekKey();
   const current = await saveSnapshot(profile);
+  const roadmap = roadmapOf(profile);
+  await saveRoadmap(roadmap);
   const delta = progressDelta(current, previousSnapshot(meta.snapshots, week));
   if (document.body.dataset.view !== "analysis") return;
   const { reading, practice } = profile;
@@ -359,6 +458,8 @@ async function renderAnalysis() {
         : t("Desde la semana pasada: {words} palabras dominadas, {kanji} kanjis, {grammar} estructuras, {texts} textos leídos.",
           { words: signed(delta.words), kanji: signed(delta.kanji), grammar: signed(delta.grammar), texts: signed(delta.texts) }))
       : t("Esta es tu primera foto semanal: la semana que viene verás aquí lo que has avanzado.")}</p>
+
+    ${roadmapHTML(roadmap, profile)}
 
     <div class="panel chart-panel">
       <h3>${t("Vocabulario por nivel")}</h3>
