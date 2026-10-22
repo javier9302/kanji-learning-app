@@ -732,6 +732,12 @@ export default async function extra({ page, step, check }) {
         sync.user = { id: "smoke" };
         sync.config.plan = { plan: "premium", until: null };
         meta.snapshots = {};
+        // El resumen de la IA, imitado
+        window.realInvokeSummary = window.invokeSummary;
+        window.summaryCalls = [];
+        window.invokeSummary = async (body) => { summaryCalls.push(body); return { data: { summary: "Buena semana: sigue así." }, error: null }; };
+        meta.summary = {};
+        try { localStorage.removeItem("kanji-summary-failed"); } catch { /* sin almacenamiento */ }
         switchView("analysis");
       });
       await page.waitForSelector("#analysisArea .analysis-level", { timeout: 30000 });
@@ -786,6 +792,17 @@ export default async function extra({ page, step, check }) {
       });
       check(roadmap.panel && roadmap.steps > 0 && roadmap.level && roadmap.words > 0 && roadmap.planned && roadmap.first &&
         roadmap.prompt.length === roadmap.grammar.length && roadmap.rendered === roadmap.grammar.length > 0, JSON.stringify(roadmap));
+      // El resumen de la semana: se pide una vez con los números de la pantalla y después se reutiliza
+      await page.waitForFunction(() => $("analysisSummary")?.textContent.includes("Buena semana"), { timeout: 10000 });
+      const summary = await page.evaluate(async () => {
+        const first = summaryCalls[0];
+        switchView("analysis");
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+        return { calls: summaryCalls.length, week: first.week === weekKey(), lang: first.lang === lang,
+          facts: Object.keys(first.facts).sort().join(), text: $("analysisSummary").textContent.includes("Buena semana") };
+      });
+      check(summary.calls === 1 && summary.week && summary.lang && summary.text &&
+        summary.facts === "delta,grammarNext,levels,practice,reading,roadmap", JSON.stringify(summary));
       await shot(page, "analisis");
       // La foto se sube con lo que espera progress_snapshots
       const sent = await page.evaluate(async () => {
@@ -810,6 +827,7 @@ export default async function extra({ page, step, check }) {
     } finally {
       await page.evaluate(() => {
         if (window.realSchedule) window.scheduleSync = window.realSchedule;
+        if (window.realInvokeSummary) window.invokeSummary = window.realInvokeSummary;
         sync.user = null;
         sync.config.plan = null;
         switchView("study");

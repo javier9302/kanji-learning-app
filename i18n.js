@@ -143,6 +143,8 @@ const EN = {
   "TU PROGRESO POR NIVEL": "YOUR PROGRESS BY LEVEL",
   "{done} completo": "{done} complete",
   "Tu hoja de ruta": "Your roadmap",
+  "Tu semana": "Your week",
+  "Escribiendo el resumen de tu semana…": "Writing your weekly summary…",
   "Objetivo: completar {level}. Lo que más te falta ahora es {focus} ({percent} % de {level}).":
     "Goal: complete {level}. What you need most right now is {focus} ({percent} % of {level}).",
   "Has completado todos los niveles que mide el análisis. Sigue leyendo y repasando para no olvidarlo.":

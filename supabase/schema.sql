@@ -1112,3 +1112,50 @@ drop policy if exists "progress_snapshots_update_own" on public.progress_snapsho
 create policy "progress_snapshots_update_own" on public.progress_snapshots
   for update to authenticated
   using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);
+
+-- Resumen de la semana con IA (función summarize-progress, solo premium): uno por
+-- usuario, semana e idioma. La función lo escribe y, si ya está, lo devuelve sin
+-- llamar a la IA. Cada usuario lee los suyos y los administradores, todos.
+create table if not exists public.progress_summaries (
+  user_id uuid not null references auth.users (id) on delete cascade,
+  week text not null check (week ~ '^\d{4}-W\d{2}$'),
+  lang text not null check (lang in ('es', 'en')),
+  summary text not null check (char_length(summary) <= 1000),
+  model text,
+  prompt_version text,
+  created_at timestamptz not null default now(),
+  primary key (user_id, week, lang)
+);
+
+alter table public.progress_summaries enable row level security;
+revoke all on public.progress_summaries from anon, authenticated;
+grant select on public.progress_summaries to authenticated;
+drop policy if exists "progress_summaries_select_own" on public.progress_summaries;
+create policy "progress_summaries_select_own" on public.progress_summaries
+  for select to authenticated using ((select auth.uid()) = user_id or (select public.is_admin()));
+
+-- Registro de cada llamada de summarize-progress (límite diario y errores). Solo la
+-- función escribe; los administradores leen.
+create table if not exists public.summary_generations (
+  id bigint generated always as identity primary key,
+  user_id uuid not null references auth.users (id) on delete cascade,
+  created_at timestamptz not null default now(),
+  ok boolean not null default false,
+  result text,                                -- ok | empty | provider | quota
+  model text,
+  key_label text,
+  attempts text,
+  prompt_version text,
+  prompt_tokens integer,
+  output_tokens integer,
+  error text
+);
+
+create index if not exists summary_generations_user_created_idx on public.summary_generations (user_id, created_at);
+
+alter table public.summary_generations enable row level security;
+revoke all on public.summary_generations from anon, authenticated;
+grant select on public.summary_generations to authenticated;
+drop policy if exists "summary_generations_admin_select" on public.summary_generations;
+create policy "summary_generations_admin_select" on public.summary_generations
+  for select to authenticated using ((select public.is_admin()));

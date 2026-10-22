@@ -12,6 +12,8 @@
    meta.roadmap = { level, words, grammar, updatedAt }: la hoja de ruta que se
    calculó al abrir el análisis. Sus palabras salen antes en el repaso
    (scoreWord) y sus estructuras se piden en los textos de la IA (promptParams).
+   meta.summary = { key: "2026-W43:es", text }: el resumen de la semana que
+   escribió la IA (función summarize-progress, sección 6).
    ========================================= */
 
 const SNAPSHOT_WEEKS = 104; // fotos que se guardan (dos años)
@@ -175,8 +177,9 @@ const roadmapGrammar = () => (isPremium() ? meta.roadmap?.grammar || [] : [])
    ========================================= */
 
 /* Guarda la foto de esta semana (sustituye la de esta semana si ya había). Si
-   esta vez no se calculó la gramática, se conserva la que tuviera la semana. */
-async function saveSnapshot(profile) {
+   esta vez no se calculó la gramática o la hoja de ruta, se conserva la que
+   tuviera la semana. roadmap: { level, focus } para la vista del profesor. */
+async function saveSnapshot(profile, roadmap = null) {
   profile ??= await computeProfile();
   meta.snapshots ??= {};
   const before = meta.snapshots[weekKey()];
@@ -185,6 +188,8 @@ async function saveSnapshot(profile) {
     snapshot.grammar = before.grammar;
     snapshot.level.grammar = before.level?.grammar || "";
   }
+  if (roadmap) snapshot.roadmap = { level: roadmap.level, focus: roadmap.focus };
+  else if (before?.roadmap) snapshot.roadmap = before.roadmap;
   meta.snapshots[weekKey()] = snapshot;
   const weeks = Object.keys(meta.snapshots).sort();
   for (const old of weeks.slice(0, Math.max(0, weeks.length - SNAPSHOT_WEEKS))) delete meta.snapshots[old];
@@ -425,9 +430,9 @@ async function renderAnalysis() {
     return;
   }
   const week = weekKey();
-  const current = await saveSnapshot(profile);
   const roadmap = roadmapOf(profile);
   await saveRoadmap(roadmap);
+  const current = await saveSnapshot(profile, roadmap);
   const delta = progressDelta(current, previousSnapshot(meta.snapshots, week));
   if (document.body.dataset.view !== "analysis") return;
   const { reading, practice } = profile;
@@ -459,6 +464,7 @@ async function renderAnalysis() {
           { words: signed(delta.words), kanji: signed(delta.kanji), grammar: signed(delta.grammar), texts: signed(delta.texts) }))
       : t("Esta es tu primera foto semanal: la semana que viene verás aquí lo que has avanzado.")}</p>
 
+    <div id="analysisSummary" class="panel analysis-summary hidden" aria-live="polite"></div>
     ${roadmapHTML(roadmap, profile)}
 
     <div class="panel chart-panel">
@@ -492,4 +498,56 @@ async function renderAnalysis() {
       <h3>${t("Evolución")}</h3>
       ${historyHTML()}
     </div>`;
+  showSummary(profile, roadmap, delta);
+}
+
+/* =========================================
+   6. EL RESUMEN DE LA SEMANA (IA)
+   -----------------------------------------
+   La función summarize-progress (Gemini) lo escribe a partir de los números
+   de esta pantalla: no calcula nada. Uno por semana e idioma, guardado en el
+   servidor (progress_summaries) y aquí (meta.summary). Si la función no está
+   desplegada o falla, no se enseña nada y no se reintenta en 6 horas.
+   ========================================= */
+
+const SUMMARY_RETRY_MS = 6 * 3600000;
+
+/* La llamada a la función de Supabase, aparte para poder imitarla en las pruebas */
+function invokeSummary(body) {
+  return sb.functions.invoke("summarize-progress", { body });
+}
+
+/* Los números que se le pasan: los mismos que ve el estudiante */
+function summaryFacts(profile, roadmap, delta) {
+  return {
+    levels: { vocab: profile.vocabLevel, kanji: profile.kanjiLevel, grammar: profile.grammarLevel || null, texts: profile.readLevel || null },
+    delta, reading: profile.reading, practice: profile.practice,
+    roadmap: roadmap.steps.map(({ kind, level, count, missing }) => ({ kind, level, count, missing })),
+    grammarNext: roadmapGrammar()
+  };
+}
+
+async function showSummary(profile, roadmap, delta) {
+  const box = $("analysisSummary");
+  const key = `${weekKey()}:${lang}`;
+  const render = (text) => {
+    box.innerHTML = `<h3>${t("Tu semana")}</h3><p>${escapeHTML(text)}</p>`;
+    box.classList.remove("hidden");
+  };
+  if (meta.summary?.key === key) return render(meta.summary.text);
+  const failed = loadLocal("kanji-summary-failed", { key: "", at: 0 });
+  if (!sb || !isPremium() || failed.key === key && Date.now() - failed.at < SUMMARY_RETRY_MS) return;
+  box.innerHTML = `<p class="helper">${t("Escribiendo el resumen de tu semana…")}</p>`;
+  box.classList.remove("hidden");
+  try {
+    const { data, error } = await invokeSummary({ week: weekKey(), lang, facts: summaryFacts(profile, roadmap, delta) });
+    if (error || !data?.summary) throw error || new Error("sin resumen");
+    meta.summary = { key, text: data.summary };
+    await saveMeta();
+    if (document.contains(box)) render(data.summary);
+  } catch (error) {
+    saveLocal("kanji-summary-failed", { key, at: Date.now() });
+    console.warn("No se pudo escribir el resumen de la semana:", error?.message || error);
+    box.classList.add("hidden");
+  }
 }

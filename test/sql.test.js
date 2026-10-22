@@ -217,3 +217,17 @@ test("análisis: una foto por usuario y semana, con formato de semana y tamaño 
   assert.ok(Number(clock[0].stamp) < Date.now() + 301000);
   await db.exec(SCHEMA);
 });
+
+test("resumen semanal: uno por usuario, semana e idioma", async () => {
+  const db = await database();
+  const USER = "00000000-0000-0000-0000-000000000001";
+  const put = (week, lang, summary = "Buena semana.") => db.query(
+    "insert into public.progress_summaries (user_id, week, lang, summary) values ($1, $2, $3, $4)", [USER, week, lang, summary]);
+  await put("2026-W43", "es");
+  await put("2026-W43", "en");
+  await assert.rejects(put("2026-W43", "es"), /duplicate key/);
+  await assert.rejects(put("2026-W44", "fr"), /progress_summaries_lang_check/);
+  await assert.rejects(put("2026-W44", "es", "x".repeat(1001)), /progress_summaries_summary_check/);
+  await db.query("insert into public.summary_generations (user_id, ok, result) values ($1, true, 'ok')", [USER]);
+  await db.exec(SCHEMA);
+});

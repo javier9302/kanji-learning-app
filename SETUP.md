@@ -240,6 +240,18 @@ foto semanal se sincronice entre dispositivos, **vuelve a ejecutar `supabase/sch
 `progress_snapshots`; los administradores pueden leer las de todos). Sin la tabla, el análisis
 funciona igual con las fotos del dispositivo.
 
+**Resumen de la semana con IA y vista del profesor:**
+
+1. **Vuelve a ejecutar `supabase/schema.sql`**: crea `progress_summaries` (un resumen por usuario,
+   semana e idioma) y `summary_generations` (registro de llamadas).
+2. **Despliega la función.** En **Edge Functions → Deploy a new function → Via Editor**, ponle el
+   nombre exacto `summarize-progress`, pega
+   [`supabase/functions/summarize-progress/index.ts`](supabase/functions/summarize-progress/index.ts)
+   y despliega. **Deja activada la verificación de JWT.** Usa las mismas claves de Gemini que
+   `generate-text`. Opcional: `SUMMARY_DAILY_CALLS` (llamadas por usuario y día, 5 por defecto).
+3. En `admin.html`, pestaña **Progreso**, ves la última foto semanal de cada estudiante, su
+   evolución y su resumen. Sin la función, el análisis funciona igual, sin resumen.
+
 **Hoja de ruta:** el análisis propone al alumno premium metas de cada semana. Sus palabras salen
 antes en el repaso y sus estructuras de gramática se piden en los textos de la IA. Para eso último
 **vuelve a desplegar `generate-text`** (el prompt cambió a la versión `2026-10-22.1-seg`). Hasta

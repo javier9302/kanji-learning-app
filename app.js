@@ -11,7 +11,8 @@ let db;
 // writing: { skipped: ["N5"] } niveles de Escribir aprobados con la prueba
 // snapshots: { "2026-W43": foto } una foto del progreso por semana (progress.js)
 // roadmap: { level, words, grammar, updatedAt } la hoja de ruta de la semana (progress.js)
-let meta = { days: {}, deleted: {}, reading: {}, practice: {}, writing: {}, snapshots: {}, roadmap: {} };
+// summary: { key: "2026-W43:es", text } el resumen de la semana escrito por la IA (progress.js)
+let meta = { days: {}, deleted: {}, reading: {}, practice: {}, writing: {}, snapshots: {}, roadmap: {}, summary: {} };
 let emptyStudyHTML = ""; // mensaje inicial de la pantalla de estudio
 
 const $ = (id) => document.getElementById(id);
@@ -679,6 +680,9 @@ async function clearLocalData() {
   meta.reading = {};
   meta.practice = {};
   meta.writing = {};
+  meta.snapshots = {};
+  meta.roadmap = {};
+  meta.summary = {};
   reader = placement = evaluation = null;
   await saveMeta();
   await clearReadingData();

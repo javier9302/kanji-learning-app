@@ -6,6 +6,15 @@ Cómo funciona todo hoy: [docs/COMO-FUNCIONA.md](docs/COMO-FUNCIONA.md).
 
 ## 2026-10-22
 
+- **Análisis → Tu semana** (solo premium): un resumen breve escrito por la IA con tus números de la
+  semana: qué fue bien, qué toca ahora y una acción concreta. Uno por semana.
+- **admin.html → Progreso** (vista del profesor): la foto semanal de cada estudiante, su nivel
+  estimado, cómo cambió desde la semana anterior, el foco de su hoja de ruta, su evolución y su
+  resumen. Requiere volver a ejecutar `schema.sql` y desplegar `summarize-progress`.
+- Arreglo: al cambiar de cuenta en un dispositivo, las fotos semanales de la cuenta anterior ya no
+  pasan a la nueva.
+- Análisis, fase 3 (hoja de ruta) publicada (`54961f8`).
+
 - **Análisis → Tu hoja de ruta** (solo premium): las metas de la semana. Cuántas palabras, kanjis
   y estructuras te faltan para completar cada nivel, y cuáles van ahora. Si tus textos te cuestan
   o estudias pocos días, también te lo dice. Sus palabras salen antes en tu repaso y sus

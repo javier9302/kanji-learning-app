@@ -44,6 +44,7 @@ function show(view) {
   $("gradesPanel").classList.toggle("hidden", view !== "panel" || section !== "grades");
   $("usersPanel").classList.toggle("hidden", view !== "panel" || section !== "users");
   $("sentencesPanel").classList.toggle("hidden", view !== "panel" || section !== "sentences");
+  $("progressPanel").classList.toggle("hidden", view !== "panel" || section !== "progress");
 }
 
 /* Con sesión: comprueba el permiso y muestra el panel o el motivo */
@@ -404,6 +405,91 @@ async function savePlan(card) {
   loadUsers();
 }
 
+/* ---------- Progreso de los estudiantes (vista del profesor) ----------
+   Las fotos semanales de progress_snapshots (progress-core.js, snapshotOf) y los
+   resúmenes de progress_summaries; las reglas son las mismas que en la app. */
+
+const HISTORY_WEEKS = 12;
+const FOCUS_LABEL = { vocab: "vocabulario", kanji: "kanjis", grammar: "gramática" };
+
+/* De la foto compacta a las filas por nivel que entiende estimateLevel */
+function unpackSnapshot(packed, fields) {
+  return Object.fromEntries(Object.entries(packed || {}).map(([level, values]) => {
+    const row = Object.fromEntries(fields.map((field, i) => [field, values[i] || 0]));
+    row.total = values[fields.length] || 0;
+    return [level, row];
+  }));
+}
+
+/* "N5 · N4 al 34 %" a partir de una foto */
+function snapshotLevel(snapshot, dimension) {
+  const grammar = dimension === "grammar";
+  const rows = unpackSnapshot(snapshot?.[dimension], grammar ? ["mastered", "understood", "seen"] : ["mastered", "learning", "assumed"]);
+  if (!Object.keys(rows).length) return "—";
+  const share = grammar ? (row) => row.total ? (row.mastered + row.understood) / row.total : 0 : knownShare;
+  const estimate = estimateLevel(rows, STUDY_CONFIG.analysis.levelDone, share);
+  if (!estimate.current) return `${estimate.done} completo`;
+  return `${estimate.done ? `${estimate.done} · ` : ""}${estimate.current} al ${estimate.percent} %`;
+}
+
+const signedDelta = (value) => value === null || value === undefined ? "" : ` (${value > 0 ? "+" : ""}${value})`;
+
+async function loadProgress() {
+  $("progressList").innerHTML = `<p class="message">Cargando…</p>`;
+  const since = weekKey(new Date(Date.now() - HISTORY_WEEKS * 7 * 86400000));
+  const [users, snaps, summaries] = await Promise.all([
+    sb.rpc("admin_list_users"),
+    sb.from("progress_snapshots").select("user_id, week, data").gte("week", since).order("week", { ascending: false }).limit(5000),
+    sb.from("progress_summaries").select("user_id, week, lang, summary").gte("week", since).order("week", { ascending: false }).limit(2000)
+  ]);
+  const error = users.error || snaps.error;
+  if (error) {
+    $("progressList").innerHTML = "";
+    return say(`No se pudo cargar el progreso (${error.message}). ¿Ejecutaste supabase/schema.sql?`, true);
+  }
+  const byUser = new Map();
+  for (const row of snaps.data) (byUser.get(row.user_id) || byUser.set(row.user_id, {}).get(row.user_id))[row.week] = row.data;
+  const summaryOf = new Map();
+  for (const row of summaries.data || []) if (!summaryOf.has(row.user_id)) summaryOf.set(row.user_id, row);
+
+  const students = users.data.map((user) => ({ user, weeks: byUser.get(user.user_id) || {} }))
+    .sort((a, b) => (Object.keys(b.weeks)[0] || "").localeCompare(Object.keys(a.weeks)[0] || ""));
+  $("progressCount").textContent = `${byUser.size} con datos de ${users.data.length}`;
+  $("progressList").innerHTML = students.map(({ user, weeks }) => {
+    const keys = Object.keys(weeks).sort().reverse();
+    const snap = weeks[keys[0]];
+    const name = escapeHTML(user.email || user.user_id);
+    if (!snap) return `<article class="item-row"><div class="item-info"><div class="item-title">${name}</div>
+      <div class="item-sub">Sin fotos de progreso todavía (se guardan al sincronizar).</div></div></article>`;
+    const delta = progressDelta(snap, previousSnapshot(weeks, keys[0]));
+    const summary = summaryOf.get(user.user_id);
+    const history = keys.map((week) => {
+      const s = weeks[week];
+      return `<tr><td>${escapeHTML(weekStart(week))}</td><td>${snapshotTotal(s, "vocab")}</td><td>${snapshotTotal(s, "kanji")}</td>
+        <td>${snapshotGrammar(s) ?? "—"}</td><td>${s.reading?.texts ?? 0}</td><td>${s.practice?.activeDays ?? "—"}</td>
+        <td>${s.practice?.accuracy ?? "—"}</td></tr>`;
+    }).join("");
+    return `
+      <details class="item-row admin-progress">
+        <summary class="item-info">
+          <div class="item-title">${name} <span class="pill">${escapeHTML(user.plan === "premium" ? "Premium" : "Gratuito")}</span></div>
+          <div class="item-sub">Semana del ${escapeHTML(weekStart(keys[0]))} ·
+            Vocabulario ${escapeHTML(snapshotLevel(snap, "vocab"))}, ${snapshotTotal(snap, "vocab")} dominadas${signedDelta(delta?.words)} ·
+            Kanjis ${escapeHTML(snapshotLevel(snap, "kanji"))} ·
+            Gramática ${escapeHTML(snapshotLevel(snap, "grammar"))}${signedDelta(delta?.grammar)} ·
+            ${snap.reading?.texts ?? 0} textos${signedDelta(delta?.texts)} ·
+            ${snap.practice?.activeDays ?? 0}/30 días activos · aciertos ${snap.practice?.accuracy ?? "—"}${snap.practice?.accuracy == null ? "" : " %"}
+            ${snap.roadmap?.focus ? ` · foco: ${escapeHTML(FOCUS_LABEL[snap.roadmap.focus] || snap.roadmap.focus)} ${escapeHTML(snap.roadmap.level || "")}` : ""}</div>
+        </summary>
+        ${summary ? `<p class="admin-summary">«${escapeHTML(summary.summary)}» <span class="item-sub">(${escapeHTML(weekStart(summary.week))}, ${escapeHTML(summary.lang)})</span></p>` : ""}
+        <div class="table-scroll"><table class="debug-table analysis-table">
+          <thead><tr><th>Semana del</th><th>Palabras dominadas</th><th>Kanjis dominados</th><th>Gramática</th>
+            <th>Textos</th><th>Días activos</th><th>Aciertos %</th></tr></thead>
+          <tbody>${history}</tbody></table></div>
+      </details>`;
+  }).join("") || `<div class="no-items">No hay usuarios.</div>`;
+}
+
 /* ---------- Frases compartidas ---------- */
 
 const SENTENCE_SOURCE = { text: "De una historia", ai: "Escrita por la IA" };
@@ -512,6 +598,7 @@ function bind() {
     else if (section === "grades") loadGrades();
     else if (section === "users") loadUsers();
     else if (section === "sentences") loadSentences();
+    else if (section === "progress") loadProgress();
     else loadTexts();
   });
 

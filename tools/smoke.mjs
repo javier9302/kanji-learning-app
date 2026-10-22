@@ -97,10 +97,26 @@ await step("administración: la página carga con todas sus pestañas", async ()
   await page.goto(`${url}admin.html`, { waitUntil: "networkidle2" });
   const state = await page.evaluate(() => ({
     tabs: [...document.querySelectorAll("[data-admin]")].map((tab) => tab.dataset.admin),
-    panels: ["adminPanel", "wordsPanel", "logsPanel", "gradesPanel", "usersPanel", "sentencesPanel"].every((id) => !!document.getElementById(id)),
-    functions: [loadGrades, exportGrades, loadLogs, loadUsers, savePlan, loadSentences, deleteSentence].every((fn) => typeof fn === "function")
+    panels: ["adminPanel", "wordsPanel", "logsPanel", "gradesPanel", "usersPanel", "sentencesPanel", "progressPanel"].every((id) => !!document.getElementById(id)),
+    functions: [loadGrades, exportGrades, loadLogs, loadUsers, savePlan, loadSentences, deleteSentence, loadProgress].every((fn) => typeof fn === "function")
   }));
-  check(state.tabs.join() === "texts,words,logs,grades,users,sentences" && state.panels && state.functions, JSON.stringify(state));
+  check(state.tabs.join() === "texts,words,logs,grades,users,sentences,progress" && state.panels && state.functions, JSON.stringify(state));
+  // Vista del profesor, con datos imitados: nivel estimado, diferencia con la semana anterior, foco y resumen
+  const progress = await page.evaluate(async () => {
+    const user = "00000000-0000-0000-0000-000000000001";
+    const snap = (words, texts) => ({ vocab: { N5: [words, 0, 0, 500], N4: [0, 0, 0, 500] }, kanji: { N5: [10, 0, 0, 87] },
+      grammar: { N5: [3, 4, 2, 56] }, reading: { texts }, practice: { activeDays: 9, accuracy: 85 }, roadmap: { level: "N5", focus: "grammar" } });
+    const result = (data) => ({ gte: () => ({ order: () => ({ limit: async () => ({ data, error: null }) }) }) });
+    sb.rpc = async () => ({ data: [{ user_id: user, email: "alumno@ejemplo.com", plan: "premium" }, { user_id: "otro", email: "nuevo@ejemplo.com", plan: "free" }], error: null });
+    sb.from = (table) => ({ select: () => result(table === "progress_snapshots"
+      ? [{ user_id: user, week: "2026-W43", data: snap(410, 5) }, { user_id: user, week: "2026-W42", data: snap(400, 3) }]
+      : [{ user_id: user, week: "2026-W43", lang: "es", summary: "Buena semana." }]) });
+    await loadProgress();
+    return $("progressList").textContent.replace(/\s+/g, " ");
+  });
+  for (const expected of ["alumno@ejemplo.com", "Vocabulario N5 · N4 al 0 %", "Kanjis N5 al 11 %", "410 dominadas (+10)", "5 textos (+2)", "foco: gramática N5", "Buena semana", "Sin fotos de progreso"]) {
+    check(progress.includes(expected), `falta «${expected}» en ${progress.slice(0, 300)}`);
+  }
 });
 
 await browser.close();

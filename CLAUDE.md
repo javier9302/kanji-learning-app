@@ -41,7 +41,9 @@ después de `learning-core.js`)
   demostrado por nivel JLPT, nivel estimado y foto semanal (`meta.snapshots`, tabla
   `progress_snapshots`). Fases 1 a 3 hechas (la hoja de ruta, `buildRoadmap`, guarda `meta.roadmap`:
   sus palabras suben en el repaso con el peso `roadmap` y sus estructuras van al prompt de los
-  textos); falta la fase 4 (vista del profesor y resumen con IA).
+  textos). Fase 4: resumen semanal con IA (`summarize-progress`, solo con los números ya
+  calculados) y vista del profesor (`admin.html` → Progreso, que carga `study-config.js` y
+  `progress-core.js`). Propuesto en el chat del 2026-10-22 y sin hacer: pronóstico a 6 meses.
 - **`grammar-core.js`**: catálogo de gramática (`GRAMMAR`, hoy solo N5), detector sobre las piezas
   de kuromoji de la frase entera (`detectGrammar`) y medición (`grammarStates`). Una estructura
   nueva lleva su regla, su ejemplo y, si se parece a otra, un caso en «no confunde» de
@@ -50,7 +52,7 @@ después de `learning-core.js`)
   `readings.js` (lectura de cada kanji por palabra, generado desde JmdictFurigana con
   `tools/build-readings.mjs`; no se edita a mano).
 - **`supabase/`**: `schema.sql` (tablas y Row Level Security) y Edge Functions
-  (`generate-text`, `generate-sentences`, `grade-translation`, `notify-admin`). No hay CLI de
+  (`generate-text`, `generate-sentences`, `grade-translation`, `summarize-progress`, `notify-admin`). No hay CLI de
   Supabase: el usuario ejecuta `schema.sql` y despliega las funciones desde el panel (pasos en
   `SETUP.md`). `admin.html` / `admin.js`: moderación.
 - **Prompts con copia en una función**: la fuente de los textos es `reading.js` y la de las frases,

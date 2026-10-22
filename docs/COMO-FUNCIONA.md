@@ -15,7 +15,7 @@ mismo commit que cambie cualquiera de estas reglas. Los cambios, con fecha, est�
 | **Diccionario** | Búsqueda por kanji, kana, rōmaji o significado (español o inglés). |
 | **Mis palabras** | Agregar palabras a mano, progreso y estadísticas. **Análisis** (solo premium): lo demostrado por nivel JLPT, nivel estimado y evolución semanal. |
 | **Cuenta** (opcional) | Sincronización con Supabase, plan gratuito (10 textos de IA al día) o premium (30). |
-| **admin.html** | Aprobar textos de la comunidad, revisar palabras, traducciones y frases compartidas, cambiar planes. |
+| **admin.html** | Aprobar textos de la comunidad, revisar palabras, traducciones y frases compartidas, cambiar planes y ver el progreso de cada estudiante (pestaña Progreso). |
 
 ## Listas y archivos de datos
 
@@ -154,8 +154,8 @@ se escribe. Primero los kanjis de palabras que el usuario ya conoce.
 
 ### 9. Análisis del progreso (`progress.js` + `progress-core.js` + `grammar-core.js`, solo premium)
 
-Fases 1 a 3: vocabulario, kanjis, gramática, lectura y constancia, y la hoja de ruta (qué estudiar
-esta semana). La vista del profesor y un resumen con IA llegarán más adelante.
+Fases 1 a 4: vocabulario, kanjis, gramática, lectura y constancia; la hoja de ruta (qué estudiar
+esta semana); un resumen de la semana escrito por la IA, y la vista del profesor.
 
 - **Listas que se miden**: las palabras con kanji de cada nivel del banco (las que casi siempre van
   en kana no se estudian) y todos los kanjis de cada nivel.
@@ -201,6 +201,16 @@ esta semana). La vista del profesor y un resumen con IA llegarán más adelante.
   - Se guarda en `meta.roadmap` al abrir el análisis y tiene efecto: sus palabras de la semana
     suben en el orden del repaso (peso `roadmap`) y sus estructuras se piden en los textos de la IA.
     Solo para premium: sin premium no cambia nada.
+- **Resumen de la semana** (función `summarize-progress`, Gemini): 3 a 5 frases sobre lo que fue
+  bien, lo que toca ahora y una acción concreta, escritas **solo** con los números de la pantalla
+  (niveles, cambios, lectura, constancia y metas; nunca texto libre). Uno por semana e idioma,
+  guardado en `progress_summaries` y en `meta.summary`; volver a abrir el análisis no gasta otra
+  llamada. El servidor comprueba que el alumno es premium. Como mucho 5 llamadas por usuario y día
+  (`SUMMARY_DAILY_CALLS`); si falla, no se reintenta en 6 horas y no se enseña nada.
+- **Vista del profesor** (`admin.html` → Progreso): la última foto semanal de cada estudiante, con
+  su nivel estimado en vocabulario, kanjis y gramática (las mismas reglas de `progress-core.js`),
+  lo que cambió desde la semana anterior, textos, días activos, aciertos y el foco de su hoja de
+  ruta. Al desplegarlo: sus 12 últimas semanas y su último resumen.
 - **Quién lo ve**: con sesión y plan premium sin caducar (`isPremium`). Sin premium se ve un aviso.
 
 ## Dónde cambiar cada número

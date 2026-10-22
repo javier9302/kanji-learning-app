@@ -10,6 +10,8 @@
   <link rel="stylesheet" href="style.css">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js" defer></script>
   <script src="config.js" defer></script>
+  <script src="study-config.js" defer></script>
+  <script src="progress-core.js" defer></script>
   <script src="admin.js" defer></script>
 </head>
 <body>
@@ -54,6 +56,7 @@
       <button class="tab" data-admin="grades" type="button">Traducciones</button>
       <button class="tab" data-admin="users" type="button">Usuarios</button>
       <button class="tab" data-admin="sentences" type="button">Frases</button>
+      <button class="tab" data-admin="progress" type="button">Progreso</button>
     </nav>
 
     <!-- Palabras por revisar -->
@@ -142,6 +145,24 @@
         (premium, 30 por defecto) de la función generate-text. Sin fecha de fin, premium no caduca.
       </p>
       <div id="usersList" class="items-list"></div>
+    </section>
+
+    <!-- Progreso de los estudiantes -->
+    <section id="progressPanel" class="hidden">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">VISTA DEL PROFESOR</p>
+          <h2>Progreso</h2>
+        </div>
+        <span id="progressCount" class="pill"></span>
+      </div>
+      <p class="helper admin-help">
+        La última foto semanal de cada estudiante (la app la guarda al sincronizar y al abrir el
+        análisis), con su nivel estimado, lo que cambió desde la semana anterior y el foco de su hoja de
+        ruta. Toca un estudiante para ver sus últimas semanas y su resumen. Nivel: el último completo
+        (80 % sabido) y cuánto lleva del siguiente.
+      </p>
+      <div id="progressList" class="items-list"></div>
     </section>
 
     <!-- Frases compartidas -->
