@@ -234,6 +234,12 @@ El plan de cada usuario decide cuántos textos con IA puede generar al día (`DA
    dura hasta ese día; sin fecha, no caduca. El usuario ve su plan en **Ajustes → Mi perfil** y,
    al crear un texto, cuántos le quedan hoy.
 
+**Análisis del progreso (solo premium):** en **Mis palabras → Análisis** el alumno premium ve lo
+que ha demostrado de cada nivel JLPT, su nivel estimado y su evolución semana a semana. Para que la
+foto semanal se sincronice entre dispositivos, **vuelve a ejecutar `supabase/schema.sql`** (crea
+`progress_snapshots`; los administradores pueden leer las de todos). Sin la tabla, el análisis
+funciona igual con las fotos del dispositivo.
+
 Un usuario no puede cambiarse el plan a sí mismo: un trigger de la base de datos lo impide aunque
 lo intente sin pasar por la app, y la función lee el plan en el servidor. Todavía no hay pagos:
 cuando los haya, una Edge Function con la clave de servicio llamará a `admin_set_plan` desde el

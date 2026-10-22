@@ -4,6 +4,14 @@ Lo que cambia para quien usa la app, el más reciente primero. Cada cambio añad
 el mismo commit. El detalle técnico está en el mensaje de cada commit (`git show <commit>`).
 Cómo funciona todo hoy: [docs/COMO-FUNCIONA.md](docs/COMO-FUNCIONA.md).
 
+## 2026-10-22
+
+- **Mis palabras → Análisis** (solo premium): cuántas palabras y kanjis de cada nivel JLPT has
+  demostrado (dominadas, aprendiendo, dadas por sabidas), tu nivel estimado en vocabulario y
+  kanjis, tu lectura y constancia, y una foto semanal para ver cómo avanzas. Las fotos se guardan
+  para todos desde ya. Requiere volver a ejecutar `schema.sql` para sincronizarlas. Los colores de
+  los gráficos de estados se ajustaron para distinguirse mejor, también con daltonismo.
+
 ## 2026-10-21
 
 - **Frases comunes de N5** publicadas: 132 frases con traducción en `bank/sentences/n5.json`

@@ -32,8 +32,9 @@
   --heat-3: #5d6bc4;
   --heat-4: #3b4a9c;
   --state-new: #dcdbe3;
-  --state-learning: #959ee0;
+  --state-learning: #7d8be6;
   --state-mature: #3b4a9c;
+  --state-prek: #c07a1e;   /* por confirmar / dado por sabido */
 }
 
 @media (prefers-color-scheme: dark) {
@@ -67,8 +68,9 @@
     --heat-3: #6878d4;
     --heat-4: #b3bcf5;
     --state-new: #34364a;
-    --state-learning: #5a68c4;
-    --state-mature: #b3bcf5;
+    --state-learning: #4a58c2;
+    --state-mature: #7d8ae2;
+    --state-prek: #bd842f;
   }
 }
 
@@ -1889,7 +1891,7 @@ footer {
   color: var(--muted);
 }
 
-.sw-prek { background: var(--gold); }
+.sw-prek { background: var(--state-prek); }
 
 .state-counts {
   margin-top: 12px;
@@ -2701,4 +2703,35 @@ body[data-view="dict"] .intro {
 .ai-quota {
   font-weight: 600;
   color: var(--green);
+}
+
+/* =========================================
+   ANÁLISIS (Mis palabras → Análisis)
+   ========================================= */
+
+/* El nivel estimado es texto ("N5 completo · N4 al 34 %"): más pequeño que una cifra */
+.stat-card strong.analysis-level {
+  display: block;
+  font-size: 19px;
+  letter-spacing: -.3px;
+  line-height: 1.25;
+}
+
+.analysis-delta {
+  margin: -4px 0 16px;
+}
+
+.level-total.analysis-total {
+  width: 84px;
+}
+
+.analysis-table td,
+.analysis-table th {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.analysis-table td:first-child,
+.analysis-table th:first-child {
+  text-align: left;
 }

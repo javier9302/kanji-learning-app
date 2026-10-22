@@ -9,7 +9,7 @@
      versión nueva de la app no lo borra.
    ========================================= */
 
-const CACHE = "kanji-learning-v18";
+const CACHE = "kanji-learning-v19";
 /* Súbelo SOLO si cambian los archivos de vendor/: obliga a descargarlos otra vez */
 const LASTING = "kanji-lasting-v1";
 const SHELL = [
@@ -24,6 +24,7 @@ const SHELL = [
   "bank/aliases.js",
   "study-config.js",
   "learning-core.js",
+  "progress-core.js",
   "bank/n5.js",
   "ja-core.js",
   "sentences-core.js",
@@ -35,6 +36,7 @@ const SHELL = [
   "study.js",
   "sentences.js",
   "translate.js",
+  "progress.js",
   "dictionary.js",
   "app.js",
   "manifest.webmanifest",

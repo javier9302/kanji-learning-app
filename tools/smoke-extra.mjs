@@ -717,6 +717,70 @@ export default async function extra({ page, step, check }) {
     check(result.rows[2].includes("answer_key") && !result.rows[2].includes("email"), result.rows[2]);
   });
 
+  await step("análisis: sin premium, el aviso; con premium, cada nivel, la foto de la semana y su sincronización", async () => {
+    const locked = await page.evaluate(() => {
+      switchView("analysis");
+      return { lock: $("analysisArea").textContent.includes(t("El análisis de tu progreso es parte del plan premium")),
+        tiles: document.querySelectorAll("#analysisArea .stat-card").length };
+    });
+    check(locked.lock && !locked.tiles, JSON.stringify(locked));
+    try {
+      // Premium imitado: sin sincronizar de verdad
+      await page.evaluate(() => {
+        window.realSchedule = window.scheduleSync;
+        window.scheduleSync = () => {};
+        sync.user = { id: "smoke" };
+        sync.config.plan = { plan: "premium", until: null };
+        meta.snapshots = {};
+        switchView("analysis");
+      });
+      await page.waitForSelector("#analysisArea .analysis-level", { timeout: 30000 });
+      const state = await page.evaluate(() => {
+        const panels = [...document.querySelectorAll("#analysisArea .chart-panel")];
+        const words = [...BANK.words.values()].filter((w) => !w.kana && w.kanji.length);
+        const legendTotal = (panel) => [...panel.querySelectorAll(".state-counts span")]
+          .reduce((sum, span) => sum + Number(span.textContent.split(":").pop()), 0);
+        return {
+          levels: [...document.querySelectorAll("#analysisArea .analysis-level")].map((el) => el.textContent),
+          rows: panels[0].querySelectorAll(".level-row").length,
+          vocab: legendTotal(panels[0]) === words.length,
+          kanji: legendTotal(panels[1]) === BANK.kanji.size,
+          snapshot: Object.keys(meta.snapshots).join() === weekKey() && meta.snapshots[weekKey()].vocab.N5[3] > 0,
+          tiles: document.querySelectorAll("#analysisArea .stat-card").length
+        };
+      });
+      check(state.rows === 5 && state.vocab && state.kanji && state.snapshot && state.tiles === 9 &&
+        state.levels.every((text) => text && text !== "undefined"), JSON.stringify(state));
+      await shot(page, "analisis");
+      // La foto se sube con lo que espera progress_snapshots
+      const sent = await page.evaluate(async () => {
+        const real = window.pushRows, rows = [];
+        window.pushRows = async (table, conflict, list, marks, pushed) => {
+          rows.push([table, conflict, ...list.map((row) => Object.keys(row).sort().join())]);
+          for (const [key, print] of marks) pushed[key] = print;
+        };
+        try { await pushSnapshots("smoke"); await pushSnapshots("smoke"); } finally { window.pushRows = real; }
+        return rows;
+      });
+      check(sent.length === 2 && sent[0][0] === "progress_snapshots" && sent[0][2] === "client_updated_at,data,user_id,week" &&
+        sent[1].length === 2, JSON.stringify(sent)); // la segunda vez ya no hay nada que subir
+      // Premium caducado: vuelve el aviso
+      const expired = await page.evaluate(() => {
+        sync.config.plan = { plan: "premium", until: "2020-01-01T00:00:00Z" };
+        switchView("analysis");
+        return !document.querySelector("#analysisArea .stat-card");
+      });
+      check(expired, "con el premium caducado se ve el análisis");
+    } finally {
+      await page.evaluate(() => {
+        if (window.realSchedule) window.scheduleSync = window.realSchedule;
+        sync.user = null;
+        sync.config.plan = null;
+        switchView("study");
+      });
+    }
+  });
+
   await step("lectura: al recargar en mitad de un texto se vuelve a él, con lo consultado", async () => {
     const before = await page.evaluate(async () => {
       const text = texts.find((x) => !x.readAt && !x.hiddenAt && x.data.sentences.length) || texts[0];

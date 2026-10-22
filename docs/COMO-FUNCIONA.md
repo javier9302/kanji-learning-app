@@ -13,7 +13,7 @@ mismo commit que cambie cualquiera de estas reglas. Los cambios, con fecha, est�
 | **Traducir** | El usuario traduce frases de sus textos y lo corrige la IA (o él mismo con la traducción de referencia). Mide si entiende el significado; no mueve el calendario de repaso. |
 | **Escribir** | Trazos de kanjis (KanjiVG), nivel a nivel, con una prueba para saltarse un nivel. |
 | **Diccionario** | Búsqueda por kanji, kana, rōmaji o significado (español o inglés). |
-| **Mis palabras** | Agregar palabras a mano, progreso y estadísticas. |
+| **Mis palabras** | Agregar palabras a mano, progreso y estadísticas. **Análisis** (solo premium): lo demostrado por nivel JLPT, nivel estimado y evolución semanal. |
 | **Cuenta** (opcional) | Sincronización con Supabase, plan gratuito (10 textos de IA al día) o premium (30). |
 | **admin.html** | Aprobar textos de la comunidad, revisar palabras, traducciones y frases compartidas, cambiar planes. |
 
@@ -149,12 +149,39 @@ Nivel a nivel: no sale ningún kanji de N4 hasta escribir todos los de N5 o apro
 (8 kanjis, 7 bien escritos sin ayuda). Cada 5 kanjis sale uno ya escrito, el que hace más que no
 se escribe. Primero los kanjis de palabras que el usuario ya conoce.
 
+### 9. Análisis del progreso (`progress.js` + `progress-core.js`, solo premium)
+
+Fase 1 de la hoja de ruta: vocabulario, kanjis, lectura y constancia. La gramática llegará después.
+
+- **Listas que se miden**: las palabras con kanji de cada nivel del banco (las que casi siempre van
+  en kana no se estudian) y todos los kanjis de cada nivel.
+- **Estado de cada palabra** (`wordState`): *dominada* (estado `mastered`), *aprendiendo* (en el
+  repaso o en estado `learning`), *dada por sabida* (su nivel se aprobó en la evaluación inicial,
+  o salió en una lectura sin consultarla: «por confirmar») y *sin estudiar*. Si el alumno marcó
+  una palabra como desconocida, cuenta como sin estudiar aunque su nivel se diera por sabido.
+- **Estado de cada kanji** (`kanjiState`): *dominado* si sabe su significado o escribirlo,
+  *aprendiendo* si está en el repaso, *dado por sabido* si aparece en palabras dominadas o dadas
+  por sabidas. Esto último es generoso: quien aprobó N5 en la evaluación ya tiene buena parte de
+  los kanjis de N4 dados por sabidos.
+- **Nivel estimado** (`estimateLevel`): el último nivel del que sabe (dominado + dado por sabido)
+  al menos el 80 %, siempre que también sepa los anteriores, y cuánto lleva del siguiente.
+  Se calcula aparte para vocabulario y kanjis; la lectura muestra el nivel de sus textos.
+- **Lectura**: textos leídos (en total y en 30 días), qué % conoce hoy de sus 5 últimos textos y
+  cuántas palabras consulta por cada 100 que lee. **Constancia**: días activos y aciertos en los
+  repasos de los últimos 30 días.
+- **Foto semanal** (`meta.snapshots`, tabla `progress_snapshots`): se guarda para todos los
+  usuarios, premium o no, en cada sincronización y al abrir el análisis; la última de cada semana
+  gana. Con ella se ven las diferencias con la semana anterior y la tabla de evolución (8 semanas).
+- **Quién lo ve**: con sesión y plan premium sin caducar (`isPremium`). Sin premium se ve un aviso.
+
 ## Dónde cambiar cada número
 
 Casi todo lo ajustable está en `study-config.js`: palabras nuevas por sesión, pesos del orden,
 días de dominio, reglas de Escribir y de Traducir. Lo que no:
 
 - 90 % de cobertura de los textos: `COVERAGE_TARGET` en `reading.js`.
+- Análisis: umbral para dar un nivel por completo (80 %) y textos recientes que se miran (5):
+  `STUDY_CONFIG.analysis` en `study-config.js`.
 - Tamaño y aprobado de la evaluación inicial: `PLACEMENT_SIZE` y `PLACEMENT_PASS` en `reading.js`.
 - Textos de IA al día: variables `DAILY_TEXTS` y `PREMIUM_DAILY_TEXTS` de la función `generate-text` en Supabase.
 - Frases de IA al día: `SENTENCE_DAILY_WORDS` y `SENTENCE_DAILY_CALLS` de la función `generate-sentences`.

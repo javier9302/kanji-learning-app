@@ -56,6 +56,11 @@ const STUDY_CONFIG = {
   /* Palabras solo en kana que se le piden a la IA como vocabulario preferente */
   kanaWordsInPrompt: 40,
 
+  /* Mis palabras → Análisis (premium; reglas en progress-core.js).
+       levelDone    proporción de una lista JLPT que hay que saber (dominada o
+                    dada por sabida) para que su nivel cuente como completo
+       recentTexts  cuántos textos recientes se miran para la lectura */
+  analysis: { levelDone: 0.8, recentTexts: 5 },
   /* Sección "Traducir": el estudiante escribe la traducción de una frase y una
      IA la corrige. Demuestra que entiende el SIGNIFICADO; no mueve el calendario
      de repaso de la lectura. */

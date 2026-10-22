@@ -20,7 +20,7 @@ Scripts clásicos (no módulos) que comparten variables globales. El orden de ca
 `config.js` → `i18n.js` → `vendor/ts-fsrs` → `bank/*.js` → `study-config.js` → `learning-core.js`
 → `ja-core.js` → `sentences-core.js` → `translate-core.js` → `texts.js` → `reading.js`
 → `reading-stats.js` → `reading-sync.js` → `study.js` → `sentences.js` → `translate.js`
-→ `dictionary.js` → `app.js`
+→ `progress.js` → `dictionary.js` → `app.js` (`progress-core.js` va justo después de `learning-core.js`)
 
 - **`*-core.js`**: reglas puras, sin DOM ni datos del usuario. Las usan el navegador y Node
   (`tools/`, `test/`) mediante `if (typeof module !== "undefined") module.exports = …`. La lógica
@@ -36,6 +36,10 @@ Scripts clásicos (no módulos) que comparten variables globales. El orden de ca
 - **`texts.js`, `reading*.js`**: textos (IA, comunidad o pegados), lector, nivel de lectura y su sincronización.
 - **`translate*.js`**: sección Traducir, corregida con IA (Edge Function `grade-translation`).
 - **`dictionary.js`**: búsqueda por escritura, kana, rōmaji o significado.
+- **`progress.js` / `progress-core.js`**: Mis palabras → Análisis (solo premium, `isPremium`): lo
+  demostrado por nivel JLPT, nivel estimado y foto semanal (`meta.snapshots`, tabla
+  `progress_snapshots`). Es la fase 1 de la hoja de ruta; después vienen gramática (catálogo y
+  detector sobre `morph` de kuromoji), hoja de ruta y vista del profesor.
 - **`bank/`**: banco de palabras y kanjis por nivel JLPT (N5–N1), frecuencias y
   `readings.js` (lectura de cada kanji por palabra, generado desde JmdictFurigana con
   `tools/build-readings.mjs`; no se edita a mano).

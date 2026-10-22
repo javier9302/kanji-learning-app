@@ -197,3 +197,23 @@ test("frases compartidas: tamaño máximo, filas nuevas al día y registro de la
   await db.query("insert into public.sentence_generations (user_id, words, ok, result) values ($1, 3, true, 'ok')", [USER]);
   await db.exec(SCHEMA);
 });
+
+test("análisis: una foto por usuario y semana, con formato de semana y tamaño máximo", async () => {
+  const db = await database();
+  const USER = "00000000-0000-0000-0000-000000000001";
+  await db.exec(`insert into auth.users (id) values ('${USER}') on conflict do nothing`);
+  const put = (week, data = "{}", stamp = 1) => db.query(
+    `insert into public.progress_snapshots (user_id, week, data, client_updated_at) values ($1, $2, $3::jsonb, $4)
+     on conflict (user_id, week) do update set data = excluded.data, client_updated_at = excluded.client_updated_at`, [USER, week, data, stamp]);
+  await put("2026-W43", '{"vocab":{}}');
+  await put("2026-W43", '{"vocab":{"N5":[1,0,0,10]}}', 2);
+  const { rows } = await db.query("select count(*)::int as n, max(data::text) as data from public.progress_snapshots");
+  assert.deepEqual(rows[0], { n: 1, data: '{"vocab": {"N5": [1, 0, 0, 10]}}' });
+  await assert.rejects(put("semana 43"), /progress_snapshots_week_check/);
+  await assert.rejects(put("2026-W44", JSON.stringify({ x: "a".repeat(20001) })), /progress_snapshots_size_check/);
+  // Un reloj adelantado se limita, como en las demás tablas
+  await put("2026-W45", "{}", Date.now() + 365 * 86400000);
+  const { rows: clock } = await db.query("select client_updated_at::text as stamp from public.progress_snapshots where week = '2026-W45'");
+  assert.ok(Number(clock[0].stamp) < Date.now() + 301000);
+  await db.exec(SCHEMA);
+});

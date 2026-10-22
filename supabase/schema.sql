@@ -1064,3 +1064,51 @@ grant select on public.sentence_generations to authenticated;
 drop policy if exists "sentence_generations_admin_select" on public.sentence_generations;
 create policy "sentence_generations_admin_select" on public.sentence_generations
   for select to authenticated using ((select public.is_admin()));
+
+-- =========================================
+-- ANÁLISIS DEL PROGRESO
+-- =========================================
+
+-- Una foto del progreso por usuario y semana ISO ("2026-W43"): cuántas palabras y
+-- kanjis de cada nivel JLPT ha demostrado, su nivel estimado, lectura y constancia
+-- (progress-core.js, snapshotOf). La app la rehace en cada sincronización de esa
+-- semana; gana la de client_updated_at más reciente. Cada usuario ve las suyas y
+-- los administradores, todas (para la vista del profesor, más adelante).
+create table if not exists public.progress_snapshots (
+  user_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  week text not null check (week ~ '^\d{4}-W\d{2}$'),
+  data jsonb not null,
+  client_updated_at bigint not null default 0,
+  updated_at timestamptz not null default now(),
+  primary key (user_id, week),
+  constraint progress_snapshots_size_check check (octet_length(data::text) <= 20000)
+);
+
+create index if not exists progress_snapshots_user_updated_idx on public.progress_snapshots (user_id, updated_at);
+
+drop trigger if exists progress_snapshots_set_updated_at on public.progress_snapshots;
+create trigger progress_snapshots_set_updated_at
+  before insert or update on public.progress_snapshots
+  for each row execute function public.set_updated_at();
+
+drop trigger if exists progress_snapshots_clamp_clock on public.progress_snapshots;
+create trigger progress_snapshots_clamp_clock
+  before insert or update on public.progress_snapshots
+  for each row execute function public.clamp_client_clock();
+
+alter table public.progress_snapshots enable row level security;
+revoke all on public.progress_snapshots from anon;
+grant select, insert, update on public.progress_snapshots to authenticated;
+
+drop policy if exists "progress_snapshots_select_own" on public.progress_snapshots;
+create policy "progress_snapshots_select_own" on public.progress_snapshots
+  for select to authenticated using ((select auth.uid()) = user_id or (select public.is_admin()));
+
+drop policy if exists "progress_snapshots_insert_own" on public.progress_snapshots;
+create policy "progress_snapshots_insert_own" on public.progress_snapshots
+  for insert to authenticated with check ((select auth.uid()) = user_id);
+
+drop policy if exists "progress_snapshots_update_own" on public.progress_snapshots;
+create policy "progress_snapshots_update_own" on public.progress_snapshots
+  for update to authenticated
+  using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);

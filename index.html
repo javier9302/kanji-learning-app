@@ -23,6 +23,7 @@
   <script src="bank/aliases.js" defer></script>
   <script src="study-config.js" defer></script>
   <script src="learning-core.js" defer></script>
+  <script src="progress-core.js" defer></script>
   <script src="ja-core.js" defer></script>
   <script src="sentences-core.js" defer></script>
   <script src="translate-core.js" defer></script>
@@ -33,6 +34,7 @@
   <script src="study.js" defer></script>
   <script src="sentences.js" defer></script>
   <script src="translate.js" defer></script>
+  <script src="progress.js" defer></script>
   <script src="dictionary.js" defer></script>
   <script src="app.js" defer></script>
 </head>
@@ -103,6 +105,7 @@
 
     <nav class="subtabs hidden" data-group="words" aria-label="Mis palabras">
       <button class="subtab" data-view="progress" type="button">Estadísticas</button>
+      <button class="subtab" data-view="analysis" type="button">Análisis</button>
       <button class="subtab" data-view="add" type="button">Agregar palabra</button>
     </nav>
 
@@ -434,6 +437,17 @@
         <h3>Los que más se te resisten</h3>
         <div id="hardList" class="hard-list"></div>
       </div>
+    </section>
+
+    <!-- ANÁLISIS (premium) -->
+    <section id="view-analysis" class="view hidden">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">TU PROGRESO POR NIVEL</p>
+          <h2>Análisis</h2>
+        </div>
+      </div>
+      <div id="analysisArea"></div>
     </section>
 
     <!-- DATOS -->

@@ -9,7 +9,8 @@ const LEVELS = ["N5", "N4", "N3", "N2", "N1"];
 let db;
 // Historial diario, borrados, perfil de lectura y lecturas de kanji practicadas en frases
 // writing: { skipped: ["N5"] } niveles de Escribir aprobados con la prueba
-let meta = { days: {}, deleted: {}, reading: {}, practice: {}, writing: {} };
+// snapshots: { "2026-W43": foto } una foto del progreso por semana (progress.js)
+let meta = { days: {}, deleted: {}, reading: {}, practice: {}, writing: {}, snapshots: {} };
 let emptyStudyHTML = ""; // mensaje inicial de la pantalla de estudio
 
 const $ = (id) => document.getElementById(id);
@@ -160,7 +161,7 @@ function formatDate(iso) {
 const NAV = {
   study: ["read", "study", "translate", "draw"],
   library: ["library"],
-  words: ["progress", "add"],
+  words: ["progress", "analysis", "add"],
   settings: ["data"],
   dict: ["dict"] // sin pestaña: se abre desde el buscador de la cabecera
 };
@@ -187,6 +188,7 @@ function switchView(name) {
   if (name === "translate") renderTranslate();
   if (name === "draw") renderDraw();
   if (name === "progress") renderStats();
+  if (name === "analysis") renderAnalysis();
   if (name === "add") renderAddWord();
   if (name === "data") renderDataView();
   if (name === "dict") renderDictionary();
@@ -457,7 +459,7 @@ const SYNC_BATCH = 500;  // filas por subida
 const SYNC_DEFAULT = { userId: "", cursor: "", daysCursor: "", cursors: {}, lastSync: 0 };
 // Huellas de lo que ya está en el servidor (las de lectura las usa reading.js)
 const blankPushed = () =>
-  ({ days: {}, texts: {}, states: {}, words: {}, kanji: {}, sessions: {}, sentences: {}, translations: {}, profile: "" });
+  ({ days: {}, texts: {}, states: {}, words: {}, kanji: {}, sessions: {}, sentences: {}, translations: {}, snapshots: {}, profile: "" });
 
 const accountsReady = typeof SUPABASE_CONFIG === "object" &&
   /^https:\/\/.+/.test(SUPABASE_CONFIG.url) &&
@@ -624,6 +626,8 @@ async function syncNow() {
       if (sync.user?.id === userId) await pushSentences(userId);
       if (sync.user?.id === userId) await pullTranslations(userId);
       if (sync.user?.id === userId) await pushTranslations(userId);
+      // La foto semanal del progreso, al final: usa todo lo anterior
+      if (sync.user?.id === userId) await syncSnapshots(userId);
     }
 
     sync.config.lastSync = Date.now();
