@@ -717,7 +717,7 @@ export default async function extra({ page, step, check }) {
     check(result.rows[2].includes("answer_key") && !result.rows[2].includes("email"), result.rows[2]);
   });
 
-  await step("análisis: sin premium, el aviso; con premium, cada nivel, la foto de la semana y su sincronización", async () => {
+  await step("análisis: sin premium, el aviso; con premium, cada nivel, la gramática, la foto de la semana y su sincronización", async () => {
     const locked = await page.evaluate(() => {
       switchView("analysis");
       return { lock: $("analysisArea").textContent.includes(t("El análisis de tu progreso es parte del plan premium")),
@@ -746,11 +746,30 @@ export default async function extra({ page, step, check }) {
           vocab: legendTotal(panels[0]) === words.length,
           kanji: legendTotal(panels[1]) === BANK.kanji.size,
           snapshot: Object.keys(meta.snapshots).join() === weekKey() && meta.snapshots[weekKey()].vocab.N5[3] > 0,
-          tiles: document.querySelectorAll("#analysisArea .stat-card").length
+          tiles: document.querySelectorAll("#analysisArea .stat-card").length,
+          // Gramática: lo traducido bien en Traducir (私は毎朝コーヒーを飲みます) cuenta como entendido
+          grammar: meta.snapshots[weekKey()].grammar?.N5?.[3] === GRAMMAR.length,
+          groups: document.querySelectorAll("#analysisArea .grammar-group").length,
+          listed: document.querySelectorAll("#analysisArea .grammar-list li").length === GRAMMAR.length
         };
       });
-      check(state.rows === 5 && state.vocab && state.kanji && state.snapshot && state.tiles === 9 &&
+      check(state.rows === 5 && state.vocab && state.kanji && state.snapshot && state.tiles === 10 &&
+        state.grammar && state.groups >= 2 && state.listed &&
         state.levels.every((text) => text && text !== "undefined"), JSON.stringify(state));
+      // La frase traducida (私は毎朝コーヒーを飲みます) acabó con «No lo sé»: sus estructuras quedan vistas.
+      // Con una traducción buena después, pasan a entendidas.
+      const grammar = await page.evaluate(async () => {
+        const ids = ["wo", "masu", "wa"];
+        const record = translationLog[translationLog.length - 1];
+        const before = (await computeProfile({ grammar: true })).grammarStates;
+        translationLog.push({ ...record, verdict: "correct", at: Date.now() });
+        try {
+          const after = (await computeProfile({ grammar: true })).grammarStates;
+          return { last: record.verdict, before: ids.map((id) => before.get(id)), after: ids.map((id) => after.get(id)) };
+        } finally { translationLog.pop(); }
+      });
+      check(grammar.last === "incorrect" && grammar.before.every((state) => state === "seen") &&
+        grammar.after.every((state) => state === "understood"), JSON.stringify(grammar));
       await shot(page, "analisis");
       // La foto se sube con lo que espera progress_snapshots
       const sent = await page.evaluate(async () => {

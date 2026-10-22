@@ -140,7 +140,16 @@ const EN = {
   "Sin frase disponible": "No sentence available",
   "Análisis": "Analysis",
   "TU PROGRESO POR NIVEL": "YOUR PROGRESS BY LEVEL",
-  "Todos los niveles": "All levels",
+  "{done} completo": "{done} complete",
+  "Entendidas": "Understood",
+  "Vistas": "Seen",
+  "Sin ver": "Not seen",
+  "Gramática por nivel": "Grammar by level",
+  "Estructuras de {levels} en lo que has leído, repasado y traducido. Vista: apareció en tus frases. Entendida: tradujiste bien una frase con ella, o leíste {clean} sin consultar ninguna palabra. Dominada: la tradujiste bien en {days} días distintos.":
+    "{levels} grammar points in what you have read, reviewed and translated. Seen: it appeared in your sentences. Understood: you translated a sentence with it correctly, or read {clean} without looking up any word. Mastered: you translated it correctly on {days} different days.",
+  "Estructuras que manejas": "Grammar points you handle",
+  "Desde la semana pasada: {words} palabras dominadas, {kanji} kanjis, {grammar} estructuras, {texts} textos leídos.":
+    "Since last week: {words} words mastered, {kanji} kanji, {grammar} grammar points, {texts} texts read.",
   "{done} completo · {current} al {percent} %": "{done} complete · {current} at {percent} %",
   "{current} al {percent} %": "{current} at {percent} %",
   "Cada semana se guarda una foto de tu progreso. Vuelve la semana que viene para ver cómo avanzas.":

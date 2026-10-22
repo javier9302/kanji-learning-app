@@ -20,7 +20,8 @@ Scripts clásicos (no módulos) que comparten variables globales. El orden de ca
 `config.js` → `i18n.js` → `vendor/ts-fsrs` → `bank/*.js` → `study-config.js` → `learning-core.js`
 → `ja-core.js` → `sentences-core.js` → `translate-core.js` → `texts.js` → `reading.js`
 → `reading-stats.js` → `reading-sync.js` → `study.js` → `sentences.js` → `translate.js`
-→ `progress.js` → `dictionary.js` → `app.js` (`progress-core.js` va justo después de `learning-core.js`)
+→ `progress.js` → `dictionary.js` → `app.js` (`progress-core.js` y `grammar-core.js` van justo
+después de `learning-core.js`)
 
 - **`*-core.js`**: reglas puras, sin DOM ni datos del usuario. Las usan el navegador y Node
   (`tools/`, `test/`) mediante `if (typeof module !== "undefined") module.exports = …`. La lógica
@@ -38,8 +39,12 @@ Scripts clásicos (no módulos) que comparten variables globales. El orden de ca
 - **`dictionary.js`**: búsqueda por escritura, kana, rōmaji o significado.
 - **`progress.js` / `progress-core.js`**: Mis palabras → Análisis (solo premium, `isPremium`): lo
   demostrado por nivel JLPT, nivel estimado y foto semanal (`meta.snapshots`, tabla
-  `progress_snapshots`). Es la fase 1 de la hoja de ruta; después vienen gramática (catálogo y
-  detector sobre `morph` de kuromoji), hoja de ruta y vista del profesor.
+  `progress_snapshots`). Fases 1 y 2 hechas; faltan la hoja de ruta (fase 3) y la vista del
+  profesor (fase 4).
+- **`grammar-core.js`**: catálogo de gramática (`GRAMMAR`, hoy solo N5), detector sobre las piezas
+  de kuromoji de la frase entera (`detectGrammar`) y medición (`grammarStates`). Una estructura
+  nueva lleva su regla, su ejemplo y, si se parece a otra, un caso en «no confunde» de
+  `test/grammar.test.js`. Los ids se guardan en las fotos: no se cambian.
 - **`bank/`**: banco de palabras y kanjis por nivel JLPT (N5–N1), frecuencias y
   `readings.js` (lectura de cada kanji por palabra, generado desde JmdictFurigana con
   `tools/build-readings.mjs`; no se edita a mano).

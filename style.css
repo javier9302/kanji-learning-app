@@ -2735,3 +2735,58 @@ body[data-view="dict"] .intro {
 .analysis-table th:first-child {
   text-align: left;
 }
+
+/* Cuatro niveles estimados: vocabulario, kanjis, gramática y textos */
+.stats-grid.analysis-tiles {
+  grid-template-columns: repeat(4, 1fr);
+}
+
+@media (max-width: 760px) {
+  .stats-grid.analysis-tiles {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.grammar-group {
+  margin-top: 14px;
+}
+
+.grammar-group summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--label);
+}
+
+.grammar-list {
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 6px 14px;
+  padding: 0;
+  margin: 10px 0 0;
+}
+
+.grammar-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+  font-size: 13px;
+}
+
+.grammar-list strong {
+  font-family: 'Noto Sans JP', sans-serif;
+}
+
+.grammar-list span {
+  color: var(--muted);
+}
+
+.grammar-list .grammar-example {
+  flex-basis: 100%;
+  font-size: 12px;
+}

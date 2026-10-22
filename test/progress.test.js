@@ -83,8 +83,28 @@ test("snapshotOf y progressDelta: foto compacta y lo que cambió desde la anteri
   assert.deepEqual(snap.vocab.N5, [5, 0, 3, 10]);
   assert.deepEqual(snap.level, { vocab: "N5", kanji: "" });
   const older = { ...snap, vocab: { N5: [2, 0, 3, 10] }, kanji: { N5: [2, 0, 0, 10] }, reading: { texts: 1 } };
-  assert.deepEqual(P.progressDelta(snap, older), { words: 3, kanji: 0, texts: 3 });
+  assert.deepEqual(P.progressDelta(snap, older), { words: 3, kanji: 0, texts: 3, grammar: null });
   assert.equal(P.progressDelta(snap, null), null);
   assert.equal(P.previousSnapshot({ "2026-W40": older, "2026-W42": snap, "2026-W43": snap }, "2026-W43"), snap);
   assert.equal(P.previousSnapshot({ "2026-W43": snap }, "2026-W43"), null);
+});
+
+test("estimateLevel con otra forma de contar y sin los niveles vacíos (gramática)", () => {
+  const grammar = { N5: { mastered: 30, understood: 15, seen: 5, unseen: 5, total: 55 } };
+  const share = (row) => (row.mastered + row.understood) / row.total;
+  assert.deepEqual(P.estimateLevel(grammar, 0.8, share), { done: "N5", current: null, percent: 100 });
+  assert.deepEqual(P.estimateLevel({ N5: { ...grammar.N5, mastered: 10 } }, 0.8, share), { done: null, current: "N5", percent: 45 });
+});
+
+test("la foto lleva la gramática si se calculó, y su diferencia con la anterior", () => {
+  const base = {
+    vocab: breakdown([[5, 3, 10]]), kanji: breakdown([[2, 0, 10]]), vocabLevel: { done: "N5" }, kanjiLevel: { done: null },
+    reading: { texts: 1 }, practice: {}
+  };
+  assert.equal(P.snapshotOf(base).grammar, undefined);
+  const snap = P.snapshotOf({ ...base, grammar: { N5: { mastered: 3, understood: 4, seen: 2, unseen: 46, total: 55 } }, grammarLevel: { done: null } });
+  assert.deepEqual(snap.grammar, { N5: [3, 4, 2, 55] });
+  assert.equal(snap.level.grammar, "");
+  assert.equal(P.snapshotGrammar(snap), 7);
+  assert.equal(P.progressDelta(snap, { ...snap, grammar: { N5: [1, 1, 0, 55] } }).grammar, 5);
 });

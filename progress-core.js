@@ -5,8 +5,9 @@
    alrededor, para poder probarlo con Node. Se carga después de
    learning-core.js; lo usa progress.js.
 
-   Fase 1 (esto): vocabulario, kanjis, lectura y constancia. La gramática y la
-   hoja de ruta llegarán después, sobre esta misma forma.
+   Fase 1: vocabulario, kanjis, lectura y constancia. Fase 2: gramática (el
+   catálogo y su medición están en grammar-core.js). La hoja de ruta llegará
+   después, sobre esta misma forma.
 
    Cada palabra o kanji de las listas JLPT está en uno de cuatro estados:
      mastered  dominado: lo ha demostrado (repaso, evaluación, Traducir…)
@@ -69,13 +70,15 @@ const knownShare = (row) => row.total ? (row.mastered + row.assumed) / row.total
 
 /* Nivel estimado de una dimensión: el último nivel completo (se sabe al menos
    `threshold` de él y de todos los anteriores) y el siguiente, en curso.
+   share: qué parte de un nivel se sabe (la gramática cuenta distinto). Los
+   niveles vacíos no cuentan (la gramática aún no tiene todos).
    Devuelve { done: "N5" | null, current: "N4" | null, percent } (percent: lo
    que se sabe del nivel en curso, 0-100). */
-function estimateLevel(breakdown, threshold = 0.8) {
+function estimateLevel(breakdown, threshold = 0.8, share = knownShare) {
   let done = null;
-  for (const level of PC_LEVELS) {
-    if (knownShare(breakdown[level]) < threshold) {
-      return { done, current: level, percent: Math.round(knownShare(breakdown[level]) * 100) };
+  for (const level of PC_LEVELS.filter((name) => breakdown[name]?.total)) {
+    if (share(breakdown[level]) < threshold) {
+      return { done, current: level, percent: Math.round(share(breakdown[level]) * 100) };
     }
     done = level;
   }
@@ -156,31 +159,42 @@ function weekStart(key) {
   return monday.toISOString().slice(0, 10);
 }
 
-/* El perfil en forma compacta: por nivel [dominados, aprendiendo, supuestos, total] */
+/* El perfil en forma compacta: por nivel [dominados, aprendiendo, supuestos, total];
+   en gramática, [dominadas, entendidas, vistas, total] y solo si se calculó */
 function snapshotOf(profile, now = Date.now()) {
-  const pack = (breakdown) => Object.fromEntries(PC_LEVELS.map((level) => {
-    const row = breakdown[level];
-    return [level, [row.mastered, row.learning, row.assumed, row.total]];
-  }));
-  return {
+  const pack = (breakdown, fields) => Object.fromEntries(PC_LEVELS.filter((level) => breakdown[level])
+    .map((level) => [level, [...fields.map((field) => breakdown[level][field]), breakdown[level].total]]));
+  const snapshot = {
     at: now,
-    vocab: pack(profile.vocab), kanji: pack(profile.kanji),
+    vocab: pack(profile.vocab, ["mastered", "learning", "assumed"]), kanji: pack(profile.kanji, ["mastered", "learning", "assumed"]),
     level: { vocab: profile.vocabLevel.done || "", kanji: profile.kanjiLevel.done || "" },
     reading: profile.reading, practice: profile.practice
   };
+  if (profile.grammar) {
+    snapshot.grammar = pack(profile.grammar, ["mastered", "understood", "seen"]);
+    snapshot.level.grammar = profile.grammarLevel?.done || "";
+  }
+  return snapshot;
 }
 
 /* Suma de dominados de todos los niveles de una dimensión de la foto */
 const snapshotTotal = (snapshot, dimension, index = 0) =>
   Object.values(snapshot?.[dimension] || {}).reduce((sum, row) => sum + (row[index] || 0), 0);
 
-/* Lo que ha cambiado desde la foto anterior: { words, kanji, texts } (null sin foto anterior) */
+/* Estructuras que maneja según la foto (dominadas y entendidas), o null si no tiene gramática */
+const snapshotGrammar = (snapshot) => snapshot?.grammar
+  ? snapshotTotal(snapshot, "grammar", 0) + snapshotTotal(snapshot, "grammar", 1) : null;
+
+/* Lo que ha cambiado desde la foto anterior: { words, kanji, texts, grammar } (null sin foto
+   anterior; grammar es null si a alguna de las dos le falta la gramática) */
 function progressDelta(current, previous) {
   if (!previous) return null;
+  const now = snapshotGrammar(current), before = snapshotGrammar(previous);
   return {
     words: snapshotTotal(current, "vocab") - snapshotTotal(previous, "vocab"),
     kanji: snapshotTotal(current, "kanji") - snapshotTotal(previous, "kanji"),
-    texts: (current.reading?.texts || 0) - (previous.reading?.texts || 0)
+    texts: (current.reading?.texts || 0) - (previous.reading?.texts || 0),
+    grammar: now === null || before === null ? null : now - before
   };
 }
 
@@ -194,6 +208,6 @@ function previousSnapshot(snapshots, week) {
 if (typeof module !== "undefined") {
   module.exports = {
     PC_LEVELS, PC_STATES, wordState, kanjiState, levelBreakdown, knownShare, estimateLevel,
-    readingSummary, practiceSummary, weekKey, weekStart, snapshotOf, snapshotTotal, progressDelta, previousSnapshot
+    readingSummary, practiceSummary, weekKey, weekStart, snapshotOf, snapshotTotal, snapshotGrammar, progressDelta, previousSnapshot
   };
 }

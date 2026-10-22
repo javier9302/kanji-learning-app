@@ -59,8 +59,11 @@ const STUDY_CONFIG = {
   /* Mis palabras → Análisis (premium; reglas en progress-core.js).
        levelDone    proporción de una lista JLPT que hay que saber (dominada o
                     dada por sabida) para que su nivel cuente como completo
-       recentTexts  cuántos textos recientes se miran para la lectura */
-  analysis: { levelDone: 0.8, recentTexts: 5 },
+       recentTexts  cuántos textos recientes se miran para la lectura
+       grammar      cuándo una estructura cuenta como entendida (cleanReads
+                    frases leídas sin consultar nada) o dominada (traducciones
+                    buenas en masteredDays días distintos); grammar-core.js */
+  analysis: { levelDone: 0.8, recentTexts: 5, grammar: { cleanReads: 3, masteredDays: 2 } },
   /* Sección "Traducir": el estudiante escribe la traducción de una frase y una
      IA la corrige. Demuestra que entiende el SIGNIFICADO; no mueve el calendario
      de repaso de la lectura. */

@@ -30,6 +30,7 @@ mismo commit que cambie cualquiera de estas reglas. Los cambios, con fecha, est�
 | `vendor/jmdict/common-<fecha>.json` | Diccionario general: palabras comunes que no están en el banco | `tools/build-dictionary.mjs` desde JMdict | No |
 | `bank/sentences/<nivel>.json` | Frases comunes de ejemplo, con traducción | IA por tandas: `tools/generate-sentences.mjs` | No |
 | Tabla `shared_sentences` (Supabase) | Frases compartidas por todos: las de historias que se usaron y las que escribió la IA para palabras sin frase | La app, al repasar «En una frase» | Se borran en admin.html → Frases |
+| `grammar-core.js` (`GRAMMAR`) | Catálogo de gramática: 56 estructuras de N5 (partículas, です/ます y sus formas, forma て, 〜たい, 〜から…), cada una con su regla de detección y un ejemplo | Escrito a mano sobre el análisis de kuromoji | Sí: cada estructura nueva lleva su ejemplo en `test/grammar.test.js` |
 | `kanji-data.js` | Modelo antiguo; ya no se carga, solo sirve para migrar datos viejos | — | No |
 
 Tamaño del banco:
@@ -149,9 +150,10 @@ Nivel a nivel: no sale ningún kanji de N4 hasta escribir todos los de N5 o apro
 (8 kanjis, 7 bien escritos sin ayuda). Cada 5 kanjis sale uno ya escrito, el que hace más que no
 se escribe. Primero los kanjis de palabras que el usuario ya conoce.
 
-### 9. Análisis del progreso (`progress.js` + `progress-core.js`, solo premium)
+### 9. Análisis del progreso (`progress.js` + `progress-core.js` + `grammar-core.js`, solo premium)
 
-Fase 1 de la hoja de ruta: vocabulario, kanjis, lectura y constancia. La gramática llegará después.
+Fases 1 y 2 de la hoja de ruta: vocabulario, kanjis, gramática, lectura y constancia. La hoja de
+ruta (qué estudiar después) y la vista del profesor llegarán más adelante.
 
 - **Listas que se miden**: las palabras con kanji de cada nivel del banco (las que casi siempre van
   en kana no se estudian) y todos los kanjis de cada nivel.
@@ -166,6 +168,18 @@ Fase 1 de la hoja de ruta: vocabulario, kanjis, lectura y constancia. La gramát
 - **Nivel estimado** (`estimateLevel`): el último nivel del que sabe (dominado + dado por sabido)
   al menos el 80 %, siempre que también sepa los anteriores, y cuánto lleva del siguiente.
   Se calcula aparte para vocabulario y kanjis; la lectura muestra el nivel de sus textos.
+- **Gramática** (`grammar-core.js`): cada frase se analiza con kuromoji y `detectGrammar` dice
+  qué estructuras del catálogo lleva. Se miran las frases de los textos leídos, las enseñadas en
+  el repaso «En una frase» y las traducidas en Traducir. Estados (`grammarStates`):
+  - *vista*: apareció en alguna de esas frases;
+  - *entendida*: tradujo bien una frase con ella (Traducir: correcta o casi), o leyó 3 frases con
+    ella sin consultar ninguna de sus palabras;
+  - *dominada*: la tradujo bien en 2 días distintos;
+  - si su última traducción fue mala (también «No lo sé») no cuenta como dominada ni, por las
+    traducciones, como entendida.
+  El nivel estimado de gramática cuenta dominadas y entendidas, con el mismo umbral del 80 %. Solo
+  hay catálogo de N5 por ahora. El análisis descarga el analizador de japonés si hace falta (unos
+  18 MB la primera vez); al sincronizar no se descarga, y la foto conserva la gramática de esa semana.
 - **Lectura**: textos leídos (en total y en 30 días), qué % conoce hoy de sus 5 últimos textos y
   cuántas palabras consulta por cada 100 que lee. **Constancia**: días activos y aciertos en los
   repasos de los últimos 30 días.
@@ -180,7 +194,8 @@ Casi todo lo ajustable está en `study-config.js`: palabras nuevas por sesión, 
 días de dominio, reglas de Escribir y de Traducir. Lo que no:
 
 - 90 % de cobertura de los textos: `COVERAGE_TARGET` en `reading.js`.
-- Análisis: umbral para dar un nivel por completo (80 %) y textos recientes que se miran (5):
+- Análisis: umbral para dar un nivel por completo (80 %), textos recientes que se miran (5) y
+  cuándo una estructura cuenta como entendida (3 lecturas sin consultar) o dominada (2 días):
   `STUDY_CONFIG.analysis` en `study-config.js`.
 - Tamaño y aprobado de la evaluación inicial: `PLACEMENT_SIZE` y `PLACEMENT_PASS` en `reading.js`.
 - Textos de IA al día: variables `DAILY_TEXTS` y `PREMIUM_DAILY_TEXTS` de la función `generate-text` en Supabase.

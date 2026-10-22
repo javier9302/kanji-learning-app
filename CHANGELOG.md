@@ -6,6 +6,12 @@ Cómo funciona todo hoy: [docs/COMO-FUNCIONA.md](docs/COMO-FUNCIONA.md).
 
 ## 2026-10-22
 
+- **Análisis → Gramática** (solo premium): 56 estructuras de N5 (partículas, です/ます y sus
+  formas, forma て, 〜たい, 〜から…). La app las detecta en lo que lees, repasas y traduces, y te
+  dice cuáles has visto, entendido o dominado, con un ejemplo de cada una y tu nivel de gramática.
+  La foto semanal y la tabla de evolución incluyen la gramática.
+- Análisis, fase 1 publicada (`bd3f338`).
+
 - **Mis palabras → Análisis** (solo premium): cuántas palabras y kanjis de cada nivel JLPT has
   demostrado (dominadas, aprendiendo, dadas por sabidas), tu nivel estimado en vocabulario y
   kanjis, tu lectura y constancia, y una foto semanal para ver cómo avanzas. Las fotos se guardan
