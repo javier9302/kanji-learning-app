@@ -188,11 +188,16 @@ si todos sus kanjis son de tu nivel o inferior, o ya los conoces; o si tiene var
 al menos uno y la palabra es de tu nivel. Las que agregas a mano no tienen esta limitación. La vista
 de depuración enseña las que esperan y qué kanji las bloquea. Reglas en `learning-core.js`.
 
-**Escribir** va nivel a nivel en el modo automático: no salen kanjis de N4 hasta escribir todos los
-de N5. Cada `writing.reviewEvery` kanjis sale uno ya escrito para repasarlo. Quien ya sabe escribir
+**Escribir** usa repaso espaciado (FSRS) con una tarjeta de escritura por kanji: salen primero los
+repasos que tocan y, como kanjis nuevos (`writing.newPerDay` al día), los que el estudiante ya ha
+visto en sus palabras, con uno de su nivel de vez en cuando (`writing.unseenEvery`). El primer
+fallo no cuenta; una pista lo deja en Difícil y «Mostrar», en Otra vez (`writing.rating`). Para
+sincronizar la tarjeta de escritura, **vuelve a ejecutar `supabase/schema.sql`** (añade
+`write_fsrs` a `user_kanji`); sin la columna, se sincroniza el resto. Quien ya sabe escribir
 un nivel puede hacer la prueba («¿Ya sabes escribir los de N5?»): unos kanjis al azar de ese nivel,
 sin ayuda; si aprueba, el nivel se salta. Los niveles saltados se sincronizan (vuelve a ejecutar
-`supabase/schema.sql`). Eligiendo un nivel en el selector se practican sus kanjis sin orden.
+`supabase/schema.sql`). Eligiendo un nivel en el selector se practican sus kanjis: primero los
+que vencen y si no, al azar.
 Cámbialo, recarga la página y listo.
 
 - Tras actualizar la app hay que volver a ejecutar `supabase/schema.sql` en el SQL Editor:

@@ -4,6 +4,16 @@ Lo que cambia para quien usa la app, el más reciente primero. Cada cambio añad
 el mismo commit. El detalle técnico está en el mensaje de cada commit (`git show <commit>`).
 Cómo funciona todo hoy: [docs/COMO-FUNCIONA.md](docs/COMO-FUNCIONA.md).
 
+## 2026-10-24
+
+- **Escribir con repaso espaciado**: cada kanji vuelve cuando toca repasarlo, en lugar de ir por la
+  lista del nivel de principio a fin. Como kanjis nuevos (hasta 10 al día) salen primero los que ya
+  has visto en tus palabras y, de vez en cuando, uno de tu nivel para completarlo. Se valora mejor:
+  el primer fallo no cuenta, una pista o fallos de más lo dejan en «Difícil» y «Mostrar» en «Otra
+  vez», y al terminar ves cuándo vuelve. Lo que ya sabías escribir pasa a repaso. Para
+  sincronizarlo, vuelve a ejecutar `schema.sql`.
+- Análisis, fase 4 publicada (`fc97bdd`).
+
 ## 2026-10-22
 
 - **Análisis → Tu semana** (solo premium): un resumen breve escrito por la IA con tus números de la

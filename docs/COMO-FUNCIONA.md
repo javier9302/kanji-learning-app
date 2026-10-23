@@ -11,7 +11,7 @@ mismo commit que cambie cualquiera de estas reglas. Los cambios, con fecha, est�
 | **Leer** | Textos en japonés (generados por IA, de la comunidad o pegados) con furigana según el nivel. Tocar una palabra enseña su lectura y su significado. Al terminar, una evaluación corta de las palabras del texto. |
 | **Repasar** | Repaso espaciado (FSRS) de palabras y kanjis. Modo «Escribir la lectura» o «Tarjetas»; presentación «Palabra sola» o «En una frase». |
 | **Traducir** | El usuario traduce frases de sus textos y lo corrige la IA (o él mismo con la traducción de referencia). Mide si entiende el significado; no mueve el calendario de repaso. |
-| **Escribir** | Trazos de kanjis (KanjiVG), nivel a nivel, con una prueba para saltarse un nivel. |
+| **Escribir** | Trazos de kanjis (KanjiVG) con repaso espaciado: primero los kanjis que ya has visto y los que toca repasar, y una prueba para saltarse un nivel. |
 | **Diccionario** | Búsqueda por kanji, kana, rōmaji o significado (español o inglés). |
 | **Mis palabras** | Agregar palabras a mano, progreso y estadísticas. **Análisis** (solo premium): lo demostrado por nivel JLPT, nivel estimado y evolución semanal. |
 | **Cuenta** (opcional) | Sincronización con Supabase, plan gratuito (10 textos de IA al día) o premium (30). |
@@ -146,11 +146,38 @@ palabras que ya conoce o está aprendiendo. En «Palabras y kanjis» se alternan
 Frases de 4 a 40 caracteres con traducción y como mucho 2 palabras desconocidas. Si la respuesta
 casi coincide con la traducción de referencia se acepta sin llamar a la IA.
 
-### 8. Escribir (`learning-core.js`)
+### 8. Escribir (`learning-core.js` + `study.js`)
 
-Nivel a nivel: no sale ningún kanji de N4 hasta escribir todos los de N5 o aprobar su prueba
-(8 kanjis, 7 bien escritos sin ayuda). Cada 5 kanjis sale uno ya escrito, el que hace más que no
-se escribe. Primero los kanjis de palabras que el usuario ya conoce.
+Repaso espaciado con FSRS: cada kanji tiene su **tarjeta de escritura** (`writeFsrs`), aparte de la
+de su significado. En el modo automático sale, por este orden (`nextWritingKanji`):
+
+1. **Un repaso que toca**: su tarjeta ya venció, el más atrasado primero. Un kanji recién aprendido
+   vuelve a los pocos minutos, en la misma sesión, y después a días, semanas o meses.
+2. **Un kanji nuevo**, como mucho 10 al día. Primero los que el estudiante ya ha visto
+   (`seenKanji`): en palabras que domina o acierta, o cuyo significado sabe (más cerca); en palabras
+   que repasa o que se dan por sabidas por su nivel; en palabras que vio al leer o en Repasar (más
+   lejos). Antes los de niveles más bajos, y como mucho un nivel por encima de su nivel de
+   escritura. De cada 4 nuevos, uno que aún no ha visto de su nivel de escritura, para ir
+   completándolo.
+3. **Práctica extra**: si no queda nada de lo anterior, el ya escrito que vence antes. Bien hecha
+   no cambia cuándo vuelve.
+
+El **nivel de escritura** es el primero que no ha terminado (todos sus kanjis escritos alguna vez)
+ni aprobado con la prueba (8 kanjis, 7 bien escritos sin ayuda; los bien escritos entran con un
+intervalo largo).
+
+**Cómo se valora** cada kanji (`writingRating`), una sola vez:
+
+- limpio, o con **un solo fallo** (el primero no cuenta): *Bien*;
+- con una **pista** (pedida, o la que sale sola tras tres fallos en un trazo) o con algún fallo de
+  más: *Difícil*;
+- con 4 o más fallos, si pulsa **Mostrar**, o si lo deja a medias y pasa al siguiente: *Otra vez*
+  (vuelve en un minuto y deja de contar como «sabe escribirlo»).
+
+Tras valorarlo se ve cómo fue y cuándo vuelve («Bien · vuelve en 3 d»). Pasar sin haber empezado
+no lo valora. Eligiendo un nivel en el selector: primero lo que vence de ese nivel y, si no, uno al
+azar, valorado igual. Un kanji que ya se sabía escribir antes de este cambio empieza como repaso a
+7 días de la última vez que se escribió.
 
 ### 9. Análisis del progreso (`progress.js` + `progress-core.js` + `grammar-core.js`, solo premium)
 
@@ -219,6 +246,8 @@ Casi todo lo ajustable está en `study-config.js`: palabras nuevas por sesión, 
 días de dominio, reglas de Escribir y de Traducir. Lo que no:
 
 - 90 % de cobertura de los textos: `COVERAGE_TARGET` en `reading.js`.
+- Escribir: kanjis nuevos al día (10), cada cuántos nuevos uno sin ver (4) y los fallos que
+  perdona la valoración (1) o con los que cuenta como Otra vez (3 de más): `STUDY_CONFIG.writing`.
 - Análisis: umbral para dar un nivel por completo (80 %), textos recientes que se miran (5) y
   cuándo una estructura cuenta como entendida (3 lecturas sin consultar) o dominada (2 días), y las
   metas y avisos de la hoja de ruta: `STUDY_CONFIG.analysis` en `study-config.js`. El peso de la

@@ -56,51 +56,66 @@ test("kanjiGate con datos inventados: casos límite", () => {
 
 /* ---------- Escribir ---------- */
 
-const BY_LEVEL = { N5: ["一", "二", "三"], N4: ["会", "同"], N3: ["政"], N2: [], N1: [] };
-const writer = (written = [], extra = {}) => ({
-  kanjiByLevel: BY_LEVEL, written: (c) => written.includes(c), skipped: [], useful: () => false,
-  lastWritten: (c) => extra.last?.[c] || 0, turn: 1, avoid: "", ...extra
+const BY_LEVEL = { N5: ["一", "二", "三", "四"], N4: ["会", "同"], N3: ["政"], N2: [], N1: [] };
+const NOW = 1_000_000_000;
+/* due: { 一: ms } kanjis ya escritos y cuándo vencen; seen: { 三: 2 } lo que ha visto */
+const writer = ({ due = {}, seen = {}, ...extra } = {}) => ({
+  now: NOW, kanjiByLevel: BY_LEVEL, dueAt: (c) => c in due ? due[c] : null, seen: (c) => seen[c] || 0,
+  skipped: [], newToday: 0, avoid: "", ...extra
 });
-const W = { reviewEvery: 5, test: { size: 3, pass: 2, maxMistakes: 1 } };
+const W = { newPerDay: 3, unseenEvery: 3, rating: { forgiveMistakes: 1, againMistakes: 3 }, test: { size: 3, pass: 2, maxMistakes: 1 } };
 
-test("escribir: no salen kanjis de un nivel superior hasta terminar el actual", () => {
+test("escribir: el nivel de escritura es el primero sin terminar ni aprobar", () => {
   assert.equal(core.writingLevel(BY_LEVEL, () => false), "N5");
-  assert.equal(core.writingLevel(BY_LEVEL, (c) => ["一", "二"].includes(c)), "N5");
-  assert.equal(core.writingLevel(BY_LEVEL, (c) => ["一", "二", "三"].includes(c)), "N4");
-  assert.equal(core.writingLevel(BY_LEVEL, () => true), null);
-  // Escribiendo de uno en uno, todos los de N5 salen antes que cualquiera de N4
-  const written = [], order = [];
-  for (let turn = 1; turn <= 6; turn++) {
-    const next = core.nextWritingKanji(writer(written, { turn, avoid: order[order.length - 1], reviewEvery: 0 }), { ...W, reviewEvery: 0 });
-    if (!next) break;
-    order.push(next.c);
-    if (!next.review) written.push(next.c);
-  }
-  assert.deepEqual(order, ["一", "二", "三", "会", "同", "政"]);
-});
-
-test("escribir: un nivel aprobado con la prueba se salta", () => {
+  assert.equal(core.writingLevel(BY_LEVEL, (c) => ["一", "二", "三"].includes(c)), "N5");
+  assert.equal(core.writingLevel(BY_LEVEL, (c) => BY_LEVEL.N5.includes(c)), "N4");
   assert.equal(core.writingLevel(BY_LEVEL, () => false, ["N5"]), "N4");
-  const next = core.nextWritingKanji(writer([], { skipped: ["N5"] }), W);
-  assert.equal(next.level, "N4");
+  assert.equal(core.writingLevel(BY_LEVEL, () => true), null);
 });
 
-test("escribir: cada reviewEvery kanjis sale un repaso, el que hace más que no se escribe", () => {
-  const last = { 一: 3000, 二: 1000 };
-  const state = writer(["一", "二"], { last, turn: 5 });
-  const next = core.nextWritingKanji(state, W);
-  assert.deepEqual(next, { c: "二", level: "N5", review: true });
-  // En los demás turnos, uno nuevo del nivel actual
-  assert.deepEqual(core.nextWritingKanji({ ...state, turn: 4 }, W), { c: "三", level: "N5", review: false });
-  // Sin nada escrito todavía no hay repaso posible
-  assert.equal(core.nextWritingKanji(writer([], { turn: 5 }), W).review, false);
-  // Con todo escrito, solo repasos
-  assert.equal(core.nextWritingKanji(writer(Object.values(BY_LEVEL).flat(), { turn: 2 }), W).review, true);
+test("escribir: primero los repasos que vencieron, el más atrasado antes", () => {
+  const next = core.nextWritingKanji(writer({ due: { 一: NOW - 10, 二: NOW - 500, 三: NOW + 999 } }), W);
+  assert.deepEqual(next, { c: "二", level: "N5", kind: "review", seen: true });
+  // Los que aún no vencen no salen como repaso
+  assert.equal(core.nextWritingKanji(writer({ due: { 三: NOW + 999 } }), W).kind, "new");
 });
 
-test("escribir: primero los kanjis de palabras que conoce", () => {
-  const next = core.nextWritingKanji(writer([], { useful: (c) => c === "三" }), W);
-  assert.equal(next.c, "三");
+test("escribir: los nuevos, primero los que ya ha visto (no la lista del nivel en orden)", () => {
+  const state = writer({ seen: { 四: 3, 三: 1, 会: 3 } });
+  assert.deepEqual(core.nextWritingKanji(state, W), { c: "四", level: "N5", kind: "new", seen: true });
+  // A igual nivel, el que más cerca le queda; un nivel más bajo va antes
+  assert.equal(core.nextWritingKanji({ ...state, avoid: "四" }, W).c, "三");
+  // Un kanji visto muy por encima de su nivel no sale todavía
+  assert.equal(core.nextWritingKanji(writer({ seen: { 政: 3 } }), W).c, "一");
+});
+
+test("escribir: de vez en cuando uno sin ver de su nivel, para completarlo; sin vistos, solo esos", () => {
+  const seen = { 三: 2, 四: 2, 会: 2 };
+  assert.equal(core.nextWritingKanji(writer({ seen, newToday: 0 }), W).c, "三");
+  assert.deepEqual(core.nextWritingKanji(writer({ seen, newToday: 2 }), W), { c: "一", level: "N5", kind: "new", seen: false });
+  assert.equal(core.nextWritingKanji(writer(), W).c, "一");
+});
+
+test("escribir: con el tope de nuevos del día, práctica extra con el que vence antes", () => {
+  const state = writer({ due: { 一: NOW + 5000, 二: NOW + 100 }, seen: { 三: 3 }, newToday: 3 });
+  assert.deepEqual(core.nextWritingKanji(state, W), { c: "二", level: "N5", kind: "extra", seen: true });
+  // Sin nada escrito y sin poder empezar uno nuevo, no hay nada
+  assert.equal(core.nextWritingKanji(writer({ newToday: 3 }), W), null);
+});
+
+test("escribir: un nivel aprobado con la prueba se salta al elegir uno sin ver", () => {
+  const next = core.nextWritingKanji(writer({ skipped: ["N5"] }), W);
+  assert.deepEqual(next, { c: "会", level: "N4", kind: "new", seen: false });
+});
+
+test("escribir: la valoración perdona el primer fallo y castiga pistas y Mostrar", () => {
+  const rate = (attempt) => core.writingRating(attempt, W.rating);
+  assert.equal(rate({ mistakes: 0 }), "good");
+  assert.equal(rate({ mistakes: 1 }), "good");            // el primer fallo no cuenta
+  assert.equal(rate({ mistakes: 2 }), "hard");
+  assert.equal(rate({ mistakes: 0, hinted: true }), "hard");
+  assert.equal(rate({ mistakes: 4 }), "again");
+  assert.equal(rate({ mistakes: 0, shown: true }), "again");
 });
 
 test("prueba para saltar un nivel: cuenta solo lo escrito sin ayuda y con pocos fallos", () => {

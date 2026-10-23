@@ -29,7 +29,8 @@ después de `learning-core.js`)
 - **`app.js`**: IndexedDB (`DB_VERSION`), preferencias (`prefs`, en localStorage), navegación,
   Ajustes y sincronización general.
 - **`study.js`**: Repasar (repaso espaciado con FSRS, modos «Escribir la lectura» / «Tarjetas»,
-  presentación «Palabra sola» / «En una frase»), Escribir kanjis y Agregar palabra.
+  presentación «Palabra sola» / «En una frase»), Escribir kanjis (también con FSRS: tarjeta propia
+  `writeFsrs` por kanji; qué sale y cómo se valora en `learning-core.js`) y Agregar palabra.
   Los números ajustables están en `study-config.js`.
 - **`sentences.js` / `sentences-core.js`**: frases de ejemplo (de los textos del usuario y de
   `bank/sentences/<nivel>.json`). La única regla de validez es `validateSentence`; la elección

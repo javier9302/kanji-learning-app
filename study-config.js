@@ -40,13 +40,22 @@ const STUDY_CONFIG = {
      "Conozco la palabra pero no el kanji". */
   newWordKanji: { knownNeeded: 1 },
 
-  /* Escribir: se avanza nivel a nivel (no salen kanjis de N4 hasta escribir
-     todos los de N5, o aprobar la prueba de N5).
-       reviewEvery  cada cuántos kanjis sale uno ya escrito, para no olvidarlo
+  /* Escribir: repaso espaciado (FSRS) con una tarjeta de escritura por kanji
+     (reglas en learning-core.js, nextWritingKanji y writingRating).
+       newPerDay    kanjis nuevos al día como mucho; después, solo repasos y práctica extra
+       unseenEvery  de cada tantos nuevos, uno que aún no ha visto de su nivel de
+                    escritura (los demás, de los que ya ha visto en sus palabras)
+       rating       forgiveMistakes: fallos que no cuentan (el primero);
+                    againMistakes: fallos de más con los que cuenta como Otra vez.
+                    Con una pista, o algún fallo de más, es Difícil; con "Mostrar",
+                    Otra vez; limpio, Bien
        test         prueba para saltar un nivel: size kanjis al azar; se aprueba
                     con pass bien escritos (sin "Mostrar", sin pistas y con
                     como mucho maxMistakes trazos fallados) */
-  writing: { reviewEvery: 5, test: { size: 8, pass: 7, maxMistakes: 1 } },
+  writing: {
+    newPerDay: 10, unseenEvery: 4, rating: { forgiveMistakes: 1, againMistakes: 3 },
+    test: { size: 8, pass: 7, maxMistakes: 1 }
+  },
 
   /* "Ya la domino": días hasta el primer repaso de una palabra agregada así */
   masteredIntervalDays: 60,

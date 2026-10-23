@@ -5,7 +5,7 @@
    y antes de study.js.
 
    1. Palabras nuevas: kanjiGate decide si una palabra se puede proponer.
-   2. Escribir: writingLevel, nextWritingKanji y writingTestResult.
+   2. Escribir: writingLevel, nextWritingKanji, writingRating y writingTestResult.
    Los números (repaso cada cuántos kanjis, tamaño de la prueba…) vienen de
    STUDY_CONFIG.
    ========================================= */
@@ -42,16 +42,23 @@ function kanjiGate(entry, ctx) {
 /* =========================================
    2. ESCRIBIR
    -----------------------------------------
-   Se avanza nivel a nivel: no se piden kanjis de N4 mientras queden kanjis de
-   N5 por escribir. Un nivel se termina escribiendo todos sus kanjis, o
-   aprobando su prueba (para quien ya sabe escribirlos). De vez en cuando
-   (cada reviewEvery kanjis) sale uno ya escrito, el que hace más que no se
-   escribe, para no olvidarlo.
+   Repaso espaciado (FSRS), con una tarjeta de escritura por kanji, aparte de
+   la de su significado. Cada vez sale, por este orden:
+     1. un repaso que toca: su tarjeta ya venció (los recién aprendidos vuelven
+        a los pocos minutos, en la misma sesión), el más atrasado primero;
+     2. un kanji nuevo, si hoy no ha llegado a newPerDay. Primero los que el
+        estudiante ya ha visto (en palabras que conoce o repasa, o estudiados en
+        Repasar), de los niveles más bajos primero y hasta uno por encima de su
+        nivel de escritura; cada unseenEvery nuevos, uno que aún no ha visto de
+        su nivel de escritura, para ir completándolo;
+     3. si no queda nada de eso, práctica extra: el ya escrito que vence antes.
+   El nivel de escritura es el primero que no ha terminado (todos sus kanjis
+   escritos alguna vez) ni aprobado con la prueba.
    ========================================= */
 
 /* El nivel que toca escribir: el primero que no está terminado ni aprobado.
      kanjiByLevel  { N5: ["日", …], … }
-     written(c)    ¿ya lo sabe escribir?
+     written(c)    ¿lo ha escrito alguna vez (tiene tarjeta de escritura)?
      skipped       niveles aprobados con la prueba
    Devuelve el nivel, o null si están todos terminados. */
 function writingLevel(kanjiByLevel, written, skipped = []) {
@@ -64,31 +71,55 @@ function writingLevel(kanjiByLevel, written, skipped = []) {
 
 /* El siguiente kanji para escribir.
    state:
-     kanjiByLevel, written(c), skipped   (como en writingLevel)
-     useful(c)       ¿sale en palabras que el usuario conoce? Esos van primero
-     lastWritten(c)  cuándo lo escribió por última vez (ms, 0 si nunca)
-     turn            cuántos kanjis lleva en esta sesión (para el repaso)
-     avoid           el kanji anterior, para no repetirlo seguido
+     now            ahora (ms)
+     kanjiByLevel   { N5: ["日", …], … } en el orden del banco
+     dueAt(c)       cuándo vence su tarjeta de escritura (ms), o null si nunca lo escribió
+     seen(c)        cuánto lo ha visto: 0 nada; más, más cerca le queda (palabras que domina > que repasa > lecturas)
+     skipped        niveles aprobados con la prueba
+     newToday       kanjis nuevos que ya ha empezado hoy
+     avoid          el kanji anterior, para no repetirlo seguido
    config: STUDY_CONFIG.writing
-   Devuelve { c, level, review } o null si no hay nada que escribir. */
+   Devuelve { c, level, kind: "review" | "new" | "extra", seen } o null si no hay nada. */
 function nextWritingKanji(state, config) {
-  const level = writingLevel(state.kanjiByLevel, state.written, state.skipped);
-  const reachable = level ? LC_LEVELS.slice(0, LC_LEVELS.indexOf(level) + 1) : LC_LEVELS;
-  // Ya escritos (o de un nivel aprobado), hasta el nivel actual: los que se pueden repasar
-  const done = reachable.flatMap((lv) => (state.kanjiByLevel[lv] || [])
-    .filter((c) => state.written(c) || (state.skipped || []).includes(lv)).map((c) => ({ c, level: lv })))
-    .filter((item) => item.c !== state.avoid);
-  const pending = level ? (state.kanjiByLevel[level] || []).filter((c) => !state.written(c) && c !== state.avoid) : [];
+  const levelOf = new Map();
+  for (const level of LC_LEVELS) for (const c of state.kanjiByLevel[level] || []) if (!levelOf.has(c)) levelOf.set(c, level);
+  const rank = (c) => LC_LEVELS.indexOf(levelOf.get(c));
+  const all = [...levelOf.keys()].filter((c) => c !== state.avoid);
+  const written = all.filter((c) => state.dueAt(c) !== null);
+  const soonest = (a, b) => state.dueAt(a) - state.dueAt(b) || rank(a) - rank(b);
 
-  const reviewTurn = config.reviewEvery > 0 && state.turn > 0 && state.turn % config.reviewEvery === 0;
-  if (done.length && (reviewTurn || !pending.length)) {
-    const oldest = [...done].sort((a, b) => (state.lastWritten(a.c) || 0) - (state.lastWritten(b.c) || 0) || (a.c < b.c ? -1 : 1))[0];
-    return { ...oldest, review: true };
+  const due = written.filter((c) => state.dueAt(c) <= state.now).sort(soonest);
+  if (due.length) return { c: due[0], level: levelOf.get(due[0]), kind: "review", seen: true };
+
+  if (state.newToday < config.newPerDay) {
+    const level = writingLevel(state.kanjiByLevel, (c) => state.dueAt(c) !== null, state.skipped);
+    const top = level ? LC_LEVELS.indexOf(level) + 1 : LC_LEVELS.length - 1; // hasta un nivel por encima
+    const fresh = all.filter((c) => state.dueAt(c) === null);
+    const seen = fresh.filter((c) => state.seen(c) > 0 && rank(c) <= top)
+      .sort((a, b) => rank(a) - rank(b) || state.seen(b) - state.seen(a));
+    const unseen = level ? fresh.filter((c) => levelOf.get(c) === level && !(state.seen(c) > 0)) : [];
+    const discoverTurn = config.unseenEvery > 0 && state.newToday % config.unseenEvery === config.unseenEvery - 1;
+    const pick = unseen.length && (discoverTurn || !seen.length) ? unseen[0] : seen[0];
+    if (pick) return { c: pick, level: levelOf.get(pick), kind: "new", seen: state.seen(pick) > 0 };
   }
-  if (!pending.length) return null;
-  // Primero los que salen en palabras que conoce; dentro de cada grupo, el orden del banco (por frecuencia)
-  const next = [...pending].sort((a, b) => (state.useful(b) ? 1 : 0) - (state.useful(a) ? 1 : 0))[0];
-  return { c: next, level, review: false };
+
+  if (!written.length) return null;
+  const extra = [...written].sort(soonest)[0];
+  return { c: extra, level: levelOf.get(extra), kind: "extra", seen: true };
+}
+
+/* Cómo le fue con un kanji, como valoración de FSRS.
+     attempt  { mistakes, hinted, shown }: trazos fallados, si pidió una pista
+              (o salió sola tras tres fallos en un trazo) y si pidió que se lo
+              mostraran o lo dejó a medias
+   config: STUDY_CONFIG.writing.rating { forgiveMistakes, againMistakes }
+   El primer fallo no cuenta (un trazo torcido no es no saberlo). */
+function writingRating({ mistakes = 0, hinted = false, shown = false }, config) {
+  if (shown) return "again";
+  const counted = Math.max(0, mistakes - config.forgiveMistakes);
+  if (counted >= config.againMistakes) return "again";
+  if (hinted || counted > 0) return "hard";
+  return "good";
 }
 
 /* Resultado de la prueba para saltar un nivel.
@@ -115,5 +146,5 @@ function writingTestKanji(kanjiList, written, size, random = Math.random) {
 
 /* Para las pruebas (Node); en el navegador son globales */
 if (typeof module !== "undefined") {
-  module.exports = { kanjiGate, writingLevel, nextWritingKanji, writingTestResult, writingTestKanji };
+  module.exports = { kanjiGate, writingLevel, nextWritingKanji, writingRating, writingTestResult, writingTestKanji };
 }

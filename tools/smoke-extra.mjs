@@ -610,32 +610,76 @@ export default async function extra({ page, step, check }) {
     check(!!result.highWordEasyKanji, "ninguna palabra de otro nivel con kanjis de N5");
   });
 
-  await step("escritura: nivel a nivel, con repaso, y la prueba salta un nivel", async () => {
+  await step("escritura: repaso espaciado; primero lo ya visto, el primer fallo no cuenta y Mostrar es Otra vez", async () => {
     const result = await page.evaluate(async () => {
       await BANK.loadUpTo("N1");
       $("drawLevel").value = "auto";
+      const savedKanji = new Map(userKanji), savedWords = new Map(userWords), savedMeta = meta.writing, savedReading = meta.reading;
+      userKanji = new Map(); meta.writing = {}; meta.reading = { ...meta.reading, assumed: "" };
+      // Conoce 学校: sus kanjis salen antes que el primero de la lista de N5
+      userWords = new Map([["学校|がっこう", { ...blankUserWord("学校", "がっこう"), status: "mastered" }]]);
+      try {
+        const first = pickDrawKanji();
+        // Bien escrito: vuelve a los pocos minutos (paso de aprendizaje), no ahora
+        const card = await gradeWriting(first.kanji.c, "good", "new");
+        const second = pickDrawKanji();
+        // Cuando vence, sale como repaso antes que cualquier nuevo
+        userKanji.get(first.kanji.c).writeFsrs.due = new Date(Date.now() - 1000).toISOString();
+        draw = null;
+        const review = pickDrawKanji();
+        // Con el tope de nuevos del día: práctica extra
+        meta.writing.today = { day: today(), fresh: STUDY_CONFIG.writing.newPerDay };
+        userKanji.get(first.kanji.c).writeFsrs.due = new Date(Date.now() + 86400000).toISOString();
+        const extra = pickDrawKanji();
+        meta.writing.today = { day: today(), fresh: 0 };
+        // Un kanji que ya sabía escribir de antes, escrito hace un mes: le toca repaso
+        userKanji.set("日", { ...blankUserKanji("日"), canWrite: true, lastWrittenAt: Date.now() - 30 * 86400000 });
+        const legacy = pickDrawKanji();
+        return {
+          first: [first.kanji.c, first.kind], minutes: Math.round((new Date(card.due) - Date.now()) / 60000),
+          second: [second.kanji.c, second.kind], review: [review.kanji.c, review.kind], extra: extra.kind, legacy: [legacy.kanji.c, legacy.kind],
+          rating: ["good", "hard", "again"].map((r) => r) && [
+            writingRating({ mistakes: 1 }, STUDY_CONFIG.writing.rating), writingRating({ mistakes: 0, hinted: true }, STUDY_CONFIG.writing.rating),
+            writingRating({ shown: true }, STUDY_CONFIG.writing.rating)]
+        };
+      } finally {
+        userKanji = savedKanji; userWords = savedWords; meta.writing = savedMeta; meta.reading = savedReading;
+      }
+    });
+    check(["学", "校"].includes(result.first[0]) && result.first[1] === "new" && result.minutes > 0 && result.minutes < 60, JSON.stringify(result));
+    check(result.second[1] === "new" && result.second[0] !== result.first[0], JSON.stringify(result));
+    check(result.review[0] === result.first[0] && result.review[1] === "review" && result.extra === "extra", JSON.stringify(result));
+    check(result.legacy[0] === "日" && result.legacy[1] === "review", JSON.stringify(result));
+    check(result.rating.join() === "good,hard,again", JSON.stringify(result.rating));
+  });
+
+  await step("escritura: en pantalla, Mostrar cuenta como Otra vez y dice cuándo vuelve; la prueba salta un nivel", async () => {
+    await page.evaluate(() => { switchView("draw"); });
+    await page.waitForSelector("#drawShowBtn", { timeout: 30000 });
+    const shown = await page.evaluate(async () => {
+      const c = draw.kanji.c;
+      $("drawShowBtn").click();
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      const rec = userKanji.get(c);
+      const text = $("drawFeedback").textContent;
+      $("drawNextBtn").click(); // ya valorado: pasar no lo vuelve a valorar
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      return { c, again: text.includes(t("Otra vez")) && text.includes(t("vuelve en {when}", { when: "" }).trim()),
+        card: !!rec?.writeFsrs, canWrite: rec?.canWrite, lapsesOk: rec?.writeFsrs?.reps === 1 };
+    });
+    check(shown.again && shown.card && shown.canWrite === false && shown.lapsesOk, JSON.stringify(shown));
+    const test = await page.evaluate(async () => {
       const savedKanji = new Map(userKanji), savedMeta = meta.writing;
       userKanji = new Map(); meta.writing = {};
-      drawTurn = 1;
-      const first = pickDrawKanji();
-      // La prueba de N5 aprobada: el siguiente kanji ya es de N4
-      const n5 = kanjiByLevel().N5;
-      const test = { level: "N5", queue: n5.slice(0, 8), results: n5.slice(0, 8).map((c) => ({ c, mistakes: 0, shown: false, hinted: false })) };
-      switchView("draw");
-      await finishWritingTest(test);
-      const after = pickDrawKanji();
-      const status = $("drawStatus").textContent;
-      // Repaso: con kanjis ya escritos, cada reviewEvery sale uno de ellos
-      drawTurn = STUDY_CONFIG.writing.reviewEvery;
-      const review = pickDrawKanji();
-      const out = { first: first.kanji.level, after: after.kanji.level, skipped: meta.writing.skipped, review: review.review, reviewLevel: review.kanji.level, status,
-        written: [...userKanji.values()].filter((k) => k.canWrite).length };
-      userKanji = savedKanji; meta.writing = savedMeta;
-      return out;
+      try {
+        const n5 = kanjiByLevel().N5;
+        await finishWritingTest({ level: "N5", queue: n5.slice(0, 8), results: n5.slice(0, 8).map((c) => ({ c, mistakes: 0, shown: false, hinted: false })) });
+        const good = n5.slice(0, 8).map((c) => userKanji.get(c));
+        return { skipped: meta.writing.skipped, level: writingProgress().level, status: $("drawStatus").textContent,
+          long: good.every((rec) => rec.canWrite && new Date(rec.writeFsrs.due) - Date.now() > 30 * 86400000) };
+      } finally { userKanji = savedKanji; meta.writing = savedMeta; draw = null; }
     });
-    check(result.first === "N5" && result.after === "N4" && result.skipped.join() === "N5", JSON.stringify(result));
-    check(result.review === true && result.reviewLevel === "N5" && result.written === 8, JSON.stringify(result));
-    check(/N4/.test(result.status), result.status);
+    check(test.skipped.join() === "N5" && test.level === "N4" && test.long && /N4/.test(test.status), JSON.stringify(test));
   });
 
   await step("escritura: los trazos de un kanji llegan de KanjiVG (versión fija)", async () => {

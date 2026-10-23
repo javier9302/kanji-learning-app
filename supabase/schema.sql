@@ -976,6 +976,8 @@ grant execute on function public.admin_set_plan(uuid, text, timestamptz) to auth
 -- por última vez cada kanji (para repasar primero el que hace más que no se escribe)
 alter table public.profiles add column if not exists writing_skipped text[] not null default '{}';
 alter table public.user_kanji add column if not exists last_written_at timestamptz;
+-- Repaso espaciado de la escritura: la tarjeta de FSRS de Escribir, aparte de la del significado (fsrs)
+alter table public.user_kanji add column if not exists write_fsrs jsonb;
 
 -- =========================================
 -- FRASES COMPARTIDAS
