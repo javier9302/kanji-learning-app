@@ -284,6 +284,7 @@ function rankingScores(entries) {
    Cuenta la lectura nueva: se enseña solo con la respuesta. */
 function whyText(info) {
   const parts = [
+    info.queued ? t("está en tu lista importada") : "",
     info.manual ? t("la agregaste tú") : "",
     info.dictionary ? t("la buscaste en el diccionario") : "",
     info.meaningFail ? t("la fallaste al traducir") : "",
@@ -347,7 +348,28 @@ function newWordCandidates() {
     if (item.mmr !== undefined) item.card.info.mmr = item.mmr;
     return item.card;
   });
-  return { list: [...asked, ...varied], excluded: excluded.sort(order) };
+  excluded.sort(order);
+  // La lista importada (Ajustes → Tus datos) va delante de todo, en su orden, hasta que se acaba.
+  // La eligió una persona: sus palabras salen aunque lleven kanjis de un nivel superior.
+  const queued = queueRemaining();
+  if (!queued.length) return { list: [...asked, ...varied], excluded };
+  const byId = new Map([...list, ...excluded].map((card) => [card.id, card]));
+  const front = queued.map((id) => byId.get(id)).filter(Boolean);
+  for (const card of front) card.info.queued = true;
+  const inFront = new Set(front.map((card) => card.id));
+  return {
+    list: [...front, ...asked.filter((card) => !inFront.has(card.id)), ...varied.filter((card) => !inFront.has(card.id))],
+    excluded: excluded.filter((card) => !inFront.has(card.id))
+  };
+}
+
+/* Lo que queda de la lista importada: meta.queue = { ids, note, importedAt, total }.
+   Una palabra sale de ella al empezar a estudiarla o al darla por dominada. */
+function queueRemaining() {
+  return (meta.queue?.ids || []).filter((id) => {
+    const rec = userWords.get(id);
+    return BANK.words.has(id) && !rec?.studied && rec?.status !== "mastered";
+  });
 }
 
 /* Tarjetas posibles, por grupos: due (toca repasar), fresh (nuevas, ya en el

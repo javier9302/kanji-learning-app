@@ -53,8 +53,10 @@ después de `learning-core.js`)
   acertado por lectura va a `userKanji[c].readings`, columna `kanji_readings`) y C (orden de las
   palabras nuevas en `ranking-core.js`: frecuencia, puente i+1, desbloqueo, lecturas que faltan y
   MMR; pesos en `STUDY_CONFIG.ranking`; `newWordCandidates` lo aplica debajo de las razones del
-  estudiante); quedan D (temas con embeddings: el componente `topic`, hoy con peso 0) y E
-  (exportar/importar la cola).
+  estudiante) y E (exportar v2 con el orden y los kanjis; importar una lista, `parseQueueText` /
+  `resolveQueue` en `ranking-core.js`, que se guarda en `meta.queue` y va primero; formatos en
+  `README.md`); queda D (temas con embeddings: el componente `topic`, hoy con peso 0;
+  `topicProfile` del archivo, hoy `null`).
 - **`grammar-core.js`**: catálogo de gramática (`GRAMMAR`, hoy solo N5), detector sobre las piezas
   de kuromoji de la frase entera (`detectGrammar`) y medición (`grammarStates`). Una estructura
   nueva lleva su regla, su ejemplo y, si se parece a otra, un caso en «no confunde» de

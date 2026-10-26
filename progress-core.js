@@ -257,12 +257,15 @@ function buildRoadmap({ dims, reading, practice }, config, threshold = 0.8) {
    6. LA EXPORTACIÓN
    -----------------------------------------
    Ajustes → Tus datos: un JSON con todo el progreso para dárselo a una IA
-   (Claude, por ejemplo) y pedirle un análisis. Lleva el perfil ya calculado
-   y, debajo, el detalle de cada palabra y kanji con lo que ha demostrado.
-   La guía de campos va en inglés: la lee la IA, no la interfaz.
+   (Claude, por ejemplo) y pedirle un análisis o la lista de las siguientes
+   palabras. Lleva el perfil ya calculado, lo que sabe de cada kanji por sus
+   palabras, las 100 siguientes palabras del orden y, debajo, el detalle de
+   cada palabra y kanji. La guía de campos va en inglés: la lee la IA, no la
+   interfaz; dice también cómo contestar con una lista para importarla
+   (formato en README.md).
    ========================================= */
 
-const EXPORT_VERSION = 1;
+const EXPORT_VERSION = 2;
 
 /* Lo que dice la tarjeta FSRS: estabilidad (días hasta olvidar un 10 %), dificultad (1-10) y olvidos */
 function fsrsFacts(card) {
@@ -320,7 +323,13 @@ const EXPORT_GUIDE = {
   snapshots: "One snapshot per ISO week (last one of the week). vocab/kanji per level: [mastered, learning, assumed, total]; grammar: [mastered, understood, seen, total].",
   readingSessions: "Finished texts, newest first: date, level, words in the text, words looked up, coverage = % of its words known today.",
   translations: "Translation exercises, newest first: sentence in Japanese, the learner's answer, verdict (correct, mostly, partial, incorrect; skipped when the learner skipped it), score 0-100, words looked up while translating.",
-  roadmap: "The weekly plan the app computed (target level, words and grammar points to focus on)."
+  roadmap: "The weekly plan the app computed (target level, words and grammar points to focus on).",
+  kanjiReadings: "What the learner knows of each kanji through the words they know (kanji are learned in context). state: mastered (meaning known and every relevant reading seen in known words), partial (in some known word, but a relevant reading or the meaning is missing). knownReadings / missingReadings: relevant readings (used by at least 2 words of the app's list) seen or not yet seen. knownWords: how many known words use it. typed: per reading, right (ok) and wrong (ko) answers when typing it in its own box, and the last day. Kanji not listed are unknown.",
+  recentWords: "The 40 words the learner started most recently (id = writing|reading, firstSeen = date). Use them to infer current interests (topics).",
+  topicProfile: "Reserved for topic clusters (not computed yet); infer topics from recentWords.",
+  nextWords: "The app's current top 100 new words, in order. score = total; parts = each component of the ordering, 0-1: frequency (rank in the frequency list), bridge (one new thing is best: one new kanji among known ones, or one new reading of a known kanji; 2+ new kanji is negative), unlock (how much common vocabulary the new kanji opens), coverage (gives a partial kanji a missing reading), topic (not used yet). why: the reason in words. queued: comes from an imported list.",
+  queue: "The list imported by the learner, if any: the remaining ids come first among new words, in order.",
+  howToCurate: "To choose the learner's next words yourself, reply with JSON in this format (the learner pastes it in Settings → Your data → Import list): {\"format\": \"kanji-app-queue\", \"version\": 1, \"note\": \"short reason\", \"words\": [\"有名|ゆうめい\", \"前置き|まえおき\"]}. Use ids writing|reading (reading in hiragana) exactly as in nextWords or words when possible; a bare writing is accepted unless it has several readings. Only words with kanji from the app's word list (JLPT N5-N1) can be imported: the app reports the rest. Words already known or being studied are skipped. Order them as they should be learned (one new thing at a time works best), up to about 100."
 };
 
 /* Arma el archivo. parts: lo que ya ha reunido progress.js (perfil, filas, historia) */

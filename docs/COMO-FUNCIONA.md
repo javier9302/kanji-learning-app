@@ -69,10 +69,21 @@ Se guardan en el dispositivo (IndexedDB) y, con cuenta, se sincronizan con Supab
   de campos en inglés (`guide`), los totales por estado, el perfil del análisis (desglose por
   nivel JLPT, nivel estimado, lectura y constancia), el estado de cada estructura de gramática,
   la hoja de ruta, el historial diario, las fotos semanales, los textos leídos (fecha, nivel,
-  consultas, cobertura de hoy), las traducciones (frase, respuesta, veredicto, nota) y una fila por
-  cada palabra y kanji de `userWords` / `userKanji` (estado, aciertos, fallos, tarjeta FSRS
-  resumida). Las palabras de los niveles dados por sabidos que nunca ha tocado solo cuentan en el
-  perfil. Descarga el analizador de japonés si hace falta para incluir la gramática.
+  consultas, cobertura de hoy), las traducciones (frase, respuesta, veredicto, nota), lo que sabe
+  de cada kanji por sus palabras (estado de la tabla, lecturas vistas y que faltan, aciertos de
+  cada lectura en su casilla), las 40 palabras empezadas más recientemente, las 100 siguientes
+  palabras nuevas con cada componente del orden y su porqué, la lista importada si la hay, y una
+  fila por cada palabra y kanji de `userWords` / `userKanji` (estado, aciertos, fallos, tarjeta
+  FSRS resumida). Las palabras de los niveles dados por sabidos que nunca ha tocado solo cuentan en
+  el perfil. Descarga el analizador de japonés si hace falta para incluir la gramática. La guía
+  explica también cómo contestar con una lista para importarla. Formato completo en `README.md`.
+- **Importar lista** (Ajustes → Tus datos): se pega (o se elige un archivo) una lista de palabras,
+  en el formato de `README.md`, en JSON o una por línea. `parseQueueText` y `resolveQueue`
+  (`ranking-core.js`) la comprueban contra el banco e informan de las que no están, las que
+  tienen varias lecturas sin decir cuál, las que ya sabe o estudia, las que van en kana y las
+  repetidas. Las válidas se guardan en `meta.queue` (solo en el dispositivo) y salen **primero**
+  entre las palabras nuevas, en su orden y aunque lleven kanjis de un nivel superior, hasta que
+  todas se han empezado a estudiar o se han dado por dominadas. «Quitar la lista» la borra.
 
 ## Cómo se decide qué enseñar
 
@@ -95,8 +106,8 @@ aunque sea de un nivel supuesto, y una acertada cuenta aunque sea de un nivel su
 - Excepción: una palabra de varios kanjis puede llevar uno de nivel superior si el usuario conoce
   al menos uno de los suyos y la palabra es de su nivel o inferior.
 - Las agregadas a mano y las marcadas «Conozco la palabra pero no el kanji» no tienen límite.
-- **Orden** (pesos en `study-config.js`; cada criterio solo desempata al anterior):
-  agregada a mano > buscada en el diccionario > consultada hace poco (pierde peso en 14 días) >
+- **Orden** (pesos en `study-config.js`; cada criterio solo desempata al anterior): la lista
+  importada (Ajustes → Tus datos), en su orden y sin límite de nivel > agregada a mano > buscada en el diccionario > consultada hace poco (pierde peso en 14 días) >
   fallada al traducir > vista en una lectura > en la hoja de ruta (solo premium) > el **orden por
   kanjis**, que decide entre todas las demás (peso `ranking`, siempre por debajo de la hoja de ruta).
 - **Orden por kanjis** (`ranking-core.js`, números en `STUDY_CONFIG.ranking`), con lo que se sabe

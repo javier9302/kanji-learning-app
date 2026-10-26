@@ -1014,6 +1014,53 @@ export default async function extra({ page, step, check }) {
     check(!("kanjiStates" in data.profile), "el perfil lleva un Map que no se puede guardar");
   });
 
+  await step("Tus datos: importar una lista (informe, va primero hasta acabarse) y el archivo v2 con el orden y los kanjis", async () => {
+    try {
+      await page.evaluate(async () => {
+        await ensureStudyBank();
+        switchView("data");
+        $("queueOpenBtn").click();
+        $("queueText").value = "1. 教室\n2. 有名|ゆうめい\n3. 角\n4. 存在しない\n5. 教室";
+        $("queueImportBtn").click();
+      });
+      await page.waitForFunction(() => $("queueReport").textContent.includes("存在しない"), { timeout: 10000 });
+      await shot(page, "importar-lista");
+      const imported = await page.evaluate(() => ({
+        queue: meta.queue.ids, report: $("queueReport").textContent, status: $("queueStatus").textContent,
+        first: newWordCandidates().list.slice(0, 2).map((card) => card.id), why: whyText(newWordCandidates().list[0].info)
+      }));
+      check(imported.queue.join() === "教室|きょうしつ,有名|ゆうめい", JSON.stringify(imported.queue));
+      check(imported.report.includes("角") && imported.report.includes("存在しない"), imported.report);
+      check(imported.first.join() === imported.queue.join() && imported.why.length > 0, JSON.stringify(imported));
+      check(/2/.test(imported.status), imported.status);
+      // El archivo, versión 2: los kanjis por sus palabras, las 100 siguientes y cómo contestar con una lista
+      const data = await page.evaluate(async () => {
+        $("queueDialog").close();
+        const file = JSON.parse(JSON.stringify(await progressExport()));
+        return { version: file.version, next: file.nextWords.length, first: file.nextWords[0], kanji: file.kanjiReadings.length,
+          queue: file.queue?.remaining, curate: file.guide.howToCurate.includes("kanji-app-queue"), recent: Array.isArray(file.recentWords) };
+      });
+      check(data.version === 2 && data.next === 100 && data.first.queued && data.first.parts && data.curate && data.recent, JSON.stringify(data).slice(0, 300));
+      check(data.queue?.length === 2, JSON.stringify(data.queue));
+      // Al estudiarla sale de la lista; «Quitar la lista» la borra
+      const after = await page.evaluate(async () => {
+        const rec = userWords.get("教室|きょうしつ") || blankUserWord("教室", "きょうしつ");
+        rec.studied = true;
+        await saveUserWord(rec);
+        const left = queueRemaining();
+        window.realConfirm = window.confirm;
+        window.confirm = () => true;
+        $("queueClearBtn").click();
+        await new Promise((resolve) => setTimeout(resolve, 200));
+        window.confirm = window.realConfirm;
+        return { left, cleared: !meta.queue.ids, hidden: $("queueClearBtn").classList.contains("hidden") };
+      });
+      check(after.left.join() === "有名|ゆうめい" && after.cleared && after.hidden, JSON.stringify(after));
+    } finally {
+      await page.evaluate(() => { if ($("queueDialog").open) $("queueDialog").close(); meta.queue = {}; });
+    }
+  });
+
   await step("kanjis: sin premium, el aviso; con premium, la tabla por nivel, la ficha y el cambio de agrupación", async () => {
     const locked = await page.evaluate(() => {
       switchView("kanji");

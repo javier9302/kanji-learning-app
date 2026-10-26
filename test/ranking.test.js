@@ -82,3 +82,32 @@ test("rankingReasons: lo nuevo, lo que completa y lo conocido", () => {
   assert.deepEqual(R.rankingReasons(byId.前置き, config), [["newKanji", { kanji: "置" }], ["knownKanji", { kanji: "前" }]]);
   assert.deepEqual(R.rankingReasons(byId.電話, config), [["manyKanji", { n: 2, kanji: "電、話" }]]);
 });
+
+test("parseQueueText: el formato de la app, una lista sin más o una palabra por línea", () => {
+  assert.deepEqual(R.parseQueueText('{"format":"kanji-app-queue","version":1,"note":"escuela","words":["有名|ゆうめい","前置き"]}'),
+    { items: ["有名|ゆうめい", "前置き"], note: "escuela" });
+  assert.deepEqual(R.parseQueueText('["有名", {"w":"角","r":"かど"}]').items, ["有名", { w: "角", r: "かど" }]);
+  assert.deepEqual(R.parseQueueText("1. 有名\n2) 前置き\n- 午前、教室").items, ["有名", "前置き", "午前", "教室"]);
+  assert.throws(() => R.parseQueueText("  "), /empty/);
+  assert.throws(() => R.parseQueueText('{"words": []}'), /format/);
+});
+
+test("resolveQueue: valida cada palabra contra el banco y dice qué no vale", () => {
+  const entries = [
+    { id: "有名|ゆうめい", w: "有名", r: "ゆうめい" }, { id: "前置き|まえおき", w: "前置き", r: "まえおき" },
+    { id: "角|かど", w: "角", r: "かど" }, { id: "角|つの", w: "角", r: "つの" },
+    { id: "有る|ある", w: "有る", r: "ある", kana: true }, { id: "名前|なまえ", w: "名前", r: "なまえ" },
+    { id: "午前|ごぜん", w: "午前", r: "ごぜん" }
+  ];
+  const lookup = {
+    byId: (id) => entries.find((entry) => entry.id === id) || null,
+    byWriting: (w) => entries.filter((entry) => entry.w === w),
+    state: (id) => ({ "名前|なまえ": "known", "午前|ごぜん": "studied" })[id] || null
+  };
+  const result = R.resolveQueue(["有名|ゆうめい", "前置き", "角", { w: "角", r: "カド" }, "有名", "有る", "名前", "午前", "存在しない"], lookup);
+  assert.deepEqual(result.ids, ["有名|ゆうめい", "前置き|まえおき", "角|かど"]);
+  assert.deepEqual(result.ambiguous, [{ item: "角", options: ["角|かど", "角|つの"] }]);
+  assert.deepEqual(result.duplicates, ["有名|ゆうめい"]);
+  assert.deepEqual(result.skipped, [{ id: "有る|ある", reason: "kana" }, { id: "名前|なまえ", reason: "known" }, { id: "午前|ごぜん", reason: "studied" }]);
+  assert.deepEqual(result.notFound, ["存在しない"]);
+});

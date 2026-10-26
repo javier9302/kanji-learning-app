@@ -6,6 +6,12 @@ Cómo funciona todo hoy: [docs/COMO-FUNCIONA.md](docs/COMO-FUNCIONA.md).
 
 ## 2026-10-26
 
+- **Ajustes → Tus datos → Importar lista**: pega la lista de palabras que te proponga Claude (o
+  una por línea) y saldrán primero entre tus palabras nuevas, en ese orden, hasta acabarse. La app
+  te dice cuáles no están en su lista, cuáles tienen varias lecturas y cuáles ya sabes. El archivo
+  de **Descargar mis datos** trae ahora también lo que sabes de cada kanji, tus palabras recientes,
+  las 100 siguientes palabras con su porqué y cómo pedirle a Claude la lista. Formatos en `README.md`.
+
 - **Repasar: nuevo orden de las palabras nuevas.** Primero las que te enseñan una sola cosa nueva:
   un kanji nuevo junto a otros que ya conoces, o una lectura nueva de un kanji conocido (si sabes
   名前, salen 有名 o 午前 antes que palabras con dos kanjis nuevos). También pesan la frecuencia,

@@ -563,6 +563,7 @@ async function showSummary(profile, roadmap, delta) {
 
 async function progressExport() {
   const profile = await computeProfile({ grammar: true });
+  await ensureStudyBank(); // lecturas de cada kanji y su información, para el estado y el orden
   const known = knownLemmas();
   const textsById = new Map(texts.map((text) => [text.id, text]));
   const sentenceById = new Map();
@@ -593,6 +594,28 @@ async function progressExport() {
     score: record.score ?? null, lookups: record.lookups?.length || 0
   }));
 
+  // Lo que sabe de cada kanji por sus palabras (Mis palabras → Kanjis): solo los que conoce algo
+  const tableStates = currentKanjiStates().states;
+  const kanjiReadings = [...tableStates].filter(([, state]) => state.state !== "unknown").map(([c, state]) => ({
+    c, level: BANK.kanjiLevel(c), state: state.state, meaningKnown: state.meaning, knownReadings: state.known,
+    missingReadings: state.missing, knownWords: state.words.length, ...(userKanji.get(c)?.readings ? { typed: userKanji.get(c).readings } : {})
+  })).sort((a, b) => KC_STATES.indexOf(a.state) - KC_STATES.indexOf(b.state));
+  // Lo último que ha empezado a estudiar: de ahí saldrán sus temas (fase D)
+  const recentWords = [...userWords.values()].filter((rec) => rec.studied || rec.status === "mastered")
+    .sort((a, b) => (b.firstSeen || 0) - (a.firstSeen || 0)).slice(0, 40).map((rec) => {
+      const entry = wordEntry(rec.id);
+      return { id: rec.id, meaning: entry ? meaningOf(entry).slice(0, 2).join("; ") : "", firstSeen: rec.firstSeen ? isoDate(new Date(rec.firstSeen)) : null };
+    });
+  // Las 100 siguientes palabras nuevas, como las pondría el orden ahora
+  const nextWords = newWordCandidates().list.slice(0, STUDY_CONFIG.ranking.debugTop).map((card, i) => ({
+    position: i + 1, id: card.id, meaning: meaningOf(card.entry).slice(0, 2).join("; "), level: card.entry.level,
+    score: Math.round(card.info.score * 100) / 100,
+    parts: card.info.ranked ? Object.fromEntries(Object.entries(card.info.ranked.parts).map(([key, value]) => [key, Math.round(value * 100) / 100])) : null,
+    why: whyText(card.info), queued: !!card.info.queued
+  }));
+  const queue = meta.queue?.ids?.length ? { note: meta.queue.note || "", importedAt: isoDate(new Date(meta.queue.importedAt)),
+    total: meta.queue.total, remaining: queueRemaining() } : null;
+
   const { kanjiStates, grammarStates: grammarMap, ...summary } = profile;
   return buildProgressExport({
     profile: { ...summary, assumedLevels: [...assumed], levelDone: STUDY_CONFIG.analysis.levelDone },
@@ -600,6 +623,7 @@ async function progressExport() {
     roadmap: meta.roadmap?.updatedAt ? meta.roadmap : null,
     days: meta.days, snapshots: meta.snapshots || {},
     readingSessions: sessions, translations,
+    kanjiReadings, recentWords, topicProfile: null, nextWords, queue,
     words: wordRows, kanji: kanjiRows
   });
 }
@@ -626,4 +650,102 @@ async function downloadProgress() {
   } finally {
     button.disabled = false;
   }
+}
+
+/* =========================================
+   8. IMPORTAR UNA LISTA
+   -----------------------------------------
+   Ajustes → Tus datos → Importar lista: las siguientes palabras nuevas las
+   elige una persona o una IA (con el archivo de arriba) en lugar del orden.
+   Se pegan o se elige un archivo; parseQueueText y resolveQueue
+   (ranking-core.js) las comprueban contra el banco y dicen qué no vale.
+   Se guardan en meta.queue, en este dispositivo; newWordCandidates las pone
+   primero hasta que se acaban. Formato en README.md.
+   ========================================= */
+
+/* Cómo están las palabras de la lista para el estudiante */
+function queueLookup() {
+  // Sin kanji no hay lectura que preguntar: cuenta como las que casi siempre van en kana
+  const entry = (word) => word && { ...word, kana: word.kana || !word.kanji.length };
+  return {
+    byId: (id) => entry(BANK.words.get(id)) || null,
+    byWriting: (writing) => (BANK.sensesOf(writing) || []).map(entry),
+    state: (id) => {
+      const rec = userWords.get(id);
+      return rec?.status === "mastered" ? "known" : rec?.studied ? "studied" : null;
+    }
+  };
+}
+
+/* El informe de una importación, en líneas */
+function queueReportHTML(result) {
+  const list = (ids) => `<span lang="ja">${escapeHTML(ids.map((id) => String(id).split("|")[0]).join("、"))}</span>`;
+  const lines = [];
+  if (result.ids.length) lines.push(escapeHTML(t("Importadas {n}: saldrán primero entre tus palabras nuevas, en este orden.", { n: result.ids.length })));
+  else lines.push(escapeHTML(t("Ninguna palabra de la lista se puede estudiar: no se ha cambiado nada.")));
+  if (result.notFound.length) lines.push(`${escapeHTML(t("No están en la lista de palabras de la app ({n}):", { n: result.notFound.length }))} ${list(result.notFound)}`);
+  if (result.ambiguous.length) lines.push(`${escapeHTML(t("Tienen varias lecturas; escribe cuál, como 角|かど ({n}):", { n: result.ambiguous.length }))} <span lang="ja">${
+    result.ambiguous.map((item) => escapeHTML(`${item.item} (${item.options.map((id) => id.split("|")[1]).join(" / ")})`)).join("、")}</span>`);
+  const skipped = (reason) => result.skipped.filter((item) => item.reason === reason).map((item) => item.id);
+  if (skipped("known").length || skipped("studied").length) {
+    lines.push(`${escapeHTML(t("Ya las sabes o las estás estudiando ({n}):", { n: skipped("known").length + skipped("studied").length }))} ${list([...skipped("known"), ...skipped("studied")])}`);
+  }
+  if (skipped("kana").length) lines.push(`${escapeHTML(t("Van en kana y no se repasan ({n}):", { n: skipped("kana").length }))} ${list(skipped("kana"))}`);
+  if (result.duplicates.length) lines.push(`${escapeHTML(t("Repetidas ({n}):", { n: result.duplicates.length }))} ${list(result.duplicates)}`);
+  return lines.map((line) => `<p>${line}</p>`).join("");
+}
+
+/* Ajustes → Tus datos: cuánto queda de la lista importada */
+function renderQueueStatus() {
+  const total = meta.queue?.ids?.length ? meta.queue.total || meta.queue.ids.length : 0;
+  const left = total ? queueRemaining().length : 0;
+  $("queueStatus").textContent = total
+    ? t("Lista importada: te quedan {left} de {total} palabras. Salen antes que el orden de siempre.", { left, total })
+    : "";
+  $("queueClearBtn").classList.toggle("hidden", !total);
+}
+
+async function importQueue() {
+  const report = $("queueReport");
+  let parsed;
+  try {
+    parsed = parseQueueText($("queueText").value);
+  } catch (error) {
+    report.innerHTML = `<p>${escapeHTML(error.message === "empty"
+      ? t("Pega la lista o elige un archivo primero.")
+      : t("No se entiende el archivo: tiene que llevar una lista de palabras (mira el formato en README.md)."))}</p>`;
+    return;
+  }
+  await BANK.loadUpTo("N1").catch(() => {});
+  const result = resolveQueue(parsed.items, queueLookup());
+  report.innerHTML = queueReportHTML(result);
+  if (!result.ids.length) return;
+  meta.queue = { ids: result.ids, note: parsed.note, importedAt: Date.now(), total: result.ids.length };
+  await saveMeta();
+  renderQueueStatus();
+  $("queueImportBtn").classList.add("hidden");
+}
+
+function bindQueueImport() {
+  $("queueOpenBtn").addEventListener("click", () => {
+    $("queueText").value = "";
+    $("queueFile").value = "";
+    $("queueReport").innerHTML = "";
+    $("queueImportBtn").classList.remove("hidden");
+    $("queueDialog").showModal();
+    $("queueText").focus();
+  });
+  $("queueFile").addEventListener("change", async () => {
+    const file = $("queueFile").files[0];
+    if (file) $("queueText").value = await file.text();
+  });
+  $("queueImportBtn").addEventListener("click", importQueue);
+  $("queueCloseBtn").addEventListener("click", () => $("queueDialog").close());
+  $("queueClearBtn").addEventListener("click", async () => {
+    if (!confirm(t("¿Quitar la lista importada? Las palabras nuevas volverán a salir en el orden de siempre."))) return;
+    meta.queue = {};
+    await saveMeta();
+    renderQueueStatus();
+  });
+  renderQueueStatus();
 }

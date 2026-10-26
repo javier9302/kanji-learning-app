@@ -162,7 +162,78 @@ function rankingReasons(item, config) {
   return reasons;
 }
 
+/* =========================================
+   LISTA IMPORTADA
+   -----------------------------------------
+   A veces una persona o una IA (Claude, con el archivo de Ajustes → Tus datos)
+   elige las siguientes palabras en lugar del orden. Ajustes → Tus datos →
+   Importar lista: sus palabras salen primero, en su orden, hasta que se
+   aprenden todas; después vuelve el orden de siempre. Formato en README.md.
+   ========================================= */
+
+const QUEUE_FORMAT = "kanji-app-queue";
+
+/* Lo que se pegó o se eligió, como lista de elementos. Acepta el formato
+   { "format": "kanji-app-queue", "version": 1, "words": [...] }, una lista
+   sin más ([...]) o, si no es JSON, una palabra por línea (o separadas por
+   comas). Cada elemento: "有名|ゆうめい", "有名" o { "w": "有名", "r": "ゆうめい" }
+   (también { "id": "有名|ゆうめい" }). Devuelve { items, note } o lanza un error. */
+function parseQueueText(text) {
+  const raw = String(text || "").trim();
+  if (!raw) throw new Error("empty");
+  let data;
+  try {
+    data = JSON.parse(raw);
+  } catch {
+    // No es JSON: una palabra por línea, sin numeración ni viñetas
+    const items = raw.split(/[\n,、，]+/).map((line) => line.replace(/^\s*(\d+[.)]|[-*•])\s*/, "").trim()).filter(Boolean);
+    if (!items.length) throw new Error("empty");
+    return { items, note: "" };
+  }
+  const items = Array.isArray(data) ? data : data?.words;
+  if (!Array.isArray(items) || !items.length) throw new Error("format");
+  return { items, note: typeof data?.note === "string" ? data.note.slice(0, 300) : "" };
+}
+
+/* Comprueba cada elemento contra el banco.
+     items   los de parseQueueText
+     lookup  { byId(id) -> entrada | null, byWriting(w) -> [entradas], state(id) -> "known" |
+             "studied" | null }   (entrada: { id, w, r, kana })
+   Devuelve { ids: [ids válidos, en orden], notFound: [texto], ambiguous: [{ item, options: [ids] }],
+   skipped: [{ id, reason: "known" | "studied" | "kana" }], duplicates: [ids] } */
+function resolveQueue(items, lookup) {
+  const out = { ids: [], notFound: [], ambiguous: [], skipped: [], duplicates: [] };
+  const seen = new Set();
+  const hira = (text) => String(text || "").trim().normalize("NFKC")
+    .replace(/[ァ-ヶ]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0x60));
+  for (const item of items) {
+    const id = typeof item === "string" ? (item.includes("|") ? item.trim() : null) : item?.id || null;
+    const writing = typeof item === "string" ? item.split("|")[0].trim() : String(item?.w || item?.id?.split("|")[0] || "").trim();
+    const reading = typeof item === "string" ? item.split("|")[1] : item?.r;
+    const label = typeof item === "string" ? item.trim() : [writing, reading].filter(Boolean).join("|");
+    if (!writing) continue;
+    let entry = id ? lookup.byId(id) : null;
+    if (!entry) {
+      let options = lookup.byWriting(writing) || [];
+      if (reading) options = options.filter((option) => hira(option.r) === hira(reading));
+      if (options.length > 1) { out.ambiguous.push({ item: label, options: options.map((option) => option.id) }); continue; }
+      entry = options[0] || null;
+    }
+    if (!entry) { out.notFound.push(label); continue; }
+    if (seen.has(entry.id)) { out.duplicates.push(entry.id); continue; }
+    seen.add(entry.id);
+    const state = lookup.state(entry.id);
+    if (entry.kana) out.skipped.push({ id: entry.id, reason: "kana" });
+    else if (state) out.skipped.push({ id: entry.id, reason: state });
+    else out.ids.push(entry.id);
+  }
+  return out;
+}
+
 /* Para las pruebas (Node); en el navegador son globales */
 if (typeof module !== "undefined") {
-  module.exports = { rankingContext, wordNovelty, bridgeScore, scoreRanking, noveltySimilarity, diversify, rankingReasons };
+  module.exports = {
+    rankingContext, wordNovelty, bridgeScore, scoreRanking, noveltySimilarity, diversify, rankingReasons,
+    QUEUE_FORMAT, parseQueueText, resolveQueue
+  };
 }

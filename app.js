@@ -12,7 +12,7 @@ let db;
 // snapshots: { "2026-W43": foto } una foto del progreso por semana (progress.js)
 // roadmap: { level, words, grammar, updatedAt } la hoja de ruta de la semana (progress.js)
 // summary: { key: "2026-W43:es", text } el resumen de la semana escrito por la IA (progress.js)
-let meta = { days: {}, deleted: {}, reading: {}, practice: {}, writing: {}, snapshots: {}, roadmap: {}, summary: {} };
+let meta = { days: {}, deleted: {}, reading: {}, practice: {}, writing: {}, snapshots: {}, roadmap: {}, summary: {}, queue: {} };
 let emptyStudyHTML = ""; // mensaje inicial de la pantalla de estudio
 
 const $ = (id) => document.getElementById(id);
@@ -683,6 +683,7 @@ async function clearLocalData() {
   meta.reading = {};
   meta.practice = {};
   delete meta.practiceMigrated;
+  meta.queue = {};
   meta.writing = {};
   meta.snapshots = {};
   meta.roadmap = {};
@@ -916,6 +917,7 @@ function renderDataView() {
     ? t("No se pudo cargar el servicio de cuentas. Comprueba la conexión y vuelve a abrir la app.")
     : t("Las cuentas no están configuradas en esta instalación (falta rellenar config.js).");
   $("syncNowBtn").disabled = sync.running;
+  renderQueueStatus();
 
 }
 
@@ -1033,6 +1035,7 @@ function bindSettings() {
   });
   bindAddWord();
   $("exportProgressBtn").addEventListener("click", downloadProgress);
+  bindQueueImport();
 
   // Nivel de Escribir: automático (por defecto) o uno elegido; se recuerda en el dispositivo
   if ([...$("drawLevel").options].some((o) => o.value === prefs.drawLevel)) $("drawLevel").value = prefs.drawLevel;

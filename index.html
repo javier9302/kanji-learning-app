@@ -654,10 +654,14 @@
         <div>
           <h3>Tus datos</h3>
           <p class="helper">Descarga todo tu progreso (palabras, kanjis, gramática, lecturas, traducciones e historial) en un archivo para analizarlo con una IA como Claude.</p>
+          <p class="helper">También puedes importar una lista de palabras (por ejemplo, la que te proponga Claude con ese archivo): saldrán primero entre tus palabras nuevas.</p>
           <p id="exportMessage" class="message" role="status"></p>
+          <p id="queueStatus" class="message" role="status"></p>
         </div>
         <div class="import-actions">
           <button id="exportProgressBtn" class="button button-outline" type="button">Descargar mis datos</button>
+          <button id="queueOpenBtn" class="button button-outline" type="button">Importar lista</button>
+          <button id="queueClearBtn" class="button button-secondary hidden" type="button">Quitar la lista</button>
         </div>
       </div>
 
@@ -723,6 +727,29 @@
         <button id="authToReset" class="link-btn" type="button">¿Olvidaste tu contraseña?</button>
       </div>
     </form>
+  </dialog>
+
+  <dialog id="queueDialog" class="dialog queue-dialog">
+    <div class="dialog-head">
+      <div>
+        <h3>Importar una lista de palabras</h3>
+        <p class="helper">Pega la lista (el JSON que te dé Claude, o una palabra por línea) o elige un archivo. Sus palabras saldrán primero entre las nuevas, en ese orden.</p>
+      </div>
+    </div>
+    <label class="field">
+      <span>Lista</span>
+      <textarea id="queueText" rows="6" lang="ja" spellcheck="false"></textarea>
+    </label>
+    <label class="field">
+      <span>O un archivo</span>
+      <input id="queueFile" type="file" accept=".json,.txt,application/json,text/plain">
+    </label>
+    <div id="queueReport" class="message queue-report" role="status"></div>
+    <div class="dialog-actions">
+      <button id="queueCloseBtn" class="button button-secondary" type="button">Cerrar</button>
+      <span class="spacer"></span>
+      <button id="queueImportBtn" class="button button-primary" type="button">Importar</button>
+    </div>
   </dialog>
 
   <dialog id="kanjiDialog" class="dialog kanji-dialog">

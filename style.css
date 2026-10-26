@@ -3042,3 +3042,14 @@ body[data-view="dict"] .intro {
   font-weight: 600;
   color: var(--red);
 }
+
+/* Importar una lista: el informe de lo que se importó y lo que no */
+.queue-dialog {
+  width: min(520px, calc(100vw - 32px));
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+}
+
+.queue-report p {
+  margin: 4px 0;
+}
