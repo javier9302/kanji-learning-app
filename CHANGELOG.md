@@ -10,7 +10,7 @@ Cómo funciona todo hoy: [docs/COMO-FUNCIONA.md](docs/COMO-FUNCIONA.md).
   (前置き → [まえ][お]き). Así se sabe qué kanji fallaste: la lectura buena sale debajo de cada
   casilla fallada y lo que aciertas de cada lectura se ve en la ficha del kanji (Mis palabras →
   Kanjis). Se puede volver a una sola casilla en Ajustes → Repaso. Para sincronizarlo, vuelve a
-  ejecutar `schema.sql`.
+  ejecutar `schema.sql` (`853501b`).
 
 - **Mis palabras → Kanjis** (solo premium): la tabla de todos los kanjis, por nivel JLPT, grado
   escolar o importancia, con cada uno dominado, parcial o sin conocer según las palabras que
