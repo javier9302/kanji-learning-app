@@ -129,6 +129,12 @@ aunque sea de un nivel supuesto, y una acertada cuenta aunque sea de un nivel su
   («lectura nueva めい de 名 · kanji nuevo 有 · frecuencia n.º 900»). Va con la respuesta porque
   cuenta la lectura.
 - Como mucho **5 nuevas por sesión** (se cambia en Ajustes). Los repasos pendientes salen antes y no cuentan.
+- **Práctica extra**: si con los repasos pendientes y las nuevas no se llega al número de preguntas
+  elegido, se completa con palabras ya estudiadas que aún no tocan, las que vuelven antes primero.
+  Nunca las ya repasadas hoy, y las dominadas al final. Si la aciertas, FSRS la calcula como un
+  repaso adelantado y se guarda solo si la deja para **más tarde** (un Fácil puede alejarla; repasar
+  antes de tiempo nunca la acerca); si no, queda igual. Fallarla («Otra vez») la vuelve a poner en
+  repaso, como siempre.
 - Con «Mostrar por qué sale cada palabra nueva» (Ajustes) se ven las 100 primeras con cada
   componente del orden, su valor de MMR y su porqué, para ajustar los pesos.
 
@@ -140,6 +146,8 @@ palabras que ya conoce o está aprendiendo. En «Palabras y kanjis» se alternan
 ### 4. Cómo se pregunta en Repasar
 
 - **Tarjetas**: palabra o kanji; el usuario ve la respuesta y se puntúa (Otra vez / Difícil / Bien / Fácil).
+- Debajo de cada botón de valoración va su tecla (1 a 4) y cuándo volvería a salir con esa
+  respuesta («3 · 57 d»); en la práctica extra, «sin cambios» si esa respuesta no la aleja.
 - **Escribir la lectura + Palabra sola**: la palabra; se escribe su lectura en hiragana. Solo palabras.
   Si tiene más de un kanji, **una casilla por kanji** con el kana escrito entre ellas
   (前置き → [まえ][お]き); Enter pasa a la siguiente. La palabra está bien solo si lo están todas

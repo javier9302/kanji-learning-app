@@ -195,6 +195,7 @@ const EN = {
   "Para activarlo, pide el plan premium al administrador.": "To turn it on, ask the administrator for the premium plan.",
   "Inicia sesión con una cuenta premium para verlo.": "Sign in with a premium account to see it.",
   "Tus datos": "Your data",
+  "sin cambios": "no change",
   "está en tu lista importada": "it's on your imported list",
   "También puedes importar una lista de palabras (por ejemplo, la que te proponga Claude con ese archivo): saldrán primero entre tus palabras nuevas.": "You can also import a list of words (for example, the one Claude suggests from that file): they'll come first among your new words.",
   "Importar lista": "Import list",

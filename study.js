@@ -494,7 +494,11 @@ async function startSession() {
   // Primero lo pendiente; después las nuevas, con su tope; el resto, práctica extra
   const reviews = shuffle(due).slice(0, count);
   const news = fresh.slice(0, Math.min(maxNewCards(), count - reviews.length));
-  const queue = [...reviews, ...news, ...extra].slice(0, count);
+  // Práctica extra para completar la sesión: nunca lo ya repasado hoy, y las dominadas al final
+  const reviewedToday = (rec) => !!rec.lastReviewed && isoDate(new Date(rec.lastReviewed)) === today();
+  const practice = extra.filter((card) => !reviewedToday(card.rec))
+    .sort((a, b) => (a.rec.status === "mastered") - (b.rec.status === "mastered"));
+  const queue = [...reviews, ...news, ...practice].slice(0, count);
 
   if (!queue.length) {
     session = null;
@@ -700,9 +704,14 @@ function showCard() {
   /* Muestra la respuesta y los botones para continuar: [valoración, etiqueta, clase] */
   function reveal(ratings, preferred) {
     const now = new Date();
-    // Debajo de cada botón, cuándo volvería a salir. La práctica extra no mueve el calendario.
-    const when = (rating) => rating === "next" || keepsDate(card, rating) ? ""
-      : ` · ${intervalLabel(nextCard(card.rec || {}, rating, now), now)}`;
+    // Debajo de cada botón, cuándo volvería a salir. En la práctica extra, «sin cambios»
+    // si la respuesta no la deja para más tarde (extraOutcome).
+    const when = (rating) => {
+      if (rating === "next") return "";
+      const extra = extraOutcome(card, rating, now);
+      if (extra?.keep) return ` · ${t("sin cambios")}`;
+      return ` · ${intervalLabel(extra?.next || nextCard(card.rec || {}, rating, now), now)}`;
+    };
     if (pick) area.querySelector(".card-sentence").remove(); // abajo va entera, con furigana
     area.querySelector("#sentTranslation")?.remove();
     answer.innerHTML = `
@@ -970,8 +979,17 @@ function bindShortcuts() {
   });
 }
 
-/* Práctica extra (aún no tocaba) acertada: no cambia el calendario */
-const keepsDate = (card, rating) => card.group === "extra" && rating !== "again" && !card.failed;
+/* Práctica extra (aún no tocaba) acertada: FSRS la calcula como un repaso
+   adelantado, pero solo se guarda si la deja para MÁS tarde. Repasar antes de
+   tiempo nunca acerca la fecha: un «Fácil» a una palabra que vuelve en 20 días
+   la puede llevar a 35; un «Difícil» que la dejaría en 10 no cambia nada.
+   Devuelve null (no es práctica extra acertada: se valora como siempre),
+   { next } (la fecha nueva) o { keep: true } (sin cambios). */
+function extraOutcome(card, rating, now = new Date()) {
+  if (card.group !== "extra" || rating === "again" || card.failed || !card.rec) return null;
+  const next = nextCard(card.rec, rating, now);
+  return new Date(next.due) > new Date(fsrsCard(card.rec, now).due) ? { next } : { keep: true };
+}
 
 /* Registra la respuesta: repaso espaciado, historial del día y estado del elemento */
 async function gradeCard(card, rating) {
@@ -991,10 +1009,11 @@ async function gradeCard(card, rating) {
   }
   card.attempts = (card.attempts || 0) + 1;
 
-  if (keepsDate(card, rating)) {
+  const extra = extraOutcome(card, rating);
+  if (extra?.keep) {
     rec.studied = true;
   } else {
-    const next = nextCard(rec, rating);
+    const next = extra?.next || nextCard(rec, rating);
     applyCard(rec, next);
     if (staysInSession(next)) card.requeue = correct ? "later" : "soon";
   }

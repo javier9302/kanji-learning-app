@@ -171,6 +171,50 @@ export default async function extra({ page, step, check }) {
     await page.evaluate(() => { $("kanjiBoxesInput").checked = true; $("kanjiBoxesInput").dispatchEvent(new Event("change")); });
   });
 
+  await step("práctica extra: cada botón dice cuándo vuelve o «sin cambios», Fácil la aleja y no se repite el mismo día", async () => {
+    // 上手: dominada hace 10 días, vuelve dentro de 20. Como práctica extra (aún no le toca)
+    const shown = await page.evaluate(async () => {
+      const rec = userWords.get("上手|じょうず") || blankUserWord("上手", "じょうず");
+      applyCard(rec, masteredCard(30, new Date(Date.now() - 10 * DAY_MS)));
+      Object.assign(rec, { status: "mastered", lastReviewed: new Date(Date.now() - 10 * DAY_MS).toISOString() });
+      await saveUserWord(rec);
+      window.extraBefore = rec.nextReview;
+      const card = { kind: "word", id: rec.id, entry: BANK.words.get(rec.id), rec, group: "extra" };
+      session = { queue: [card], total: 1, done: 0, firstTry: 0, missed: new Map(), mode: "flash", sentences: false };
+      document.body.classList.add("studying");
+      showCard();
+      $("revealBtn").click();
+      return Object.fromEntries([...document.querySelectorAll("[data-rate]")].map((b) => [b.dataset.rate, b.querySelector("small").textContent]));
+    });
+    await shot(page, "practica-extra");
+    check(Object.values(shown).every((text) => text.includes("·")), JSON.stringify(shown));
+    check(!/sin cambios|no change/.test(shown.easy), JSON.stringify(shown));
+    // Repasada ahora mismo: repetirla ya no la aleja, y lo dice
+    const same = await page.evaluate(() => {
+      const rec = { ...userWords.get("上手|じょうず") };
+      applyCard(rec, masteredCard(30));
+      return extraOutcome({ group: "extra", rec }, "hard");
+    });
+    check(same?.keep === true, JSON.stringify(same));
+    await page.evaluate(() => document.querySelector('[data-rate="easy"]').click());
+    await page.waitForFunction(() => !session || !document.querySelector('[data-rate]'), { timeout: 5000 });
+    const after = await page.evaluate(() => {
+      const rec = userWords.get("上手|じょうず");
+      const extra = studyCards().extra.map((card) => card.id);
+      return { before: window.extraBefore, now: rec.nextReview, inExtra: extra.includes(rec.id) };
+    });
+    check(after.now > after.before, JSON.stringify(after));
+    // Sigue entre las «extra» posibles, pero una sesión no la vuelve a poner hoy
+    await page.evaluate(() => { $("studyMode").value = "flash"; $("studyCount").value = "0"; });
+    await page.evaluate(() => startSession());
+    const again = await page.evaluate(() => (session?.queue || []).some((card) => card.id === "上手|じょうず"));
+    check(!again, "上手 vuelve a salir hoy como práctica extra");
+    await page.evaluate(() => {
+      session = null; document.body.classList.remove("studying");
+      $("studyMode").value = "type"; $("studyCount").value = "10"; switchView("study");
+    });
+  });
+
   await step("presentación: solo al escribir la lectura; con «Palabra sola» el contenido es solo palabras", async () => {
     await setSelect("studyMode", "flash");
     check(await page.evaluate(() => $("studyPresentation").closest(".field").classList.contains("hidden")), "se ve en Tarjetas");
