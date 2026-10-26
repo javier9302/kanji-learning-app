@@ -347,7 +347,9 @@ function studyCards() {
 }
 
 /* Todo el banco: una palabra de N3 hecha con kanjis de N5 también vale para quien está en N5 */
-const ensureStudyBank = () => BANK.loadUpTo("N1");
+const ensureStudyBank = () => Promise.all([BANK.loadUpTo("N1"),
+  // Para una casilla por kanji; sin ellas se pregunta con una sola casilla
+  BANK.loadReadings().catch(() => {}), BANK.loadKanjiInfo().then(migratePracticedReadings).catch(() => {})]);
 
 /* Vista de depuración (Ajustes): por qué sale cada palabra nueva */
 function debugHTML(fresh, excluded) {
@@ -586,6 +588,8 @@ function showCard() {
   const form = session.mode === "type" && (card.kind === "word" || pick) ? "type" : "flash";
   // Un kanji que ahora se pregunta por cómo suena: no dice nada de si sabe su significado
   card.byReading = card.kind === "kanji" && !!pick;
+  // Una palabra sola se escribe con una casilla por kanji (si se puede repartir)
+  const boxes = card.boxes = form === "type" && card.kind === "word" && !pick ? wordBoxes(entry) : null;
 
   area.innerHTML = `
     <div class="card">
@@ -600,9 +604,9 @@ function showCard() {
       ${session.sentences && !pick ? `<p class="helper sent-missing">${t("Sin frase disponible")}</p>` : ""}
       ${form === "type" ? `
       <form id="readingForm" autocomplete="off">
-        <input id="readingInput" class="reading-input" type="text" lang="ja" inputmode="text"
+        ${boxes ? readingBoxesHTML(boxes) : `<input id="readingInput" class="reading-input" type="text" lang="ja" inputmode="text"
           placeholder="${t("Escribe la lectura (hiragana)")}"
-          autocapitalize="off" autocomplete="off" spellcheck="false">
+          autocapitalize="off" autocomplete="off" spellcheck="false">`}
         <button id="checkBtn" class="button button-primary" type="submit">${t("Comprobar")}</button>
         <button id="unknownBtn" class="button button-secondary" type="button">${t("No lo sé")}</button>
       </form>` : `
@@ -687,24 +691,54 @@ function showCard() {
     };
   }
 
-  const input = $("readingInput");
+  const inputs = [...area.querySelectorAll("#readingForm .reading-input")];
+  const input = inputs[0];
   let answered = false;
   // Si WanaKana está cargado, "ka" se convierte en "か" al escribir
-  if (window.wanakana && typeof window.wanakana.bind === "function") window.wanakana.bind(input);
+  if (window.wanakana && typeof window.wanakana.bind === "function") inputs.forEach((box) => window.wanakana.bind(box));
   input.focus();
+  // Con casillas, Enter pasa a la siguiente; en la última, comprueba
+  inputs.slice(0, -1).forEach((box, i) => box.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" || event.isComposing) return;
+    event.preventDefault();
+    inputs[i + 1].focus();
+  }));
 
   const lock = () => {
     answered = true;
-    input.disabled = $("checkBtn").disabled = $("unknownBtn").disabled = true;
+    for (const box of inputs) box.disabled = true;
+    $("checkBtn").disabled = $("unknownBtn").disabled = true;
   };
   $("unknownBtn").onclick = () => {
     if (answered) return;
     lock();
+    if (boxes) markBoxes(boxes, inputs, boxes.filter((box) => !box.kana).map(() => false), card);
     finish(false, t("Esta es la respuesta:"));
   };
   $("readingForm").addEventListener("submit", (event) => {
     event.preventDefault();
     if (answered) return;
+    if (boxes) {
+      const empty = inputs.find((box) => !normalizeReading(box.value));
+      if (empty) {
+        feedback.textContent = t("Escribe la lectura de cada kanji.");
+        empty.focus();
+        return;
+      }
+      // La palabra entera, con su kana: otra lectura válida de la MISMA palabra no es un fallo
+      let at = 0;
+      const whole = boxes.map((box) => box.kana ? box.sound : normalizeReading(inputs[at++].value)).join("");
+      if (whole !== normalizeReading(entry.r) && entry.alt.some((alt) => normalizeReading(alt) === whole)) {
+        feedback.textContent = t("Esa lectura también existe, pero aquí se pide la más habitual.");
+        feedback.className = "message";
+        return;
+      }
+      const graded = gradeBoxes(boxes, inputs.map((box) => normalizeReading(box.value)), normalizeReading);
+      lock();
+      markBoxes(boxes, inputs, graded.ok, card);
+      return finish(graded.correct, graded.correct ? t("¡Correcto!")
+        : t("No es correcto: debajo de cada casilla fallada tienes su lectura."));
+    }
     const typed = normalizeReading(input.value);
     if (!typed) {
       feedback.textContent = t("Escribe una lectura primero.");
@@ -742,6 +776,56 @@ function showCard() {
   });
 }
 
+/* ---------- Una casilla por kanji ----------
+   En «Palabra sola», cada kanji de la palabra tiene su casilla (前置き ->
+   [まえ][お]き) y lo que acierta o falla en cada una se guarda por lectura en
+   userKanji[c].readings (kanji-core.js, sección 4). Se desactiva en Ajustes. */
+
+/* Las casillas de una palabra, o null si va con una sola */
+function wordBoxes(entry) {
+  if (prefs.kanjiBoxes === false) return null;
+  const tags = sentenceTagsOf(entry.id);
+  const sounds = wordSounds(entry.w, entry.r, tags, (c) => kanjiVariants(BANK.kanji.get(c) || BANK.kanjiInfo.get(c)));
+  return readingBoxes(sounds, wordKanjiReadings(tags, BANK.wordKanjiFixes[entry.id]));
+}
+
+function readingBoxesHTML(boxes) {
+  let index = 0;
+  return `<div class="reading-boxes" lang="ja">${boxes.map((box) => {
+    if (box.kana) return `<span class="box-kana">${escapeHTML(box.text)}</span>`;
+    const i = index++, last = i === boxes.filter((b) => !b.kana).length - 1;
+    return `<label class="reading-box">
+      <span class="box-kanji">${escapeHTML(box.text)}</span>
+      <input class="reading-input box-input" type="text" lang="ja" inputmode="text" enterkeyhint="${last ? "done" : "next"}"
+        aria-label="${escapeHTML(t("Lectura de {kanji}", { kanji: box.text }))}"
+        autocapitalize="off" autocomplete="off" spellcheck="false">
+      <span class="box-answer"></span>
+    </label>`;
+  }).join("")}</div>`;
+}
+
+/* Marca cada casilla (bien o mal, con la lectura buena debajo de las falladas)
+   y, si es el primer intento, guarda el resultado de cada lectura de kanji */
+function markBoxes(boxes, inputs, ok, card) {
+  const asked = boxes.filter((box) => !box.kana);
+  asked.forEach((box, i) => {
+    const label = inputs[i].closest(".reading-box");
+    label.classList.add(ok[i] ? "box-ok" : "box-wrong");
+    if (!ok[i]) label.querySelector(".box-answer").textContent = box.sound;
+  });
+  if (card.attempts) return;
+  const byKanji = new Map();
+  asked.forEach((box, i) => {
+    if (box.kanji && box.reading) (byKanji.get(box.kanji) || byKanji.set(box.kanji, []).get(box.kanji)).push([box.reading, ok[i]]);
+  });
+  for (const [c, results] of byKanji) {
+    const rec = userKanji.get(c) || blankUserKanji(c);
+    rec.readings ??= {};
+    for (const [reading, right] of results) addReadingResult(rec.readings, reading, right, today());
+    saveUserKanji(rec).catch((error) => console.error("No se pudo guardar la lectura del kanji:", error));
+  }
+}
+
 /* Una palabra se ha preguntado dentro de una frase: la frase cuenta como vista */
 function sentencePracticed(pick, card, correct) {
   markSentenceShown(pick.sentence.id).catch((error) => console.error("No se pudo anotar la frase:", error));
@@ -751,8 +835,31 @@ function sentencePracticed(pick, card, correct) {
     const entry = meta.practice[tag] ??= { n: 0, last: "" };
     entry.n++;
     entry.last = today();
+    addPracticedReading(tag, 1);
   }
   saveMeta();
+}
+
+/* Una lectura de kanji acertada en una frase también cuenta en sus lecturas
+   (userKanji[c].readings), si es una de las que usa el banco: la etiqueta de la
+   frase es la de diccionario y en unas pocas palabras no coincide (上手 じょう
+   lleva 上|しょう), así que lo que no es del banco no se anota. */
+function addPracticedReading(tag, times, last = today()) {
+  const [c, reading] = tag.split("|");
+  if ([...c].length !== 1 || !BANK.kanjiInfo.get(c)?.readings.some(([r]) => r === reading)) return;
+  const rec = userKanji.get(c) || blankUserKanji(c);
+  rec.readings ??= {};
+  for (let i = 0; i < times; i++) addReadingResult(rec.readings, reading, true, last);
+  saveUserKanji(rec).catch((error) => console.error("No se pudo guardar la lectura del kanji:", error));
+}
+
+/* Una vez: «Lecturas de kanji practicadas» de antes (meta.practice, solo en este
+   dispositivo) pasa a las lecturas de cada kanji, que se sincronizan */
+async function migratePracticedReadings() {
+  if (meta.practiceMigrated || !BANK.kanjiInfo.size) return;
+  for (const [tag, entry] of Object.entries(meta.practice || {})) addPracticedReading(tag, entry.n || 0, entry.last || today());
+  meta.practiceMigrated = true;
+  await saveMeta();
 }
 
 /* Pasa a la siguiente tarjeta. Las falladas vuelven a salir un poco después y

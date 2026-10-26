@@ -231,3 +231,15 @@ test("resumen semanal: uno por usuario, semana e idioma", async () => {
   await db.query("insert into public.summary_generations (user_id, ok, result) values ($1, true, 'ok')", [USER]);
   await db.exec(SCHEMA);
 });
+
+test("lecturas de cada kanji: kanji_readings en user_kanji, con tamaño máximo", async () => {
+  const db = await database();
+  const USER = "00000000-0000-0000-0000-000000000001";
+  await db.exec(`insert into auth.users (id) values ('${USER}') on conflict do nothing; delete from public.user_kanji;`);
+  await db.query("insert into public.user_kanji (user_id, id, kanji_readings) values ($1, '名', $2::jsonb)",
+    [USER, JSON.stringify({ めい: { ok: 3, ko: 1, last: "2026-10-26" } })]);
+  const { rows } = await db.query("select kanji_readings from public.user_kanji where id = '名'");
+  assert.deepEqual(rows[0].kanji_readings, { めい: { ok: 3, ko: 1, last: "2026-10-26" } });
+  await assert.rejects(db.query("insert into public.user_kanji (user_id, id, kanji_readings) values ($1, '前', $2::jsonb)",
+    [USER, JSON.stringify({ x: "a".repeat(4001) })]), /user_kanji_readings_size_check/);
+});

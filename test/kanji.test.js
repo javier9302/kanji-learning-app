@@ -93,3 +93,41 @@ test("kanjiGroups: por nivel, grado o importancia, con «other» y la cuenta por
   assert.deepEqual(K.kanjiGroups(list, "grade", (c) => state[c]).map((group) => group.key), ["grade1", "grade2", "grade3", "other"]);
   assert.deepEqual(K.kanjiGroups(list, "frequency", (c) => state[c]).map((group) => group.key), ["top100", "top250", "other"]);
 });
+
+test("readingBoxes: una casilla por kanji, el kana escrito y a qué lectura cuenta cada una", () => {
+  const boxes = K.readingBoxes([["前", "まえ", "前|まえ"], ["置", "お", "置|お"], ["き", "き", null]], [["前", "まえ"], ["置", "お"]]);
+  assert.deepEqual(boxes, [
+    { text: "前", sound: "まえ", kanji: "前", reading: "まえ" },
+    { text: "置", sound: "お", kanji: "置", reading: "お" },
+    { text: "き", sound: "き", kana: true }
+  ]);
+  // 上手: suena じょう; cuenta para la lectura じょう de 上 (la corrección de kanji-info.js)
+  const jouzu = K.readingBoxes([["上", "じょう", "上|しょう"], ["手", "ず", "手|ず"]], [["上", "じょう"], ["手", "ず"]]);
+  assert.equal(jouzu[0].reading, "じょう");
+  // 時々: el segundo cuenta otra vez para 時 とき
+  const tokidoki = K.readingBoxes([["時", "とき", "時|とき"], ["々", "どき", "時|とき"]], [["時", "とき"], ["時", "とき"]]);
+  assert.deepEqual(tokidoki.map((box) => [box.kanji, box.reading]), [["時", "とき"], ["時", "とき"]]);
+  // Una sola casilla no aporta nada: se pregunta como siempre
+  assert.equal(K.readingBoxes([["山", "やま", "山|やま"]], [["山", "やま"]]), null);
+  assert.equal(K.readingBoxes([["今日", "きょう", "今日|きょう"]], []), null);
+  assert.equal(K.readingBoxes(null, []), null);
+  // お兄さん: una casilla especial (sin lectura del kanji) junto a otra que sí cuenta
+  const special = K.readingBoxes([["兄", "にい", "兄|にい"], ["弟", "おとうと", "弟|おとうと"]], [["弟", "おとうと"]]);
+  assert.deepEqual(special.map((box) => box.reading), [null, "おとうと"]);
+});
+
+test("gradeBoxes: la palabra está bien si lo están todas; cada kanji se anota aparte", () => {
+  const boxes = K.readingBoxes([["有", "ゆう", "有|ゆう"], ["名", "めい", "名|めい"]], [["有", "ゆう"], ["名", "めい"]]);
+  assert.deepEqual(K.gradeBoxes(boxes, ["ゆう", "めい"]), { correct: true, ok: [true, true], results: [["有", "ゆう", true], ["名", "めい", true]] });
+  assert.deepEqual(K.gradeBoxes(boxes, ["ゆう", "な"]), { correct: false, ok: [true, false], results: [["有", "ゆう", true], ["名", "めい", false]] });
+  assert.equal(K.gradeBoxes(boxes, ["ユウ", " めい "]).correct, true); // katakana y espacios no importan
+  assert.equal(K.gradeBoxes(boxes, ["ゆう"]).correct, false);          // casilla vacía
+});
+
+test("addReadingResult: aciertos, fallos y el último día", () => {
+  const readings = {};
+  K.addReadingResult(readings, "めい", true, "2026-10-25");
+  K.addReadingResult(readings, "めい", false, "2026-10-26");
+  K.addReadingResult(readings, "な", true, "2026-10-26");
+  assert.deepEqual(readings, { めい: { ok: 1, ko: 1, last: "2026-10-26" }, な: { ok: 1, ko: 0, last: "2026-10-26" } });
+});

@@ -53,7 +53,10 @@ Se guardan en el dispositivo (IndexedDB) y, con cuenta, se sincronizan con Supab
 
 - `userWords`: progreso por palabra (clave `escritura|lectura`). Estado: `unknown`,
   `learning`, `pre_known` o `mastered`; además, la tarjeta FSRS, aciertos y fallos.
-- `userKanji`: progreso por kanji. Si conoce su significado, si sabe escribirlo y su tarjeta FSRS.
+- `userKanji`: progreso por kanji. Si conoce su significado, si sabe escribirlo, su tarjeta FSRS y
+  lo acertado y fallado de cada lectura al escribirla (`readings`: una casilla por kanji y las
+  lecturas acertadas en frases; las de «Lecturas de kanji practicadas» de antes se copiaron aquí
+  una vez por dispositivo).
 - `texts`, `words`, `sentences`, `translations`: textos, el diccionario propio, las frases
   sacadas de los textos y las traducciones respondidas.
 - `meta`: historial diario, perfil de lectura (`reading.level`, `reading.assumed`),
@@ -108,6 +111,14 @@ palabras que ya conoce o está aprendiendo. En «Palabras y kanjis» se alternan
 
 - **Tarjetas**: palabra o kanji; el usuario ve la respuesta y se puntúa (Otra vez / Difícil / Bien / Fácil).
 - **Escribir la lectura + Palabra sola**: la palabra; se escribe su lectura en hiragana. Solo palabras.
+  Si tiene más de un kanji, **una casilla por kanji** con el kana escrito entre ellas
+  (前置き → [まえ][お]き); Enter pasa a la siguiente. La palabra está bien solo si lo están todas
+  (si no, cuenta como Otra vez para su tarjeta), y cada casilla se anota aparte en la lectura de su
+  kanji: aciertos, fallos y el último día (`userKanji[c].readings`, solo el primer intento). Debajo
+  de cada casilla fallada sale su lectura. Cada casilla pide cómo suena el kanji en la palabra
+  (学校: がっ, 上手: じょう) y cuenta para su lectura de diccionario (学 がく, 上 じょう). Los kanjis
+  que se leen juntos (今日) van en una casilla que no cuenta para ninguno, y las palabras de un solo
+  kanji o que no se pueden repartir, con una sola casilla. Se desactiva en Ajustes → Repaso.
 - **Escribir la lectura + En una frase**: la palabra resaltada dentro de una frase; se escribe la
   lectura de la parte resaltada (la de diccionario o la conjugada: 行きます → いきます / いく). Si el
   elemento es un kanji suelto, se resalta solo ese kanji dentro de una palabra y se escribe cómo
@@ -272,7 +283,8 @@ guarda aparte, se calcula al abrir la tabla.
   suma, por cada palabra de la lista de frecuencia que lo lleva, de 100 / (puesto + 99); sin
   palabras frecuentes, cuenta su frecuencia en prensa. Dentro de cada grupo van primero los más
   importantes.
-- **Ficha de un kanji**: significados, cada lectura relevante (vista o que te falta), las palabras
+- **Ficha de un kanji**: significados, cada lectura relevante (vista o que te falta, y cuántas veces
+  la has acertado y fallado al escribirla), las palabras
   que conoces con él y, por cada lectura que falta, las 3 palabras más frecuentes que te la enseñan.
 
 ## Dónde cambiar cada número

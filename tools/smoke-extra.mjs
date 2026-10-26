@@ -125,6 +125,52 @@ export default async function extra({ page, step, check }) {
       !!document.querySelector(".card-symbol")), "salió una frase");
   });
 
+  await step("«Palabra sola»: una casilla por kanji; cada lectura se anota en su kanji", async () => {
+    await studyOne("前置き|まえおき");
+    const shown = await page.evaluate(() => ({
+      boxes: [...document.querySelectorAll(".reading-box .box-kanji")].map((el) => el.textContent),
+      kana: [...document.querySelectorAll(".reading-boxes .box-kana")].map((el) => el.textContent)
+    }));
+    check(shown.boxes.join() === "前,置" && shown.kana.join() === "き", JSON.stringify(shown));
+    await shot(page, "casillas");
+    // Enter en la primera pasa a la segunda; la segunda, mal
+    const moved = await page.evaluate(() => {
+      const [first, second] = document.querySelectorAll(".box-input");
+      first.value = "まえ";
+      first.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+      const focused = document.activeElement === second;
+      second.value = "おく";
+      $("checkBtn").click();
+      return focused;
+    });
+    check(moved, "Enter no pasó a la siguiente casilla");
+    await page.waitForSelector('[data-rate="next"]', { timeout: 5000 });
+    await shot(page, "casillas-fallo");
+    const wrong = await page.evaluate(() => ({
+      marks: [...document.querySelectorAll(".reading-box")].map((el) => el.classList.contains("box-ok") ? "ok" : "ko"),
+      shown: document.querySelectorAll(".reading-box .box-answer")[1].textContent,
+      mae: userKanji.get("前")?.readings, oki: userKanji.get("置")?.readings, word: userWords.get("前置き|まえおき")?.incorrectCount
+    }));
+    check(wrong.marks.join() === "ok,ko" && wrong.shown === "お" && wrong.mae?.まえ?.ok === 1 && wrong.oki?.お?.ko === 1 && wrong.word === 1,
+      JSON.stringify(wrong));
+    // 上手: suena じょう y cuenta para la lectura じょう de 上 (no la しょう de bank/readings.js)
+    await studyOne("上手|じょうず");
+    await page.evaluate(() => {
+      const [first, second] = document.querySelectorAll(".box-input");
+      first.value = "じょう"; second.value = "ず";
+      $("checkBtn").click();
+    });
+    await page.waitForSelector('[data-rate="good"]', { timeout: 5000 });
+    check(await page.evaluate(() => $("feedback").classList.contains("correct") && userKanji.get("上")?.readings?.じょう?.ok === 1),
+      "上手 no contó para 上 じょう");
+    await page.evaluate(() => document.querySelector('[data-rate="good"]').click());
+    // Sin casillas (Ajustes → Repaso): una sola, como antes
+    await page.evaluate(() => { $("kanjiBoxesInput").checked = false; $("kanjiBoxesInput").dispatchEvent(new Event("change")); });
+    await studyOne("前置き|まえおき");
+    check(await page.evaluate(() => !!$("readingInput") && !document.querySelector(".reading-box")), "siguen las casillas");
+    await page.evaluate(() => { $("kanjiBoxesInput").checked = true; $("kanjiBoxesInput").dispatchEvent(new Event("change")); });
+  });
+
   await step("presentación: solo al escribir la lectura; con «Palabra sola» el contenido es solo palabras", async () => {
     await setSelect("studyMode", "flash");
     check(await page.evaluate(() => $("studyPresentation").closest(".field").classList.contains("hidden")), "se ve en Tarjetas");

@@ -980,6 +980,17 @@ alter table public.user_kanji add column if not exists last_written_at timestamp
 alter table public.user_kanji add column if not exists write_fsrs jsonb;
 
 -- =========================================
+-- LECTURAS DE CADA KANJI
+-- =========================================
+
+-- Lo acertado y fallado de cada lectura de un kanji al escribirla (una casilla
+-- por kanji en Repasar, y las frases): { "めい": { "ok": 3, "ko": 1, "last": "2026-10-26" } }
+alter table public.user_kanji add column if not exists kanji_readings jsonb;
+alter table public.user_kanji drop constraint if exists user_kanji_readings_size_check;
+alter table public.user_kanji add constraint user_kanji_readings_size_check
+  check (octet_length(coalesce(kanji_readings::text, '')) <= 4000) not valid;
+
+-- =========================================
 -- FRASES COMPARTIDAS
 -- =========================================
 

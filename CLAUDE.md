@@ -48,9 +48,10 @@ después de `learning-core.js`)
 - **`kanji-table.js` / `kanji-core.js`**: Mis palabras → Kanjis (premium). El estado de cada kanji
   (dominado, parcial, sin conocer) se deduce de las palabras que conoce (`kanjiStates`), con sus
   lecturas relevantes de `bank/kanji-info.js` (generado con `tools/build-kanji.mjs` desde KANJIDIC2;
-  no se edita a mano). Es la fase A del plan «progresión por palabras» del chat del 2026-10-26;
-  quedan B (una casilla por kanji al escribir la lectura), C (nuevo orden de palabras nuevas),
-  D (temas con embeddings) y E (exportar/importar la cola).
+  no se edita a mano). Plan «progresión por palabras» del chat del 2026-10-26: hechas A (la tabla)
+  y B (una casilla por kanji al escribir la lectura en Repasar, `readingBoxes` / `gradeBoxes`; lo
+  acertado por lectura va a `userKanji[c].readings`, columna `kanji_readings`); quedan C (nuevo
+  orden de palabras nuevas), D (temas con embeddings) y E (exportar/importar la cola).
 - **`grammar-core.js`**: catálogo de gramática (`GRAMMAR`, hoy solo N5), detector sobre las piezas
   de kuromoji de la frase entera (`detectGrammar`) y medición (`grammarStates`). Una estructura
   nueva lleva su regla, su ejemplo y, si se parece a otra, un caso en «no confunde» de
@@ -69,7 +70,7 @@ después de `learning-core.js`)
 - **`sw.js`**: service worker; red primero para la app y caché permanente para `vendor/`.
 
 Progreso del usuario: `userWords` (clave `"escritura|lectura"`) y `userKanji` (clave el carácter),
-con la tarjeta FSRS en `record.fsrs`. `meta` guarda el historial diario, el perfil de lectura y
+con la tarjeta FSRS en `record.fsrs` (y, en los kanjis, lo acertado de cada lectura en `record.readings`). `meta` guarda el historial diario, el perfil de lectura y
 `meta.practice` («Lecturas de kanji practicadas»).
 
 ## Convenciones

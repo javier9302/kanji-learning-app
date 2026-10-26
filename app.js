@@ -115,7 +115,8 @@ function saveLocal(key, value) {
 const prefs = loadLocal("kanji-prefs", {
   studyType: "word", studyMode: "type", studyCount: "10", goal: 20,
   furigana: "unknown", // furigana al leer: unknown | all | none
-  kanjiGroup: "jlpt"   // Mis palabras → Kanjis: jlpt | grade | frequency
+  kanjiGroup: "jlpt",  // Mis palabras → Kanjis: jlpt | grade | frequency
+  kanjiBoxes: true     // Repasar, «Palabra sola»: una casilla por kanji al escribir la lectura
 });
 // Presentación al escribir la lectura: word (palabra sola) | sentence (en una frase).
 // Sustituye al antiguo ajuste "Repasar con frases": quien lo tenía activado empieza en "sentence".
@@ -681,6 +682,7 @@ async function clearLocalData() {
   meta.deleted = {};
   meta.reading = {};
   meta.practice = {};
+  delete meta.practiceMigrated;
   meta.writing = {};
   meta.snapshots = {};
   meta.roadmap = {};
@@ -1017,6 +1019,11 @@ function bindSettings() {
     const value = Math.round(Number($("maxNewInput").value));
     prefs.maxNew = Math.min(50, Math.max(0, Number.isFinite(value) ? value : STUDY_CONFIG.maxNewPerSession));
     $("maxNewInput").value = prefs.maxNew;
+    saveLocal("kanji-prefs", prefs);
+  });
+  $("kanjiBoxesInput").checked = prefs.kanjiBoxes !== false;
+  $("kanjiBoxesInput").addEventListener("change", () => {
+    prefs.kanjiBoxes = $("kanjiBoxesInput").checked;
     saveLocal("kanji-prefs", prefs);
   });
   $("debugStudyInput").checked = !!prefs.debugStudy;

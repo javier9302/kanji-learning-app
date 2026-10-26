@@ -65,9 +65,10 @@ const srsFromRow = (row) => ({
    (falta ejecutar supabase/schema.sql) se sube sin ellas y no se marca como
    subido, para volver a enviarlo completo cuando existan. */
 const PHASE2_COLUMNS = ["fsrs", "origin", "meaning", "seen_at"];
-/* Columnas de Traducir (significado). Si faltan solo se quitan estas: el resto
-   del progreso, también el de la fase 2, se sigue subiendo. */
-const MEANING_COLUMNS = ["meaning_correct", "meaning_wrong", "last_meaning_at", "last_written_at", "write_fsrs"];
+/* Columnas de Traducir (significado), de Escribir y las lecturas acertadas de
+   cada kanji. Si faltan solo se quitan estas: el resto del progreso, también el
+   de la fase 2, se sigue subiendo. */
+const MEANING_COLUMNS = ["meaning_correct", "meaning_wrong", "last_meaning_at", "last_written_at", "write_fsrs", "kanji_readings"];
 const NEWER_ORIGINS = ["diccionario", "traducir"]; // orígenes que una base de datos sin actualizar no admite
 const without = (rows, columns) => rows.map((row) => Object.fromEntries(Object.entries(row).filter(([key]) => !columns.includes(key))));
 
@@ -216,7 +217,8 @@ async function pullReading(userId) {
       writes: row.writes || 0, firstSeen: msOf(row.first_seen), lastSeen: msOf(row.last_seen),
       updatedAt: stamp, ...(row.seen_at ? { seenAt: msOf(row.seen_at) } : {}),
       ...(row.last_written_at ? { lastWrittenAt: msOf(row.last_written_at) } : {}),
-      ...(row.write_fsrs ? { writeFsrs: row.write_fsrs } : {}), ...srsFromRow(row)
+      ...(row.write_fsrs ? { writeFsrs: row.write_fsrs } : {}),
+      ...(row.kanji_readings ? { readings: row.kanji_readings } : {}), ...srsFromRow(row)
     };
     userKanji.set(record.id, record);
     newerKanji.push(record);
@@ -320,7 +322,7 @@ async function pushReading(userId) {
     user_id: userId, id: k.id, status: k.status || "unknown",
     knows_meaning: !!k.knowsMeaning, can_write: !!k.canWrite, writes: whole(k.writes),
     first_seen: isoOf(k.firstSeen), last_seen: isoOf(k.lastSeen), seen_at: isoOf(k.seenAt),
-    last_written_at: isoOf(k.lastWrittenAt), write_fsrs: k.writeFsrs || null,
+    last_written_at: isoOf(k.lastWrittenAt), write_fsrs: k.writeFsrs || null, kanji_readings: k.readings || null,
     client_updated_at: Math.round(k.updatedAt), ...srsToRow(k)
   })), kanjiChanged.map((k) => [k.id, String(k.updatedAt)]), pushed.kanji);
 

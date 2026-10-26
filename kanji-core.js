@@ -3,7 +3,8 @@
    Lo que se sabe de cada kanji, deducido de las PALABRAS que conoce el
    estudiante: un kanji se aprende en contexto, no suelto. Sin navegador ni
    datos del usuario alrededor, para poder probarlo con Node. Se carga después
-   de sentences-core.js; lo usan kanji-table.js y tools/build-kanji.mjs.
+   de sentences-core.js; lo usan kanji-table.js, study.js (una casilla por
+   kanji al escribir la lectura) y tools/build-kanji.mjs.
 
    Cada kanji tiene sus lecturas RELEVANTES: las que aparecen en palabras del
    banco (bank/kanji-info.js, con cuántas palabras usa cada una). Las raras
@@ -223,10 +224,59 @@ function kanjiGroups(list, by, stateOf) {
   });
 }
 
+/* =========================================
+   4. UNA CASILLA POR KANJI
+   -----------------------------------------
+   Al escribir la lectura de una palabra («Palabra sola»), cada kanji tiene su
+   casilla y el kana va escrito entre ellas: 前置き -> [まえ][お]き. Así se sabe
+   qué kanji falló, no solo la palabra. Lo que suena cada kanji sale de
+   wordSounds; si no encaja, se pregunta con una sola casilla, como antes.
+   ========================================= */
+
+/* Las casillas de una palabra.
+     sounds    wordSounds(...) de la palabra
+     readings  sus lecturas de kanji (wordKanjiReadings): a qué lectura del kanji
+               cuenta cada casilla
+   Devuelve [{ text, sound, kanji, reading }] (en las partes en kana, kana: true
+   y sin casilla), o null si no hay reparto o si la palabra es una sola casilla
+   (山 やま, 今日 きょう: no aporta nada). kanji y reading son null en las
+   partes que no cuentan para un kanji (今日 きょう, お兄さん にい). */
+function readingBoxes(sounds, readings) {
+  if (!sounds) return null;
+  const left = [...(readings || [])];
+  const boxes = sounds.map(([text, sound, tag]) => {
+    if (!tag) return { text, sound, kana: true };
+    const kanji = tag.split("|")[0];
+    if ([...kanji].length !== 1) return { text, sound, kanji: null, reading: null };
+    const at = left.findIndex(([c]) => c === kanji);
+    const reading = at >= 0 ? left.splice(at, 1)[0][1] : null;
+    return { text, sound, kanji, reading };
+  });
+  return boxes.filter((box) => !box.kana).length > 1 ? boxes : null;
+}
+
+/* Corrige las casillas. typed: lo escrito en cada una (ya en hiragana), en orden.
+   Devuelve { correct, ok: [por casilla], results: [[kanji, lectura, acertó]] } */
+function gradeBoxes(boxes, typed, normalize = (text) => kcHiragana(String(text).trim())) {
+  const asked = boxes.filter((box) => !box.kana);
+  const ok = asked.map((box, i) => normalize(typed[i] || "") === normalize(box.sound));
+  const results = asked.map((box, i) => [box.kanji, box.reading, ok[i]]).filter(([kanji, reading]) => kanji && reading);
+  return { correct: ok.every(Boolean), ok, results };
+}
+
+/* Suma un resultado a las lecturas de un kanji (userKanji[c].readings):
+   { "めい": { ok: aciertos, ko: fallos, last: "2026-10-26" } } */
+function addReadingResult(readings, reading, correct, day) {
+  const entry = readings[reading] ??= { ok: 0, ko: 0, last: "" };
+  entry[correct ? "ok" : "ko"]++;
+  entry.last = day;
+  return readings;
+}
+
 /* Para tools/ y las pruebas (Node); en el navegador son globales */
 if (typeof module !== "undefined") {
   module.exports = {
     KC_LEVELS, KC_STATES, KC_FREQUENCY_BANDS, normalizeKanjiReading, frequencyWeight, relevantReadings,
-    wordSounds, wordKanjiReadings, kanjiStates, kanjiGroup, kanjiGroups
+    wordSounds, wordKanjiReadings, kanjiStates, kanjiGroup, kanjiGroups, readingBoxes, gradeBoxes, addReadingResult
   };
 }

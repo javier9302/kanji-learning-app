@@ -56,6 +56,7 @@ function kanjiMeaningKnown(c, knownIds) {
 /* Todo lo de la tabla: el estado de cada kanji y la lista para agruparlos */
 async function loadKanjiTable() {
   await Promise.all([BANK.loadUpTo("N1"), BANK.loadReadings(), BANK.loadKanjiInfo()]);
+  await migratePracticedReadings();
   const knownWords = knownKanjiWords();
   const knownIds = new Set(knownWords.map((word) => word.id));
   const states = kanjiStates({
@@ -147,10 +148,14 @@ function kanjiDetailHTML(c) {
   const facts = [info.level, info.grade >= 1 && info.grade <= 8 ? kanjiGroupName(`grade${info.grade}`) : "",
     info.importance ? t("importancia n.º {n}", { n: info.importance }) : ""].filter(Boolean);
 
+  // Lo que ha acertado y fallado de cada lectura al escribirla (una casilla por kanji, frases)
+  const results = userKanji.get(c)?.readings || {};
   const readingRow = (reading) => {
     const seen = state.known.includes(reading);
+    const tried = results[reading];
     return `<li class="${seen ? "reading-known" : "reading-missing"}"><span lang="ja">${escapeHTML(reading)}</span>
-      <span class="helper">${escapeHTML(plural(counts.get(reading) || 0, "palabra", "palabras"))} · ${seen ? t("vista") : t("te falta")}</span></li>`;
+      <span class="helper">${escapeHTML([plural(counts.get(reading) || 0, "palabra", "palabras"), seen ? t("vista") : t("te falta"),
+        tried ? t("{ok} aciertos y {ko} fallos al escribirla", tried) : ""].filter(Boolean).join(" · "))}</span></li>`;
   };
   const rare = (info.readings || []).map(([reading]) => reading).filter((reading) => !relevant.includes(reading));
   const known = state.words.map((id) => BANK.words.get(id)).filter(Boolean);

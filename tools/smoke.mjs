@@ -56,9 +56,13 @@ await step("la app arranca", async () => {
 await step("repaso: una palabra escrita y valorada", async () => {
   await page.evaluate(() => { $("studyMode").value = "type"; switchView("study"); });
   await page.click("#startBtn");
-  await page.waitForSelector("#readingInput");
-  const reading = await page.evaluate(() => session.queue[0].entry.r);
-  await page.evaluate((value) => { $("readingInput").value = value; }, reading);
+  await page.waitForSelector("#readingForm .reading-input");
+  // Una casilla por kanji si la palabra se puede repartir; si no, una sola
+  await page.evaluate(() => {
+    const card = session.queue[0];
+    const sounds = card.boxes ? card.boxes.filter((box) => !box.kana).map((box) => box.sound) : [card.entry.r];
+    document.querySelectorAll("#readingForm .reading-input").forEach((input, i) => { input.value = sounds[i]; });
+  });
   await page.click("#checkBtn");
   await page.waitForSelector('[data-rate="good"]');
   await page.click('[data-rate="good"]');

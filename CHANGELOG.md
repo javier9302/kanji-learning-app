@@ -6,6 +6,12 @@ Cómo funciona todo hoy: [docs/COMO-FUNCIONA.md](docs/COMO-FUNCIONA.md).
 
 ## 2026-10-26
 
+- **Repasar → Escribir la lectura (Palabra sola)**: una casilla por kanji, con el kana ya escrito
+  (前置き → [まえ][お]き). Así se sabe qué kanji fallaste: la lectura buena sale debajo de cada
+  casilla fallada y lo que aciertas de cada lectura se ve en la ficha del kanji (Mis palabras →
+  Kanjis). Se puede volver a una sola casilla en Ajustes → Repaso. Para sincronizarlo, vuelve a
+  ejecutar `schema.sql`.
+
 - **Mis palabras → Kanjis** (solo premium): la tabla de todos los kanjis, por nivel JLPT, grado
   escolar o importancia, con cada uno dominado, parcial o sin conocer según las palabras que
   conoces. Al tocar uno ves sus significados, qué lecturas has visto y cuáles te faltan, tus
