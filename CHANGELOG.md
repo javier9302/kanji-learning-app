@@ -10,7 +10,8 @@ Cómo funciona todo hoy: [docs/COMO-FUNCIONA.md](docs/COMO-FUNCIONA.md).
   una por línea) y saldrán primero entre tus palabras nuevas, en ese orden, hasta acabarse. La app
   te dice cuáles no están en su lista, cuáles tienen varias lecturas y cuáles ya sabes. El archivo
   de **Descargar mis datos** trae ahora también lo que sabes de cada kanji, tus palabras recientes,
-  las 100 siguientes palabras con su porqué y cómo pedirle a Claude la lista. Formatos en `README.md`.
+  las 100 siguientes palabras con su porqué y cómo pedirle a Claude la lista. Formatos en `README.md`
+  (`7c6577d`).
 
 - **Repasar: nuevo orden de las palabras nuevas.** Primero las que te enseñan una sola cosa nueva:
   un kanji nuevo junto a otros que ya conoces, o una lectura nueva de un kanji conocido (si sabes
