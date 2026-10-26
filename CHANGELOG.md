@@ -10,7 +10,7 @@ Cómo funciona todo hoy: [docs/COMO-FUNCIONA.md](docs/COMO-FUNCIONA.md).
   tocaban (como 上手 o 折れる), los botones no decían cuándo volvían (solo la tecla, 2 o 3), la
   respuesta no cambiaba nada y la misma palabra volvía a salir en cada sesión. Ahora cada botón dice
   cuándo vuelve («4 · 3 meses») o «sin cambios»; acertarla la puede dejar para más tarde (nunca
-  antes); y no sale otra vez el mismo día, con las dominadas al final.
+  antes); y no sale otra vez el mismo día, con las dominadas al final (`a91cd32`).
 
 - **Ajustes → Tus datos → Importar lista**: pega la lista de palabras que te proponga Claude (o
   una por línea) y saldrán primero entre tus palabras nuevas, en ese orden, hasta acabarse. La app
