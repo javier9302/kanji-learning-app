@@ -9,7 +9,7 @@ Cómo funciona todo hoy: [docs/COMO-FUNCIONA.md](docs/COMO-FUNCIONA.md).
 - **Ajustes → Tus datos → Descargar mis datos**: guarda todo tu progreso en un archivo (palabras y
   kanjis con lo que has demostrado de cada uno, gramática, nivel estimado, lecturas, traducciones e
   historial semanal) con una guía de lo que significa cada dato, para adjuntarlo en un chat con
-  Claude y pedirle que analice tu progreso. Para todos, sin premium.
+  Claude y pedirle que analice tu progreso. Para todos, sin premium (`62d1db4`).
 
 ## 2026-10-24
 
