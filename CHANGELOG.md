@@ -9,7 +9,7 @@ Cómo funciona todo hoy: [docs/COMO-FUNCIONA.md](docs/COMO-FUNCIONA.md).
 - **Mis palabras → Kanjis** (solo premium): la tabla de todos los kanjis, por nivel JLPT, grado
   escolar o importancia, con cada uno dominado, parcial o sin conocer según las palabras que
   conoces. Al tocar uno ves sus significados, qué lecturas has visto y cuáles te faltan, tus
-  palabras con él y las siguientes que te enseñarían lo que falta.
+  palabras con él y las siguientes que te enseñarían lo que falta (`0eaf732`).
 
 - **Ajustes → Tus datos → Descargar mis datos**: guarda todo tu progreso en un archivo (palabras y
   kanjis con lo que has demostrado de cada uno, gramática, nivel estimado, lecturas, traducciones e
