@@ -4,6 +4,13 @@ Lo que cambia para quien usa la app, el más reciente primero. Cada cambio añad
 el mismo commit. El detalle técnico está en el mensaje de cada commit (`git show <commit>`).
 Cómo funciona todo hoy: [docs/COMO-FUNCIONA.md](docs/COMO-FUNCIONA.md).
 
+## 2026-10-26
+
+- **Ajustes → Tus datos → Descargar mis datos**: guarda todo tu progreso en un archivo (palabras y
+  kanjis con lo que has demostrado de cada uno, gramática, nivel estimado, lecturas, traducciones e
+  historial semanal) con una guía de lo que significa cada dato, para adjuntarlo en un chat con
+  Claude y pedirle que analice tu progreso. Para todos, sin premium.
+
 ## 2026-10-24
 
 - **Escribir con repaso espaciado**: cada kanji vuelve cuando toca repasarlo, en lugar de ir por la

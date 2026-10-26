@@ -898,4 +898,14 @@ export default async function extra({ page, step, check }) {
     await new Promise((resolve) => setTimeout(resolve, 1500));
     check(await page.evaluate(() => !reader), "se volvió a abrir tras salir");
   });
+
+  await step("Ajustes → Tus datos: el archivo lleva el perfil, las palabras y la guía", async () => {
+    await page.evaluate(() => switchView("data"));
+    await shot(page, "tus-datos");
+    const data = await page.evaluate(async () => JSON.parse(JSON.stringify(await progressExport())));
+    check(data.guide?.states && data.profile?.vocab?.N5, "faltan la guía o el perfil");
+    check(data.words.some((word) => word.studied && word.fsrs), `palabras: ${data.words.length}`);
+    check(data.readingSessions.length >= 1, `lecturas: ${data.readingSessions.length}`);
+    check(!("kanjiStates" in data.profile), "el perfil lleva un Map que no se puede guardar");
+  });
 }

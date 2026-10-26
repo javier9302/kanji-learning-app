@@ -551,3 +551,79 @@ async function showSummary(profile, roadmap, delta) {
     box.classList.add("hidden");
   }
 }
+
+/* =========================================
+   7. DESCARGAR MIS DATOS
+   -----------------------------------------
+   Ajustes → Tus datos: el progreso entero en un JSON para analizarlo con una
+   IA (buildProgressExport en progress-core.js). Es para todos, no solo
+   premium: los datos son suyos. Descarga el analizador de japonés si hace
+   falta, para que vaya la gramática.
+   ========================================= */
+
+async function progressExport() {
+  const profile = await computeProfile({ grammar: true });
+  const known = knownLemmas();
+  const textsById = new Map(texts.map((text) => [text.id, text]));
+  const sentenceById = new Map();
+  eachSentence((sentence) => sentenceById.set(sentence.id, sentence));
+  for (const sentence of userSentences.values()) sentenceById.set(sentence.id, sentence);
+
+  const assumed = new Set(assumedLevels());
+  const wordRows = [...userWords.values()].map((rec) => {
+    const entry = wordEntry(rec.id);
+    return exportWordRow(rec, entry, wordState(rec, assumed.has(entry?.level)), lang);
+  }).sort((a, b) => PC_STATES.indexOf(a.state) - PC_STATES.indexOf(b.state) || (b.correct + b.incorrect) - (a.correct + a.incorrect));
+  const kanjiRows = [...userKanji.values()].map((rec) =>
+    exportKanjiRow(rec, BANK.kanji.get(rec.id), profile.kanjiStates.get(rec.id) || kanjiState(rec, false), lang))
+    .sort((a, b) => PC_STATES.indexOf(a.state) - PC_STATES.indexOf(b.state));
+
+  const sessions = (await getAll("sessions")).filter((session) => !session.discarded && session.finishedAt)
+    .sort((a, b) => b.finishedAt - a.finishedAt).map((session) => {
+      const text = textsById.get(session.textId);
+      return {
+        date: isoDate(new Date(session.finishedAt)), title: text?.title || null, level: text?.level || null,
+        words: text?.total || null, lookups: Object.keys(session.clicks || {}).length,
+        coverage: text ? textCoverage(text, known) : null
+      };
+    });
+  const translations = [...translationLog].reverse().map((record) => ({
+    date: isoDate(new Date(record.at)), sentence: sentenceTextOf(sentenceById.get(record.sentenceId) || {}) || null,
+    answer: record.answer || null, verdict: record.source === "skip" ? "skipped" : record.verdict || null,
+    score: record.score ?? null, lookups: record.lookups?.length || 0
+  }));
+
+  const { kanjiStates, grammarStates: grammarMap, ...summary } = profile;
+  return buildProgressExport({
+    profile: { ...summary, assumedLevels: [...assumed], levelDone: STUDY_CONFIG.analysis.levelDone },
+    grammar: grammarMap ? GRAMMAR.map((point) => ({ id: point.id, ja: point.ja, meaning: point.en, level: point.level, state: grammarMap.get(point.id) })) : null,
+    roadmap: meta.roadmap?.updatedAt ? meta.roadmap : null,
+    days: meta.days, snapshots: meta.snapshots || {},
+    readingSessions: sessions, translations,
+    words: wordRows, kanji: kanjiRows
+  });
+}
+
+async function downloadProgress() {
+  const button = $("exportProgressBtn"), message = $("exportMessage");
+  button.disabled = true;
+  message.textContent = t("Preparando tus datos…");
+  try {
+    const data = await progressExport();
+    const blob = new Blob([JSON.stringify(data, null, 1)], { type: "application/json" });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = `progreso-japones-${today()}.json`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+    message.textContent = t("Listo: {words} palabras y {kanji} kanjis. Adjunta el archivo en un chat con Claude y pídele que analice tu progreso.",
+      { words: data.words.length, kanji: data.kanji.length });
+  } catch (error) {
+    console.warn("No se pudieron exportar los datos:", error?.message || error);
+    message.textContent = t("No se pudieron preparar tus datos. Comprueba la conexión y vuelve a intentarlo.");
+  } finally {
+    button.disabled = false;
+  }
+}

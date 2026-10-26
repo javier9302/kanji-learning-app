@@ -1023,6 +1023,7 @@ function bindSettings() {
     saveLocal("kanji-prefs", prefs);
   });
   bindAddWord();
+  $("exportProgressBtn").addEventListener("click", downloadProgress);
 
   // Nivel de Escribir: automático (por defecto) o uno elegido; se recuerda en el dispositivo
   if ([...$("drawLevel").options].some((o) => o.value === prefs.drawLevel)) $("drawLevel").value = prefs.drawLevel;

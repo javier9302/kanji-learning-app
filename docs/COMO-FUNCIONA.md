@@ -59,6 +59,16 @@ Se guardan en el dispositivo (IndexedDB) y, con cuenta, se sincronizan con Supab
   «Lecturas de kanji practicadas» (`practice`, solo en el dispositivo) y niveles de Escribir aprobados.
 - Preferencias (localStorage, por dispositivo): modo, presentación, contenido y número de
   preguntas del repaso, furigana, idioma, palabras nuevas por sesión.
+- **Descargar mis datos** (Ajustes → Tus datos, para todos, sin premium): un JSON
+  `progreso-japones-<fecha>.json` para analizarlo con una IA como Claude
+  (`progressExport` en `progress.js`, `buildProgressExport` en `progress-core.js`). Lleva una guía
+  de campos en inglés (`guide`), los totales por estado, el perfil del análisis (desglose por
+  nivel JLPT, nivel estimado, lectura y constancia), el estado de cada estructura de gramática,
+  la hoja de ruta, el historial diario, las fotos semanales, los textos leídos (fecha, nivel,
+  consultas, cobertura de hoy), las traducciones (frase, respuesta, veredicto, nota) y una fila por
+  cada palabra y kanji de `userWords` / `userKanji` (estado, aciertos, fallos, tarjeta FSRS
+  resumida). Las palabras de los niveles dados por sabidos que nunca ha tocado solo cuentan en el
+  perfil. Descarga el analizador de japonés si hace falta para incluir la gramática.
 
 ## Cómo se decide qué enseñar
 

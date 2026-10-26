@@ -253,11 +253,93 @@ function buildRoadmap({ dims, reading, practice }, config, threshold = 0.8) {
   return { level: open[0]?.estimate.current || null, focus: open[0]?.key || null, steps };
 }
 
+/* =========================================
+   6. LA EXPORTACIÓN
+   -----------------------------------------
+   Ajustes → Tus datos: un JSON con todo el progreso para dárselo a una IA
+   (Claude, por ejemplo) y pedirle un análisis. Lleva el perfil ya calculado
+   y, debajo, el detalle de cada palabra y kanji con lo que ha demostrado.
+   La guía de campos va en inglés: la lee la IA, no la interfaz.
+   ========================================= */
+
+const EXPORT_VERSION = 1;
+
+/* Lo que dice la tarjeta FSRS: estabilidad (días hasta olvidar un 10 %), dificultad (1-10) y olvidos */
+function fsrsFacts(card) {
+  if (!card) return null;
+  const round = (n) => Number.isFinite(n) ? Math.round(n * 10) / 10 : null;
+  return { stability: round(card.stability), difficulty: round(card.difficulty), lapses: card.lapses ?? 0,
+    reps: card.reps ?? 0, due: card.due ? String(card.due).slice(0, 10) : null };
+}
+
+/* Una palabra del usuario. rec: su registro en userWords; entry: wordEntry (o nada);
+   state: wordState. Solo los campos que dicen algo, para que el archivo no pese. */
+function exportWordRow(rec, entry, state, language = "en") {
+  const meaning = entry ? (language === "es" && entry.es?.length ? entry.es : entry.en) || [] : rec.meanings || [];
+  const row = {
+    w: entry?.w || rec.lemma || rec.id.split("|")[0], r: entry?.r || rec.reading || rec.id.split("|")[1] || "",
+    meaning: meaning.slice(0, 3).join("; "), level: entry?.level || null, state, status: rec.status || "unknown",
+    origin: rec.origin || null, studied: !!rec.studied, canReadKanji: !!rec.canReadKanji, knowsMeaning: !!rec.knowsMeaning,
+    correct: rec.correctCount || 0, incorrect: rec.incorrectCount || 0, streakDays: rec.streakDays || 0,
+    seenInTexts: rec.seen || 0, lookups: rec.lookups || 0,
+    placement: rec.evalCorrect || rec.evalWrong ? { correct: rec.evalCorrect || 0, wrong: rec.evalWrong || 0 } : null,
+    firstSeen: rec.firstSeen ? pcIsoDate(new Date(rec.firstSeen)) : null,
+    lastReviewed: rec.lastReviewed || null, nextReview: rec.studied ? rec.nextReview || null : null,
+    fsrs: fsrsFacts(rec.fsrs)
+  };
+  return Object.fromEntries(Object.entries(row).filter(([, value]) => value !== null));
+}
+
+/* Un kanji del usuario. entry: el del banco ({ c, en, es, level }) o nada */
+function exportKanjiRow(rec, entry, state, language = "en") {
+  const meaning = entry ? (language === "es" && entry.es?.length ? entry.es : entry.en) || [] : [];
+  const row = {
+    c: rec.id, meaning: meaning.slice(0, 3).join("; "), level: entry?.level || null, state, status: rec.status || "unknown",
+    knowsMeaning: !!rec.knowsMeaning, canWrite: !!rec.canWrite, writes: rec.writes || 0,
+    correct: rec.correctCount || 0, incorrect: rec.incorrectCount || 0,
+    lastReviewed: rec.lastReviewed || null, nextReview: rec.studied ? rec.nextReview || null : null,
+    fsrs: fsrsFacts(rec.fsrs), writeFsrs: fsrsFacts(rec.writeFsrs)
+  };
+  return Object.fromEntries(Object.entries(row).filter(([, value]) => value !== null));
+}
+
+/* La guía que acompaña al archivo: qué significa cada campo */
+const EXPORT_GUIDE = {
+  purpose: "Progress export from a Japanese study app (kanji, vocabulary, reading, translation). Use it to analyse the learner's progress, strengths, weaknesses and what to study next.",
+  states: {
+    mastered: "Demonstrated: answered correctly on several different days, long review interval, placement test, or (kanji) knows its meaning or can write it.",
+    learning: "Being studied in spaced repetition, not yet mastered.",
+    assumed: "Not demonstrated but counted as known: its JLPT level was passed in the placement test, it was read in a text without looking it up, or (kanji) it appears in known words.",
+    new: "Not studied yet (or the learner said they don't know it)."
+  },
+  profile: "Computed summary. vocab/kanji/grammar: counts per JLPT level and state. *Level: { done: last completed level (>= levelDone of it known), current: level in progress, percent }. reading: texts read (total, last 30 days), coverage = % of words known in the latest texts, lookups = words looked up per 100 read. practice: last 30 days (active days, reviews, accuracy %). readLevel: level of the texts the learner reads.",
+  words: "Every word the learner has interacted with (bank words in assumed levels that were never touched are only counted in profile.vocab). w: writing, r: reading, status: raw app status (mastered, learning, pre_known = seen while reading, unknown), origin: where it came from, correct/incorrect: review answers, streakDays: consecutive correct days, seenInTexts/lookups: times seen/looked up while reading, placement: placement-test answers, fsrs: spaced-repetition card (stability in days, difficulty 1-10, lapses = times forgotten, due date).",
+  kanji: "Every kanji the learner has studied. knowsMeaning: passed its meaning card, canWrite: wrote it from memory, writes: times written, fsrs: meaning card, writeFsrs: writing card.",
+  grammar: "N5 grammar points with their state: mastered (translated correctly on several days), understood (translated correctly once or read cleanly several times), seen (appeared in sentences), unseen. null if the grammar analyser could not load.",
+  days: "Daily history: r = reviews, c = correct, n = new words, t = translations, tc = good translations.",
+  snapshots: "One snapshot per ISO week (last one of the week). vocab/kanji per level: [mastered, learning, assumed, total]; grammar: [mastered, understood, seen, total].",
+  readingSessions: "Finished texts, newest first: date, level, words in the text, words looked up, coverage = % of its words known today.",
+  translations: "Translation exercises, newest first: sentence in Japanese, the learner's answer, verdict (correct, mostly, partial, incorrect; skipped when the learner skipped it), score 0-100, words looked up while translating.",
+  roadmap: "The weekly plan the app computed (target level, words and grammar points to focus on)."
+};
+
+/* Arma el archivo. parts: lo que ya ha reunido progress.js (perfil, filas, historia) */
+function buildProgressExport(parts, now = Date.now()) {
+  const { profile = {}, words = [], kanji = [], ...rest } = parts;
+  const byState = (rows) => Object.fromEntries(PC_STATES.map((state) => [state, rows.filter((row) => row.state === state).length]));
+  return {
+    app: "kanji-learning-app", version: EXPORT_VERSION, exportedAt: new Date(now).toISOString(),
+    guide: EXPORT_GUIDE,
+    totals: { words: words.length, wordsByState: byState(words), kanji: kanji.length, kanjiByState: byState(kanji) },
+    profile, ...rest, words, kanji
+  };
+}
+
 /* Para tools/ y las pruebas (Node); en el navegador son globales */
 if (typeof module !== "undefined") {
   module.exports = {
     PC_LEVELS, PC_STATES, wordState, kanjiState, levelBreakdown, knownShare, estimateLevel,
     readingSummary, practiceSummary, weekKey, weekStart, snapshotOf, snapshotTotal, snapshotGrammar, progressDelta, previousSnapshot,
-    missingFor, buildRoadmap
+    missingFor, buildRoadmap, exportWordRow, exportKanjiRow, buildProgressExport, EXPORT_GUIDE
   };
 }

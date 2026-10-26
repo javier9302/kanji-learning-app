@@ -157,3 +157,34 @@ test("buildRoadmap: con todo completo no hay nivel objetivo, y sin gramática ca
   const noGrammar = P.buildRoadmap({ dims: [dim("vocab", { done: null, current: "N5", percent: 10 }, { N5: row(50, 500) }), dim("grammar", null, {})], ...calm }, CONFIG);
   assert.deepEqual(noGrammar.steps.map((s) => s.kind), ["vocab"]);
 });
+
+test("exportWordRow: lo que ha demostrado, sin campos vacíos", () => {
+  const rec = { id: "学校|がっこう", status: "learning", studied: true, correctCount: 3, incorrectCount: 1, seen: 2,
+    nextReview: "2026-10-30", fsrs: { stability: 4.23, difficulty: 6.71, lapses: 1, reps: 4, due: "2026-10-30T08:00:00.000Z" } };
+  const entry = { w: "学校", r: "がっこう", en: ["school"], es: ["escuela"], level: "N5" };
+  const row = P.exportWordRow(rec, entry, "learning", "es");
+  assert.equal(row.meaning, "escuela");
+  assert.equal(row.level, "N5");
+  assert.deepEqual(row.fsrs, { stability: 4.2, difficulty: 6.7, lapses: 1, reps: 4, due: "2026-10-30" });
+  assert.equal("placement" in row, false);
+  // Sin entrada en el banco: escritura y lectura salen de la clave
+  const own = P.exportWordRow({ id: "猫舌|ねこじた", meanings: ["sensitive to heat"] }, null, "new");
+  assert.equal(own.w, "猫舌");
+  assert.equal(own.r, "ねこじた");
+  assert.equal(own.meaning, "sensitive to heat");
+  assert.equal("nextReview" in own, false); // sin estudiar no tiene repaso
+});
+
+test("buildProgressExport: guía, totales por estado y las partes tal cual", () => {
+  const data = P.buildProgressExport({
+    profile: { vocabLevel: { done: "N5" } }, days: { "2026-10-25": { r: 10, c: 8 } },
+    words: [{ state: "mastered" }, { state: "learning" }, { state: "learning" }],
+    kanji: [P.exportKanjiRow({ id: "学", canWrite: true }, { c: "学", en: ["study"], level: "N5" }, "mastered")]
+  }, Date.UTC(2026, 9, 26));
+  assert.equal(data.exportedAt, "2026-10-26T00:00:00.000Z");
+  assert.ok(data.guide.states.assumed);
+  assert.deepEqual(data.totals.wordsByState, { mastered: 1, learning: 2, assumed: 0, new: 0 });
+  assert.equal(data.totals.kanjiByState.mastered, 1);
+  assert.equal(data.kanji[0].meaning, "study");
+  assert.deepEqual(data.days, { "2026-10-25": { r: 10, c: 8 } });
+});
