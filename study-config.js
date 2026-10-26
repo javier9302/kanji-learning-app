@@ -57,6 +57,13 @@ const STUDY_CONFIG = {
     test: { size: 8, pass: 7, maxMistakes: 1 }
   },
 
+  /* Estado de cada kanji, deducido de las palabras que conoce (kanji-core.js;
+     se ve en Mis palabras → Kanjis).
+       relevantMinWords  palabras del banco que tienen que usar una lectura para
+                         que haga falta conocerla (la más usada siempre hace falta).
+                         Con 2, 名 pide めい, な y みょう; con 3, solo めい y な. */
+  kanji: { relevantMinWords: 2 },
+
   /* "Ya la domino": días hasta el primer repaso de una palabra agregada así */
   masteredIntervalDays: 60,
 

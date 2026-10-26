@@ -315,6 +315,11 @@ empieza en «En una frase».
 - `bank/readings.js` dice qué lectura de cada kanji ejercita cada palabra del banco. Se genera con
   `node tools/build-readings.mjs` a partir de JmdictFurigana (CC BY-SA, como JMdict); solo hay que
   repetirlo si cambia el banco.
+- `bank/kanji-info.js` (tabla de kanjis) se genera con `node tools/build-kanji.mjs` a partir de
+  KANJIDIC2 y de `bank/readings.js`: hay que repetirlo después de `build-readings.mjs` o si cambia
+  el banco. Descarga KANJIDIC2 de edrdg.org; si no puede, usa la copia en JSON del paquete de npm
+  `kanjidic2-json` (`KANJIDIC2_SOURCE=npm` la elige directamente). Imprime las palabras cuyas
+  lecturas corrigió y las lecturas especiales que no cuentan.
 - `node tools/coverage.mjs` informa de cuántas frases comunes hay por cada pareja (kanji, lectura)
   y `node tools/size-report.mjs`, del tamaño de los archivos.
 - «Lecturas de kanji practicadas», en Estadísticas, se guarda en cada dispositivo y no se sincroniza.

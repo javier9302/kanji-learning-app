@@ -18,9 +18,9 @@ Scripts clásicos (no módulos) que comparten variables globales. El orden de ca
 `index.html` importa:
 
 `config.js` → `i18n.js` → `vendor/ts-fsrs` → `bank/*.js` → `study-config.js` → `learning-core.js`
-→ `ja-core.js` → `sentences-core.js` → `translate-core.js` → `texts.js` → `reading.js`
+→ `ja-core.js` → `sentences-core.js` → `kanji-core.js` → `translate-core.js` → `texts.js` → `reading.js`
 → `reading-stats.js` → `reading-sync.js` → `study.js` → `sentences.js` → `translate.js`
-→ `progress.js` → `dictionary.js` → `app.js` (`progress-core.js` y `grammar-core.js` van justo
+→ `progress.js` → `kanji-table.js` → `dictionary.js` → `app.js` (`progress-core.js` y `grammar-core.js` van justo
 después de `learning-core.js`)
 
 - **`*-core.js`**: reglas puras, sin DOM ni datos del usuario. Las usan el navegador y Node
@@ -45,6 +45,12 @@ después de `learning-core.js`)
   textos). Fase 4: resumen semanal con IA (`summarize-progress`, solo con los números ya
   calculados) y vista del profesor (`admin.html` → Progreso, que carga `study-config.js` y
   `progress-core.js`). Propuesto en el chat del 2026-10-22 y sin hacer: pronóstico a 6 meses.
+- **`kanji-table.js` / `kanji-core.js`**: Mis palabras → Kanjis (premium). El estado de cada kanji
+  (dominado, parcial, sin conocer) se deduce de las palabras que conoce (`kanjiStates`), con sus
+  lecturas relevantes de `bank/kanji-info.js` (generado con `tools/build-kanji.mjs` desde KANJIDIC2;
+  no se edita a mano). Es la fase A del plan «progresión por palabras» del chat del 2026-10-26;
+  quedan B (una casilla por kanji al escribir la lectura), C (nuevo orden de palabras nuevas),
+  D (temas con embeddings) y E (exportar/importar la cola).
 - **`grammar-core.js`**: catálogo de gramática (`GRAMMAR`, hoy solo N5), detector sobre las piezas
   de kuromoji de la frase entera (`detectGrammar`) y medición (`grammarStates`). Una estructura
   nueva lleva su regla, su ejemplo y, si se parece a otra, un caso en «no confunde» de

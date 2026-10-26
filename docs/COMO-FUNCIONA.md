@@ -13,7 +13,7 @@ mismo commit que cambie cualquiera de estas reglas. Los cambios, con fecha, est�
 | **Traducir** | El usuario traduce frases de sus textos y lo corrige la IA (o él mismo con la traducción de referencia). Mide si entiende el significado; no mueve el calendario de repaso. |
 | **Escribir** | Trazos de kanjis (KanjiVG) con repaso espaciado: primero los kanjis que ya has visto y los que toca repasar, y una prueba para saltarse un nivel. |
 | **Diccionario** | Búsqueda por kanji, kana, rōmaji o significado (español o inglés). |
-| **Mis palabras** | Agregar palabras a mano, progreso y estadísticas. **Análisis** (solo premium): lo demostrado por nivel JLPT, nivel estimado y evolución semanal. |
+| **Mis palabras** | Agregar palabras a mano, progreso y estadísticas. **Análisis** (solo premium): lo demostrado por nivel JLPT, nivel estimado y evolución semanal. **Kanjis** (solo premium): tabla de kanjis dominados, parciales y sin conocer según las palabras que conoces. |
 | **Cuenta** (opcional) | Sincronización con Supabase, plan gratuito (10 textos de IA al día) o premium (30). |
 | **admin.html** | Aprobar textos de la comunidad, revisar palabras, traducciones y frases compartidas, cambiar planes y ver el progreso de cada estudiante (pestaña Progreso). |
 
@@ -26,6 +26,7 @@ mismo commit que cambie cualquiera de estas reglas. Los cambios, con fecha, est�
 | `bank/frequency.js` | Puesto de frecuencia de cada palabra (1 = la más usada) y palabras en kana por frecuencia | Lista de frecuencia que no se publica | No |
 | `bank/aliases.js` | Otras escrituras de una palabra del banco (終る = 終わる, 御飯 = ご飯) | `tools/build-dictionary.mjs` desde JMdict | No |
 | `bank/readings.js` | Qué lectura de cada kanji ejercita cada palabra (学校 → 学がく, 校こう) | `tools/build-readings.mjs` desde JmdictFurigana | No |
+| `bank/kanji-info.js` | Por kanji: nivel JLPT, grado escolar, frecuencia en prensa, importancia y sus lecturas en las palabras del banco con cuántas palabras usa cada una (más los kanjis de uso común que no están en las listas JLPT). Por palabra: las lecturas de sus kanjis cuando `readings.js` las da mal (上手 → 上じょう, no しょう) | `tools/build-kanji.mjs` desde KANJIDIC2 y `bank/readings.js` | No |
 | `bank/AMBIGUAS.md` | Notas sobre las palabras con varias lecturas y significados | — | Sí |
 | `vendor/jmdict/common-<fecha>.json` | Diccionario general: palabras comunes que no están en el banco | `tools/build-dictionary.mjs` desde JMdict | No |
 | `bank/sentences/<nivel>.json` | Frases comunes de ejemplo, con traducción | IA por tandas: `tools/generate-sentences.mjs` | No |
@@ -250,6 +251,30 @@ esta semana); un resumen de la semana escrito por la IA, y la vista del profesor
   ruta. Al desplegarlo: sus 12 últimas semanas y su último resumen.
 - **Quién lo ve**: con sesión y plan premium sin caducar (`isPremium`). Sin premium se ve un aviso.
 
+### 10. Tabla de kanjis (`kanji-table.js` + `kanji-core.js`, solo premium)
+
+Mis palabras → Kanjis. Lo que se sabe de cada kanji sale de las **palabras** que conoces; no se
+guarda aparte, se calcula al abrir la tabla.
+
+- **Palabras que cuentan como conocidas**: las dominadas, las repasadas cuya lectura acertaste la
+  última vez y las de los niveles que la evaluación dio por sabidos (salvo que luego dijeras que
+  no la sabes o la estés aprendiendo). Las que solo viste al leer no cuentan.
+- **Lecturas relevantes de un kanji**: las que usan al menos 2 palabras del banco, y siempre la
+  más usada (名: めい ×21, な ×12, みょう ×2). Las demás salen como «poco usadas» y no hacen falta.
+  Las lecturas especiales de una palabra (お兄さん にい, 真っ赤) no cuentan como lectura del kanji.
+- **Estados**: *dominado* si sabes su significado y has visto todas sus lecturas relevantes en
+  palabras conocidas; *parcial* si sale en alguna palabra conocida pero te falta una lectura o
+  el significado; *sin conocer* si no sale en ninguna. El significado se sabe si lo marcaste o
+  acertaste en Repasar («Kanjis»), si sabes escribirlo o si el kanji es una palabra que conoces (山).
+- **Agrupación** (se recuerda en el dispositivo): por nivel JLPT, por grado escolar (1.º a 6.º de
+  primaria y secundaria) o por importancia (los 100, 250, 500, 1000, 1500, 2000 y 2500 primeros).
+  Lo que no entra va a «Otros». La importancia es cuánto vocabulario frecuente abre el kanji: la
+  suma, por cada palabra de la lista de frecuencia que lo lleva, de 100 / (puesto + 99); sin
+  palabras frecuentes, cuenta su frecuencia en prensa. Dentro de cada grupo van primero los más
+  importantes.
+- **Ficha de un kanji**: significados, cada lectura relevante (vista o que te falta), las palabras
+  que conoces con él y, por cada lectura que falta, las 3 palabras más frecuentes que te la enseñan.
+
 ## Dónde cambiar cada número
 
 Casi todo lo ajustable está en `study-config.js`: palabras nuevas por sesión, pesos del orden,
@@ -262,6 +287,8 @@ días de dominio, reglas de Escribir y de Traducir. Lo que no:
   cuándo una estructura cuenta como entendida (3 lecturas sin consultar) o dominada (2 días), y las
   metas y avisos de la hoja de ruta: `STUDY_CONFIG.analysis` en `study-config.js`. El peso de la
   hoja de ruta en el orden del repaso: `STUDY_CONFIG.weights.roadmap`.
+- Tabla de kanjis: palabras que tienen que usar una lectura para que haga falta conocerla (2):
+  `STUDY_CONFIG.kanji.relevantMinWords`.
 - Tamaño y aprobado de la evaluación inicial: `PLACEMENT_SIZE` y `PLACEMENT_PASS` en `reading.js`.
 - Textos de IA al día: variables `DAILY_TEXTS` y `PREMIUM_DAILY_TEXTS` de la función `generate-text` en Supabase.
 - Frases de IA al día: `SENTENCE_DAILY_WORDS` y `SENTENCE_DAILY_CALLS` de la función `generate-sentences`.

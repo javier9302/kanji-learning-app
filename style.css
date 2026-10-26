@@ -35,6 +35,14 @@
   --state-learning: #7d8be6;
   --state-mature: #3b4a9c;
   --state-prek: #c07a1e;   /* por confirmar / dado por sabido */
+
+  /* Tabla de kanjis: dominado, parcial y sin conocer. El borde (lleno,
+     discontinuo, punteado) distingue el estado también en blanco y negro */
+  --kanji-mastered-bg: #3b4a9c;
+  --kanji-mastered-ink: #fff;
+  --kanji-partial-bg: #dfe3fa;
+  --kanji-partial-line: #5d6bc4;
+  --kanji-unknown-line: #c9c7d3;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -71,6 +79,12 @@
     --state-learning: #4a58c2;
     --state-mature: #7d8ae2;
     --state-prek: #bd842f;
+
+    --kanji-mastered-bg: #7d8ae2;
+    --kanji-mastered-ink: #13141c;
+    --kanji-partial-bg: #2c3466;
+    --kanji-partial-line: #8e98d6;
+    --kanji-unknown-line: #3c3e50;
   }
 }
 
@@ -2850,4 +2864,112 @@ body[data-view="dict"] .intro {
 .admin-summary {
   margin: 0 0 10px;
   line-height: 1.5;
+}
+
+/* =========================================
+   TABLA DE KANJIS (Mis palabras → Kanjis)
+   ========================================= */
+
+.kanji-group {
+  margin-top: 22px;
+}
+
+.kanji-group h3 {
+  font-size: 15px;
+  margin: 0 0 10px;
+}
+
+.kanji-group h3 .helper {
+  font-weight: 400;
+  margin-left: 6px;
+}
+
+.kanji-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(38px, 1fr));
+  gap: 4px;
+}
+
+.kanji-cell {
+  aspect-ratio: 1;
+  border-radius: 7px;
+  font: 500 19px 'Noto Sans JP', sans-serif;
+  color: var(--ink);
+  background: var(--white);
+  cursor: pointer;
+  padding: 0;
+}
+
+.kanji-cell:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+
+.kanji-mastered {
+  background: var(--kanji-mastered-bg);
+  color: var(--kanji-mastered-ink);
+  border: 2px solid var(--kanji-mastered-bg);
+}
+
+.kanji-partial {
+  background: var(--kanji-partial-bg);
+  border: 2px dashed var(--kanji-partial-line);
+}
+
+.kanji-unknown {
+  border: 1px dotted var(--kanji-unknown-line);
+  color: var(--muted);
+}
+
+.kanji-swatch {
+  width: 12px;
+  height: 12px;
+  box-sizing: border-box;
+}
+
+.kanji-dialog {
+  width: min(520px, calc(100vw - 32px));
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+}
+
+.kanji-dialog h4 {
+  font-size: 13px;
+  margin: 16px 0 6px;
+  color: var(--label);
+}
+
+.kanji-big {
+  min-width: 64px;
+  height: 64px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+}
+
+.kanji-readings,
+.kanji-words {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.kanji-readings li,
+.kanji-words li {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  flex-wrap: wrap;
+}
+
+.kanji-readings li span[lang="ja"] {
+  font-weight: 600;
+  min-width: 48px;
+}
+
+.kanji-readings .reading-missing span[lang="ja"] {
+  color: var(--muted);
+  text-decoration: underline dotted;
 }

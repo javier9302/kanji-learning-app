@@ -128,6 +128,34 @@ const BANK = {
     });
   },
 
+  /* Información de cada kanji (bank/kanji-info.js): nivel, grado escolar, frecuencia,
+     importancia y sus lecturas en las palabras del banco. Solo hace falta para la
+     tabla de kanjis; se descarga con loadKanjiInfo(). */
+  kanjiInfo: new Map(),   // carácter -> { c, level, grade, freq, importance, readings, en, es, on, kun }
+  wordKanjiFixes: {},     // id de palabra -> lecturas de sus kanjis corregidas ("上じょう,手ず")
+  setKanjiInfo(rows, fixes = {}) {
+    this.wordKanjiFixes = fixes;
+    for (const [c, [level, grade, freq, importance, readings, en, es, on, kun]] of Object.entries(rows)) {
+      const base = this.kanji.get(c);
+      this.kanjiInfo.set(c, {
+        c, level, grade, freq, importance, readings,
+        en: en || base?.en || [], es: es || base?.es || [], on: on || base?.on || [], kun: kun || base?.kun || []
+      });
+    }
+  },
+  loadKanjiInfo() {
+    return this.loading.kanjiInfo ??= new Promise((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src = "bank/kanji-info.js";
+      script.onload = () => resolve();
+      script.onerror = () => {
+        delete this.loading.kanjiInfo;
+        reject(new Error("No se pudo cargar la información de los kanjis"));
+      };
+      document.head.appendChild(script);
+    });
+  },
+
   loaded(level) {
     return [...this.words.values()].some((word) => word.level === level);
   },

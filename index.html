@@ -27,6 +27,7 @@
   <script src="grammar-core.js" defer></script>
   <script src="ja-core.js" defer></script>
   <script src="sentences-core.js" defer></script>
+  <script src="kanji-core.js" defer></script>
   <script src="translate-core.js" defer></script>
   <script src="texts.js" defer></script>
   <script src="reading.js" defer></script>
@@ -36,6 +37,7 @@
   <script src="sentences.js" defer></script>
   <script src="translate.js" defer></script>
   <script src="progress.js" defer></script>
+  <script src="kanji-table.js" defer></script>
   <script src="dictionary.js" defer></script>
   <script src="app.js" defer></script>
 </head>
@@ -107,6 +109,7 @@
     <nav class="subtabs hidden" data-group="words" aria-label="Mis palabras">
       <button class="subtab" data-view="progress" type="button">Estadísticas</button>
       <button class="subtab" data-view="analysis" type="button">Análisis</button>
+      <button class="subtab" data-view="kanji" type="button">Kanjis</button>
       <button class="subtab" data-view="add" type="button">Agregar palabra</button>
     </nav>
 
@@ -451,6 +454,22 @@
       <div id="analysisArea"></div>
     </section>
 
+    <!-- KANJIS (premium) -->
+    <section id="view-kanji" class="view hidden">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">APRENDIDOS CON TUS PALABRAS</p>
+          <h2>Kanjis</h2>
+        </div>
+        <select id="kanjiGroupSelect" class="lang-select" aria-label="Agrupar por">
+          <option value="jlpt">Por nivel JLPT</option>
+          <option value="grade">Por grado escolar</option>
+          <option value="frequency">Por importancia</option>
+        </select>
+      </div>
+      <div id="kanjiArea"></div>
+    </section>
+
     <!-- DATOS -->
     <section id="view-add" class="view hidden">
       <div class="section-heading">
@@ -699,6 +718,14 @@
         <button id="authToReset" class="link-btn" type="button">¿Olvidaste tu contraseña?</button>
       </div>
     </form>
+  </dialog>
+
+  <dialog id="kanjiDialog" class="dialog kanji-dialog">
+    <div id="kanjiDetail"></div>
+    <div class="dialog-actions">
+      <span class="spacer"></span>
+      <button id="kanjiCloseBtn" class="button button-secondary" type="button">Cerrar</button>
+    </div>
   </dialog>
 
   <dialog id="reportDialog" class="dialog">

@@ -114,7 +114,8 @@ function saveLocal(key, value) {
 
 const prefs = loadLocal("kanji-prefs", {
   studyType: "word", studyMode: "type", studyCount: "10", goal: 20,
-  furigana: "unknown" // furigana al leer: unknown | all | none
+  furigana: "unknown", // furigana al leer: unknown | all | none
+  kanjiGroup: "jlpt"   // Mis palabras → Kanjis: jlpt | grade | frequency
 });
 // Presentación al escribir la lectura: word (palabra sola) | sentence (en una frase).
 // Sustituye al antiguo ajuste "Repasar con frases": quien lo tenía activado empieza en "sentence".
@@ -163,7 +164,7 @@ function formatDate(iso) {
 const NAV = {
   study: ["read", "study", "translate", "draw"],
   library: ["library"],
-  words: ["progress", "analysis", "add"],
+  words: ["progress", "analysis", "kanji", "add"],
   settings: ["data"],
   dict: ["dict"] // sin pestaña: se abre desde el buscador de la cabecera
 };
@@ -191,6 +192,7 @@ function switchView(name) {
   if (name === "draw") renderDraw();
   if (name === "progress") renderStats();
   if (name === "analysis") renderAnalysis();
+  if (name === "kanji") renderKanjiTable();
   if (name === "add") renderAddWord();
   if (name === "data") renderDataView();
   if (name === "dict") renderDictionary();
@@ -1067,6 +1069,7 @@ async function init() {
   bindNavigation();
   bindShortcuts();
   bindSettings();
+  bindKanjiTable();
   bindLibrary();
   bindDictionary();
   bindTranslate();

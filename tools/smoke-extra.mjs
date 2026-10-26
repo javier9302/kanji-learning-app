@@ -908,4 +908,64 @@ export default async function extra({ page, step, check }) {
     check(data.readingSessions.length >= 1, `lecturas: ${data.readingSessions.length}`);
     check(!("kanjiStates" in data.profile), "el perfil lleva un Map que no se puede guardar");
   });
+
+  await step("kanjis: sin premium, el aviso; con premium, la tabla por nivel, la ficha y el cambio de agrupación", async () => {
+    const locked = await page.evaluate(() => {
+      switchView("kanji");
+      return $("kanjiArea").textContent.includes(t("La tabla de kanjis es parte del plan premium"));
+    });
+    check(locked, "sin premium no se ve el aviso");
+    try {
+      await page.evaluate(async () => {
+        window.realSchedule = window.scheduleSync;
+        window.scheduleSync = () => {};
+        sync.user = { id: "smoke" };
+        sync.config.plan = { plan: "premium", until: null };
+        // Conoce 名前: 名 queda parcial (le falta めい) y 前 también (le falta ぜん)
+        const rec = blankUserWord("名前", "なまえ");
+        Object.assign(rec, { status: "mastered", studied: true, canReadKanji: true });
+        await saveUserWord(rec);
+        switchView("kanji");
+      });
+      await page.waitForSelector("#kanjiArea .kanji-cell", { timeout: 30000 });
+      await shot(page, "kanjis");
+      const table = await page.evaluate(() => ({
+        groups: [...document.querySelectorAll("#kanjiArea .kanji-group h3")].map((h) => h.firstChild.textContent.trim()),
+        cells: document.querySelectorAll("#kanjiArea .kanji-cell").length, total: BANK.kanjiInfo.size,
+        na: document.querySelector('[data-kanji="名"]')?.className
+      }));
+      check(table.groups.slice(0, 5).join() === "N5,N4,N3,N2,N1" && table.groups.length === 6, JSON.stringify(table.groups));
+      check(table.cells === table.total && table.total > 2000, `celdas: ${table.cells} de ${table.total}`);
+      check(/kanji-partial/.test(table.na), `名: ${table.na}`);
+      await page.click('[data-kanji="名"]');
+      await shot(page, "kanji-ficha");
+      const detail = await page.evaluate(() => ({
+        open: $("kanjiDialog").open,
+        missing: [...document.querySelectorAll("#kanjiDetail .reading-missing span[lang=ja]")].map((el) => el.textContent),
+        known: [...document.querySelectorAll("#kanjiDetail .reading-known span[lang=ja]")].map((el) => el.textContent),
+        words: document.querySelector("#kanjiDetail .kanji-words")?.textContent || ""
+      }));
+      check(detail.open && detail.known.includes("な") && detail.missing.includes("めい") && detail.words.includes("名前"), JSON.stringify(detail));
+      const grades = await page.evaluate(() => {
+        $("kanjiDialog").close();
+        $("kanjiGroupSelect").value = "grade";
+        $("kanjiGroupSelect").dispatchEvent(new Event("change"));
+        return new Promise((resolve) => setTimeout(() => {
+          const names = [...document.querySelectorAll("#kanjiArea .kanji-group h3")].map((h) => h.firstChild.textContent.trim());
+          resolve({ names, ok: names[0] === t("{n}.º de primaria", { n: 1 }) && names.includes(t("Secundaria")) });
+        }, 500));
+      });
+      check(grades.ok, JSON.stringify(grades.names));
+    } finally {
+      await page.evaluate(() => {
+        if (window.realSchedule) window.scheduleSync = window.realSchedule;
+        sync.user = null;
+        sync.config.plan = null;
+        prefs.kanjiGroup = "jlpt";
+        saveLocal("kanji-prefs", prefs);
+        if ($("kanjiDialog").open) $("kanjiDialog").close();
+        switchView("study");
+      });
+    }
+  });
 }

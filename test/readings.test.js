@@ -66,3 +66,20 @@ test("bank/readings.js cubre todas las palabras con kanji del banco", () => {
     }
   }
 });
+
+test("bank/kanji-info.js: cada kanji de una palabra del banco tiene sus lecturas y su información", () => {
+  const vm = require("node:vm"), fs = require("node:fs"), path = require("node:path");
+  const rows = {};
+  vm.runInContext(fs.readFileSync(path.join(__dirname, "../bank/kanji-info.js"), "utf8"),
+    vm.createContext({ BANK: { setKanjiInfo: (data) => Object.assign(rows, data) } }));
+  assert.ok(Object.keys(rows).length > 2000);
+  const [level, grade, , importance, readings] = rows["名"];
+  assert.equal(level, "N5");
+  assert.equal(grade, 1);
+  assert.ok(importance > 0);
+  assert.equal(readings.map(([reading]) => reading).slice(0, 2).join(), "めい,な");
+  for (const word of BANK.words.values()) {
+    if (word.kana) continue;
+    for (const c of word.kanji) assert.ok(rows[c], `falta ${c} (${word.w})`);
+  }
+});
