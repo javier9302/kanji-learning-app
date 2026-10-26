@@ -11,7 +11,8 @@ Cómo funciona todo hoy: [docs/COMO-FUNCIONA.md](docs/COMO-FUNCIONA.md).
   名前, salen 有名 o 午前 antes que palabras con dos kanjis nuevos). También pesan la frecuencia,
   cuánto vocabulario abre el kanji nuevo y completar las lecturas que le faltan a un kanji. No
   salen seguidas varias con el mismo kanji nuevo. La primera vez que sale una, con la respuesta,
-  ves por qué. La vista de depuración (Ajustes → Repaso) enseña las 100 primeras con cada componente.
+  ves por qué. La vista de depuración (Ajustes → Repaso) enseña las 100 primeras con cada componente
+  (`1e0e858`).
 
 - **Repasar → Escribir la lectura (Palabra sola)**: una casilla por kanji, con el kana ya escrito
   (前置き → [まえ][お]き). Así se sabe qué kanji fallaste: la lectura buena sale debajo de cada
