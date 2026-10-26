@@ -28,8 +28,17 @@ function knownForKanji(rec, assumed) {
   return assumed;
 }
 
-/* Las lecturas de kanji de una palabra (las del banco, corregidas por kanji-info.js) */
-const kanjiReadingsOfWord = (id) => wordKanjiReadings(sentenceTagsOf(id), BANK.wordKanjiFixes[id]);
+/* Las lecturas de kanji de una palabra (las del banco, corregidas por kanji-info.js).
+   Se guardan: el orden de las palabras nuevas las pide para todo el banco cada vez.
+   Se olvidan si llegan bank/readings.js o bank/kanji-info.js después. */
+const kanjiPairs = { readings: null, fixes: null, map: new Map() };
+function kanjiReadingsOfWord(id) {
+  if (kanjiPairs.readings !== BANK.readings || kanjiPairs.fixes !== BANK.wordKanjiFixes) {
+    Object.assign(kanjiPairs, { readings: BANK.readings, fixes: BANK.wordKanjiFixes, map: new Map() });
+  }
+  if (!kanjiPairs.map.has(id)) kanjiPairs.map.set(id, wordKanjiReadings(sentenceTagsOf(id), BANK.wordKanjiFixes[id]));
+  return kanjiPairs.map.get(id);
+}
 
 /* Las palabras que conoce, con las lecturas de sus kanjis */
 function knownKanjiWords() {
@@ -53,16 +62,21 @@ function kanjiMeaningKnown(c, knownIds) {
   return (BANK.byWriting.get(c) || []).some((word) => knownIds.has(word.id));
 }
 
-/* Todo lo de la tabla: el estado de cada kanji y la lista para agruparlos */
-async function loadKanjiTable() {
-  await Promise.all([BANK.loadUpTo("N1"), BANK.loadReadings(), BANK.loadKanjiInfo()]);
-  await migratePracticedReadings();
+/* El estado de cada kanji con lo que ya está cargado (también lo usa el orden de las palabras nuevas) */
+function currentKanjiStates() {
   const knownWords = knownKanjiWords();
   const knownIds = new Set(knownWords.map((word) => word.id));
   const states = kanjiStates({
     kanji: BANK.kanjiInfo, knownWords, meaningKnown: (c) => kanjiMeaningKnown(c, knownIds), config: STUDY_CONFIG.kanji
   });
-  return { states, knownIds, list: [...BANK.kanjiInfo.values()] };
+  return { states, knownIds };
+}
+
+/* Todo lo de la tabla: el estado de cada kanji y la lista para agruparlos */
+async function loadKanjiTable() {
+  await Promise.all([BANK.loadUpTo("N1"), BANK.loadReadings(), BANK.loadKanjiInfo()]);
+  await migratePracticedReadings();
+  return { ...currentKanjiStates(), list: [...BANK.kanjiInfo.values()] };
 }
 
 /* El nombre de cada grupo */

@@ -656,6 +656,65 @@ export default async function extra({ page, step, check }) {
     check(!!result.highWordEasyKanji, "ninguna palabra de otro nivel con kanjis de N5");
   });
 
+  await step("palabras nuevas: el orden por kanjis (puente, desbloqueo, lecturas), rápido, con su porqué y la depuración", async () => {
+    const result = await page.evaluate(async () => {
+      await ensureStudyBank();
+      const savedWords = new Map(userWords), savedReading = meta.reading;
+      try {
+        // Solo conoce 名前: lo primero no debe traer dos kanjis nuevos si hay de una sola cosa nueva
+        userWords = new Map();
+        meta.reading = { ...meta.reading, level: "N5", assumed: "" };
+        const rec = blankUserWord("名前", "なまえ");
+        Object.assign(rec, { status: "mastered", studied: true, canReadKanji: true });
+        userWords.set(rec.id, rec);
+        newWordCandidates(); // la primera vez prepara las lecturas de cada palabra
+        const started = performance.now();
+        const { list } = newWordCandidates();
+        const ms = performance.now() - started;
+        const top = list.slice(0, 20);
+        const yuumei = list.find((card) => card.id === "有名|ゆうめい");
+        return {
+          ms, twoNew: top.filter((card) => card.info.ranked?.novelty.newKanji.length >= 2).map((card) => card.id),
+          yuumei: yuumei && { bridge: yuumei.info.ranked.parts.bridge, why: whyText(yuumei.info) },
+          parts: Object.keys(top[0].info.ranked.parts).join()
+        };
+      } finally {
+        userWords = savedWords;
+        meta.reading = savedReading;
+      }
+    });
+    check(result.ms < 200, `el orden tarda ${Math.round(result.ms)} ms`);
+    check(!result.twoNew.length, `con dos kanjis nuevos entre las 20 primeras: ${result.twoNew.join(" ")}`);
+    check(result.yuumei?.bridge === 0.8 && result.yuumei.why.includes("めい") && result.yuumei.why.includes("有"), JSON.stringify(result.yuumei));
+    check(result.parts === "frequency,bridge,unlock,coverage,topic", result.parts);
+    // Depuración: las 100 primeras con cada componente
+    const debug = await page.evaluate(async () => {
+      prefs.debugStudy = true;
+      session = null;
+      switchView("study");
+      await renderStudyHome();
+      const rows = document.querySelectorAll(".ranking-table")[0]?.querySelectorAll("tbody tr").length;
+      prefs.debugStudy = false;
+      return { rows, cols: document.querySelector(".ranking-table thead tr")?.children.length };
+    });
+    check(debug.rows === 100 && debug.cols === 10, JSON.stringify(debug));
+    await shot(page, "depuracion-orden");
+    // Una palabra nueva dice por qué sale, con la respuesta (antes contaría la lectura)
+    const why = await page.evaluate(() => {
+      const card = newWordCandidates().list[0];
+      session = { queue: [card], total: 1, done: 0, firstTry: 0, missed: new Map(), mode: "type", sentences: false };
+      document.body.classList.add("studying");
+      showCard();
+      const before = !!document.querySelector(".why-line");
+      $("unknownBtn").click();
+      return { before, card: card.id };
+    });
+    await page.waitForSelector(".why-line", { timeout: 5000 });
+    check(!why.before, "el porqué se ve antes de responder");
+    await shot(page, "porque");
+    await page.evaluate(() => { session = null; document.body.classList.remove("studying"); switchView("study"); });
+  });
+
   await step("escritura: repaso espaciado; primero lo ya visto, el primer fallo no cuenta y Mostrar es Otra vez", async () => {
     const result = await page.evaluate(async () => {
       await BANK.loadUpTo("N1");

@@ -6,6 +6,13 @@ Cómo funciona todo hoy: [docs/COMO-FUNCIONA.md](docs/COMO-FUNCIONA.md).
 
 ## 2026-10-26
 
+- **Repasar: nuevo orden de las palabras nuevas.** Primero las que te enseñan una sola cosa nueva:
+  un kanji nuevo junto a otros que ya conoces, o una lectura nueva de un kanji conocido (si sabes
+  名前, salen 有名 o 午前 antes que palabras con dos kanjis nuevos). También pesan la frecuencia,
+  cuánto vocabulario abre el kanji nuevo y completar las lecturas que le faltan a un kanji. No
+  salen seguidas varias con el mismo kanji nuevo. La primera vez que sale una, con la respuesta,
+  ves por qué. La vista de depuración (Ajustes → Repaso) enseña las 100 primeras con cada componente.
+
 - **Repasar → Escribir la lectura (Palabra sola)**: una casilla por kanji, con el kana ya escrito
   (前置き → [まえ][お]き). Así se sabe qué kanji fallaste: la lectura buena sale debajo de cada
   casilla fallada y lo que aciertas de cada lectura se ve en la ficha del kanji (Mis palabras →

@@ -88,7 +88,7 @@ Después manda lo que el usuario demuestra: una palabra fallada deja de contar c
 aunque sea de un nivel supuesto, y una acertada cuenta aunque sea de un nivel superior
 (`knownLemmas`, `reading.js`).
 
-### 2. Palabras nuevas en Repasar (`study.js` + `learning-core.js`)
+### 2. Palabras nuevas en Repasar (`study.js` + `learning-core.js` + `ranking-core.js`)
 
 - Lo que decide es el **nivel de sus kanjis**, no el de la palabra (`kanjiGate`). Una palabra sale si
   todos sus kanjis son del nivel del usuario o inferior, o ya los conoce.
@@ -97,10 +97,29 @@ aunque sea de un nivel supuesto, y una acertada cuenta aunque sea de un nivel su
 - Las agregadas a mano y las marcadas «Conozco la palabra pero no el kanji» no tienen límite.
 - **Orden** (pesos en `study-config.js`; cada criterio solo desempata al anterior):
   agregada a mano > buscada en el diccionario > consultada hace poco (pierde peso en 14 días) >
-  fallada al traducir > vista en una lectura > en la hoja de ruta (solo premium) > proporción de
-  kanjis conocidos > frecuencia.
+  fallada al traducir > vista en una lectura > en la hoja de ruta (solo premium) > el **orden por
+  kanjis**, que decide entre todas las demás (peso `ranking`, siempre por debajo de la hoja de ruta).
+- **Orden por kanjis** (`ranking-core.js`, números en `STUDY_CONFIG.ranking`), con lo que se sabe
+  de cada kanji por las palabras conocidas (sección 10). Suma, cada uno de 0 a 1 por su peso:
+  - *frecuencia* (×1): su puesto en la lista de frecuencia; sin puesto, 0.
+  - *puente* (×1,5), i+1: lo mejor es **una** cosa nueva. Un kanji nuevo junto a otros conocidos, o
+    una lectura nueva de un kanji conocido: 1. Un kanji nuevo y una lectura nueva (有名 para quien
+    conoce 名前): 0,8. Varias lecturas nuevas: 0,6. Un kanji nuevo y varias lecturas: 0,4. Nada
+    nuevo: 0,5. **Dos kanjis nuevos o más: −1.** Un kanji cuenta como conocido si sale en una
+    palabra conocida o si sabes su significado.
+  - *abre vocabulario* (×0,6): cuánto vocabulario frecuente sin conocer lleva su kanji nuevo
+    (escala logarítmica, 1 = el que más).
+  - *lecturas que faltan* (×0,8): le da a un kanji parcial una lectura relevante que no habías
+    visto; 1 si es la última que le faltaba, 0,5 si quedan más.
+  - *tema* (×0): aún no se calcula (fase D).
+- **Variedad**: entre las 300 primeras sin razón propia, MMR (λ = 0,7) evita que salgan seguidas
+  las que traen el mismo kanji nuevo o la misma lectura nueva (o, menos, las que comparten un kanji).
+- **Por qué**: la primera vez que sale una palabra nueva, con la respuesta, una línea dice por qué
+  («lectura nueva めい de 名 · kanji nuevo 有 · frecuencia n.º 900»). Va con la respuesta porque
+  cuenta la lectura.
 - Como mucho **5 nuevas por sesión** (se cambia en Ajustes). Los repasos pendientes salen antes y no cuentan.
-- Con «Mostrar por qué sale cada palabra nueva» (Ajustes) se ve la puntuación de cada una.
+- Con «Mostrar por qué sale cada palabra nueva» (Ajustes) se ven las 100 primeras con cada
+  componente del orden, su valor de MMR y su porqué, para ajustar los pesos.
 
 ### 3. Kanjis en Repasar
 
@@ -299,6 +318,9 @@ días de dominio, reglas de Escribir y de Traducir. Lo que no:
   cuándo una estructura cuenta como entendida (3 lecturas sin consultar) o dominada (2 días), y las
   metas y avisos de la hoja de ruta: `STUDY_CONFIG.analysis` en `study-config.js`. El peso de la
   hoja de ruta en el orden del repaso: `STUDY_CONFIG.weights.roadmap`.
+- Orden de las palabras nuevas: pesos de frecuencia, puente, abre vocabulario, lecturas que faltan
+  y tema, la tabla del puente, λ y tamaño de la variedad (MMR) y las filas de la depuración:
+  `STUDY_CONFIG.ranking`. Cuánto pesa todo eso frente a las razones del estudiante: `weights.ranking`.
 - Tabla de kanjis: palabras que tienen que usar una lectura para que haga falta conocerla (2):
   `STUDY_CONFIG.kanji.relevantMinWords`.
 - Tamaño y aprobado de la evaluación inicial: `PLACEMENT_SIZE` y `PLACEMENT_PASS` en `reading.js`.

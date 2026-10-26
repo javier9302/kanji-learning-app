@@ -20,9 +20,34 @@ const STUDY_CONFIG = {
        meaningFail falló su significado en Traducir y aún no lo ha demostrado
        reading    apareció en una lectura del usuario
        roadmap    está en la hoja de ruta del estudiante premium (Análisis)
-       kanji      proporción de sus kanjis que el usuario ya conoce
-       frequency  puesto en la lista de frecuencia (1 = la más frecuente) */
-  weights: { manual: 1000, dictionary: 300, lookup: 200, meaningFail: 150, reading: 100, roadmap: 50, kanji: 10, frequency: 1 },
+       ranking    la puntuación de `ranking` (abajo) que decide entre todas las demás;
+                  con 10 nunca pasa de la hoja de ruta */
+  weights: { manual: 1000, dictionary: 300, lookup: 200, meaningFail: 150, reading: 100, roadmap: 50, ranking: 10 },
+
+  /* El orden de las palabras nuevas que no tienen ninguna de las razones de
+     arriba (reglas en ranking-core.js). Cada componente vale de 0 a 1 y se
+     multiplica por su peso:
+       frequency  puesto en la lista de frecuencia (1 = la más frecuente)
+       bridge     i+1: cuántas cosas nuevas trae (tabla de abajo)
+       unlock     cuánto vocabulario frecuente abre su kanji nuevo
+       coverage   le da una lectura que le faltaba a un kanji parcial (1 si es la última)
+       topic      parecido con lo aprendido hace poco (aún no se calcula)
+     bridge: lo que vale según lo nuevo. one: un kanji nuevo, o una lectura nueva
+       de un kanji conocido; kanjiAndReading: un kanji nuevo y una lectura nueva
+       (有名 para quien conoce 名前); readingsOnly: varias lecturas nuevas;
+       many: un kanji nuevo y varias lecturas; nothingNew: nada nuevo (todo
+       conocido); twoKanji: dos kanjis nuevos o más (resta).
+     diversity: MMR sobre las `pool` primeras; lambda 1 = solo la puntuación,
+       0 = solo que no se parezcan (mismo kanji nuevo o misma lectura nueva).
+     unlockShown: a partir de este valor de unlock, el porqué dice que abre vocabulario.
+     debugTop: palabras de la vista de depuración. */
+  ranking: {
+    weights: { frequency: 1, bridge: 1.5, unlock: 0.6, coverage: 0.8, topic: 0 },
+    bridge: { one: 1, kanjiAndReading: 0.8, readingsOnly: 0.6, many: 0.4, nothingNew: 0.5, twoKanji: -1 },
+    diversity: { lambda: 0.7, pool: 300 },
+    unlockShown: 0.6,
+    debugTop: 100
+  },
 
   /* Días que tarda en apagarse la ventaja de una consulta reciente al diccionario */
   lookupDecayDays: 14,

@@ -18,7 +18,7 @@ Scripts clásicos (no módulos) que comparten variables globales. El orden de ca
 `index.html` importa:
 
 `config.js` → `i18n.js` → `vendor/ts-fsrs` → `bank/*.js` → `study-config.js` → `learning-core.js`
-→ `ja-core.js` → `sentences-core.js` → `kanji-core.js` → `translate-core.js` → `texts.js` → `reading.js`
+→ `ja-core.js` → `sentences-core.js` → `kanji-core.js` → `ranking-core.js` → `translate-core.js` → `texts.js` → `reading.js`
 → `reading-stats.js` → `reading-sync.js` → `study.js` → `sentences.js` → `translate.js`
 → `progress.js` → `kanji-table.js` → `dictionary.js` → `app.js` (`progress-core.js` y `grammar-core.js` van justo
 después de `learning-core.js`)
@@ -50,8 +50,11 @@ después de `learning-core.js`)
   lecturas relevantes de `bank/kanji-info.js` (generado con `tools/build-kanji.mjs` desde KANJIDIC2;
   no se edita a mano). Plan «progresión por palabras» del chat del 2026-10-26: hechas A (la tabla)
   y B (una casilla por kanji al escribir la lectura en Repasar, `readingBoxes` / `gradeBoxes`; lo
-  acertado por lectura va a `userKanji[c].readings`, columna `kanji_readings`); quedan C (nuevo
-  orden de palabras nuevas), D (temas con embeddings) y E (exportar/importar la cola).
+  acertado por lectura va a `userKanji[c].readings`, columna `kanji_readings`) y C (orden de las
+  palabras nuevas en `ranking-core.js`: frecuencia, puente i+1, desbloqueo, lecturas que faltan y
+  MMR; pesos en `STUDY_CONFIG.ranking`; `newWordCandidates` lo aplica debajo de las razones del
+  estudiante); quedan D (temas con embeddings: el componente `topic`, hoy con peso 0) y E
+  (exportar/importar la cola).
 - **`grammar-core.js`**: catálogo de gramática (`GRAMMAR`, hoy solo N5), detector sobre las piezas
   de kuromoji de la frase entera (`detectGrammar`) y medición (`grammarStates`). Una estructura
   nueva lleva su regla, su ejemplo y, si se parece a otra, un caso en «no confunde» de

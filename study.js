@@ -239,8 +239,9 @@ const kanjiGateContext = (known) => ({
 
 /* Puntuación de una palabra nueva (pesos en study-config.js) y su porqué.
    blocked: kanjis por encima del nivel del usuario que impiden proponerla (ver kanjiGate).
-   roadmap: las palabras de la hoja de ruta del estudiante premium (progress.js). */
-function scoreWord(entry, rec, known, gate = kanjiGateContext(known), roadmap = new Set()) {
+   roadmap: las palabras de la hoja de ruta del estudiante premium (progress.js).
+   ranked: su puntuación de ranking-core.js ({ score, parts, novelty }), si se calculó. */
+function scoreWord(entry, rec, known, gate = kanjiGateContext(known), roadmap = new Set(), ranked = null) {
   const W = STUDY_CONFIG.weights;
   const manual = rec?.origin === "manual";
   // Buscada en el diccionario: no es lo mismo que haberla visto en una lectura
@@ -250,9 +251,7 @@ function scoreWord(entry, rec, known, gate = kanjiGateContext(known), roadmap = 
   // Falló su significado en Traducir y todavía no lo ha demostrado
   const meaningFail = !!rec && rec.meaningWrong > 0 && !rec.knowsMeaning;
   const kanjiKnown = entry.kanji.filter((c) => known.has(c)).length;
-  const coverage = entry.kanji.length ? kanjiKnown / entry.kanji.length : 0;
   const rank = BANK.frequency[entry.id] || 0;
-  const frequency = rank ? Math.max(0, 1 - (rank - 1) / STUDY_CONFIG.frequencyMaxRank) : 0;
   const planned = roadmap.has(entry.id);
 
   const exempt = manual || !!rec?.knowsMeaning; // "Conozco la palabra pero no el kanji"
@@ -261,9 +260,48 @@ function scoreWord(entry, rec, known, gate = kanjiGateContext(known), roadmap = 
 
   return {
     score: manual * W.manual + dictionary * W.dictionary + lookup * W.lookup + meaningFail * W.meaningFail +
-      reading * W.reading + planned * W.roadmap + coverage * W.kanji + frequency * W.frequency,
-    manual, dictionary, lookup, meaningFail, reading, planned, kanjiKnown, kanjiTotal: entry.kanji.length, rank, blocked
+      reading * W.reading + planned * W.roadmap + (ranked?.score || 0) * W.ranking,
+    manual, dictionary, lookup, meaningFail, reading, planned, kanjiKnown, kanjiTotal: entry.kanji.length, rank, blocked,
+    ranked, intent: manual || dictionary || lookup > 0 || meaningFail || reading || planned
   };
+}
+
+/* La puntuación de ranking-core.js de cada palabra posible: Map id -> { score, parts, novelty }.
+   Con lo que el estudiante sabe de cada kanji (kanjiStates). Sin bank/readings.js
+   ni kanji-info.js (si no se pudieron descargar) las lecturas son las que se
+   puedan repartir con el banco, y nada cuenta como lectura que falta. */
+function rankingScores(entries) {
+  const { states, knownIds } = currentKanjiStates();
+  const word = (entry) => ({ id: entry.id, kanji: entry.kanji, pairs: kanjiReadingsOfWord(entry.id), rank: BANK.frequency[entry.id] || 0 });
+  const unknown = [...BANK.words.values()].filter((entry) => !entry.kana && entry.kanji.length && !knownIds.has(entry.id)).map(word);
+  const ctx = rankingContext(states, unknown);
+  const config = { ...STUDY_CONFIG.ranking, frequencyMaxRank: STUDY_CONFIG.frequencyMaxRank };
+  return new Map(scoreRanking(entries.map(word), ctx, config).map((item) => [item.id, item]));
+}
+
+/* Por qué sale una palabra nueva, en una línea: lo que pidió el estudiante y lo
+   que dice el orden (lo nuevo que trae, lo que ya conoce, su frecuencia).
+   Cuenta la lectura nueva: se enseña solo con la respuesta. */
+function whyText(info) {
+  const parts = [
+    info.manual ? t("la agregaste tú") : "",
+    info.dictionary ? t("la buscaste en el diccionario") : "",
+    info.meaningFail ? t("la fallaste al traducir") : "",
+    info.reading ? t("salió en tus lecturas") : "",
+    info.planned ? t("está en tu hoja de ruta") : ""
+  ];
+  const text = {
+    newReading: (d) => t("lectura nueva {reading} de {kanji}", d),
+    completes: (d) => t("{reading}: la lectura que le faltaba a {kanji}", d),
+    newKanji: (d) => t("kanji nuevo {kanji}", d),
+    newKanjiUnlocks: (d) => t("kanji nuevo {kanji}, que sale en muchas palabras frecuentes", d),
+    manyKanji: (d) => t("{n} kanjis nuevos ({kanji})", d),
+    knownKanji: (d) => t("usa {kanji}, que ya conoces", d),
+    nothingNew: () => t("ya conoces sus kanjis y sus lecturas")
+  };
+  if (info.ranked) parts.push(...rankingReasons(info.ranked, STUDY_CONFIG.ranking).map(([key, data]) => text[key](data)));
+  if (info.rank) parts.push(t("frecuencia n.º {rank}", { rank: info.rank }));
+  return parts.filter(Boolean).join(" · ");
 }
 
 /* Palabras nuevas posibles, de mayor a menor puntuación. Salen de todo el banco
@@ -272,11 +310,8 @@ function scoreWord(entry, rec, known, gate = kanjiGateContext(known), roadmap = 
    por encima del nivel del usuario. */
 function newWordCandidates() {
   const known = knownKanji(), gate = kanjiGateContext(known), roadmap = roadmapWords();
-  const list = [], excluded = [];
-  const consider = (entry, rec) => {
-    const info = scoreWord(entry, rec, known, gate, roadmap);
-    (info.blocked.length ? excluded : list).push({ kind: "word", id: entry.id, entry, rec, group: "new", info });
-  };
+  const list = [], excluded = [], pending = [];
+  const consider = (entry, rec) => pending.push([entry, rec]);
 
   const mine = new Set();
   for (const rec of userWords.values()) {
@@ -295,9 +330,24 @@ function newWordCandidates() {
     if (!mine.has(entry.id) && !entry.kana && entry.kanji.length) consider(entry, null);
   }
 
+  const ranked = rankingScores(pending.map(([entry]) => entry));
+  for (const [entry, rec] of pending) {
+    const info = scoreWord(entry, rec, known, gate, roadmap, ranked.get(entry.id));
+    (info.blocked.length ? excluded : list).push({ kind: "word", id: entry.id, entry, rec, group: "new", info });
+  }
+
   const order = (a, b) => b.info.score - a.info.score ||
     BANK.LEVELS.indexOf(a.entry.level) - BANK.LEVELS.indexOf(b.entry.level);
-  return { list: list.sort(order), excluded: excluded.sort(order) };
+  list.sort(order);
+  // Lo que pidió el estudiante va primero, en su orden; el resto, variado (MMR)
+  const asked = list.filter((card) => card.info.intent);
+  const rest = list.filter((card) => !card.info.intent)
+    .map((card) => ({ card, score: card.info.score, novelty: card.info.ranked?.novelty || { newKanji: [], newReadings: [], knownKanji: [], completes: [] } }));
+  const varied = diversify(rest, STUDY_CONFIG.ranking.diversity).map((item) => {
+    if (item.mmr !== undefined) item.card.info.mmr = item.mmr;
+    return item.card;
+  });
+  return { list: [...asked, ...varied], excluded: excluded.sort(order) };
 }
 
 /* Tarjetas posibles, por grupos: due (toca repasar), fresh (nuevas, ya en el
@@ -351,36 +401,38 @@ const ensureStudyBank = () => Promise.all([BANK.loadUpTo("N1"),
   // Para una casilla por kanji; sin ellas se pregunta con una sola casilla
   BANK.loadReadings().catch(() => {}), BANK.loadKanjiInfo().then(migratePracticedReadings).catch(() => {})]);
 
-/* Vista de depuración (Ajustes): por qué sale cada palabra nueva */
+/* Vista de depuración (Ajustes): por qué sale cada palabra nueva, con cada
+   componente del orden (ranking-core.js) para poder ajustar los pesos */
 function debugHTML(fresh, excluded) {
-  const row = ({ entry, info }) => `
+  const R = STUDY_CONFIG.ranking;
+  const n = (value) => value === undefined ? "—" : value.toFixed(2);
+  const row = ({ entry, info }, i) => `
     <tr>
+      <td>${i + 1}</td>
       <td lang="ja">${escapeHTML(entry.w)}</td>
       <td>${info.score.toFixed(2)}</td>
-      <td>${[
-        info.manual ? t("agregada a mano") : "",
-        info.dictionary ? t("buscada en el diccionario") : "",
-        info.lookup ? t("consulta reciente × {value}", { value: info.lookup.toFixed(2) }) : "",
-        info.meaningFail ? t("fallada al traducir") : "",
-        info.reading ? t("vista en lecturas") : "",
-        info.planned ? t("en tu hoja de ruta") : "",
-        t("kanjis conocidos {known}/{total}", { known: info.kanjiKnown, total: info.kanjiTotal }),
-        info.rank ? t("frecuencia n.º {rank}", { rank: info.rank }) : t("sin puesto de frecuencia"),
-        info.blocked.length ? t("kanji por encima de tu nivel: {kanji}", { kanji: info.blocked.join("、") }) : ""
-      ].filter(Boolean).map(escapeHTML).join(" · ")}</td>
+      ${["frequency", "bridge", "unlock", "coverage", "topic"].map((key) => `<td>${n(info.ranked?.parts[key])}</td>`).join("")}
+      <td>${n(info.mmr)}</td>
+      <td>${escapeHTML([info.lookup ? t("consulta reciente × {value}", { value: info.lookup.toFixed(2) }) : "", whyText(info),
+        info.blocked.length ? t("kanji por encima de tu nivel: {kanji}", { kanji: info.blocked.join("、") }) : ""].filter(Boolean).join(" · "))}</td>
     </tr>`;
   const words = fresh.filter((card) => card.kind === "word");
+  const head = `<thead><tr><th>#</th><th>${t("Palabra")}</th><th>${t("Puntos")}</th><th>${t("Frec.")}</th><th>${t("Puente")}</th>
+    <th>${t("Abre")}</th><th>${t("Lecturas")}</th><th>${t("Tema")}</th><th>MMR</th><th>${t("Por qué")}</th></tr></thead>`;
   return `
     <details class="debug-panel" open>
       <summary>${t("Depuración: próximas palabras nuevas")}</summary>
-      <p class="helper">${t("Puntuación = a mano × {manual} + diccionario × {dictionary} + consulta reciente × {lookup} + fallada al traducir × {meaningFail} + lectura × {reading} + hoja de ruta × {roadmap} + kanjis conocidos × {kanji} + frecuencia × {frequency}. Los pesos están en study-config.js.", STUDY_CONFIG.weights)}</p>
-      <div class="table-scroll"><table class="debug-table">
-        <thead><tr><th>${t("Palabra")}</th><th>${t("Puntos")}</th><th>${t("Por qué")}</th></tr></thead>
-        <tbody>${words.slice(0, 20).map(row).join("")}</tbody>
+      <p class="helper">${t("Puntuación = a mano × {manual} + diccionario × {dictionary} + consulta reciente × {lookup} + fallada al traducir × {meaningFail} + lectura × {reading} + hoja de ruta × {roadmap} + orden × {ranking}.", STUDY_CONFIG.weights)}
+        ${t("Orden = frecuencia × {frequency} + puente × {bridge} + abre vocabulario × {unlock} + lecturas que faltan × {coverage} + tema × {topic}; después, variedad (MMR, λ = {lambda}). Los pesos están en study-config.js.",
+          { ...R.weights, lambda: R.diversity.lambda })}</p>
+      <div class="table-scroll"><table class="debug-table ranking-table">
+        ${head}
+        <tbody>${words.slice(0, R.debugTop).map(row).join("")}</tbody>
       </table></div>
       ${excluded.length ? `
       <p class="helper">${t("{n} en espera: llevan kanjis por encima de tu nivel ({level}). Saldrán cuando subas de nivel o conozcas alguno de sus otros kanjis.", { n: plural(excluded.length, "palabra", "palabras"), level: userLevel() })}</p>
-      <div class="table-scroll"><table class="debug-table">
+      <div class="table-scroll"><table class="debug-table ranking-table">
+        ${head}
         <tbody>${excluded.slice(0, 10).map(row).join("")}</tbody>
       </table></div>` : ""}
     </details>`;
@@ -590,6 +642,8 @@ function showCard() {
   card.byReading = card.kind === "kanji" && !!pick;
   // Una palabra sola se escribe con una casilla por kanji (si se puede repartir)
   const boxes = card.boxes = form === "type" && card.kind === "word" && !pick ? wordBoxes(entry) : null;
+  // La primera vez que sale una palabra nueva se dice por qué (con la respuesta, que lo cuenta)
+  const firstTime = !card.attempts;
 
   area.innerHTML = `
     <div class="card">
@@ -632,6 +686,7 @@ function showCard() {
     answer.innerHTML = `
       ${pick ? sentenceAnswerHTML(pick) : ""}
       ${answerHTML(card, pick)}
+      ${card.group === "new" && card.info && firstTime ? `<p class="helper why-line">${t("Por qué ahora:")} ${escapeHTML(whyText(card.info))}</p>` : ""}
       <div class="card-actions">
         ${ratings.map(([rating, label, cls], i) => `
           <button class="button ${cls}" type="button" data-rate="${rating}">

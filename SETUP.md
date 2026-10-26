@@ -179,8 +179,8 @@ Sin sesión no se anotan palabras por revisar.
 
 El repaso usa **FSRS** (`vendor/ts-fsrs`). Todo lo ajustable está en un solo archivo,
 [`study-config.js`](study-config.js): palabras nuevas por sesión, los pesos con los que se
-elige la siguiente palabra nueva (agregada a mano > vista en lecturas > kanjis conocidos >
-frecuencia), las reglas por nivel de kanji (`newWordKanji`), las de Escribir (`writing`) y los parámetros de FSRS.
+elige la siguiente palabra nueva (agregada a mano > vista en lecturas > el orden por kanjis de
+`ranking`: frecuencia, una sola cosa nueva, vocabulario que abre y lecturas que faltan), las reglas por nivel de kanji (`newWordKanji`), las de Escribir (`writing`) y los parámetros de FSRS.
 
 **Qué palabras nuevas se proponen** lo decide el nivel de sus **kanjis**, no el de la palabra (hay
 palabras de N5 con un kanji de N1 y palabras de N3 hechas solo con kanjis de N5). Sale una palabra
