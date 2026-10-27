@@ -10,6 +10,8 @@ Cómo funciona todo hoy: [docs/COMO-FUNCIONA.md](docs/COMO-FUNCIONA.md).
   los de las palabras que mejor conoces, luego los más útiles y, entre ellos, los de menos trazos. Ya
   no sale de vez en cuando un kanji que no has visto. La cabecera dice cuántos de los que has visto
   has escrito (`a2c97ce`).
+- Interno: una prueba comprueba que todos los scripts de la app se pueden cargar (un error en
+  `i18n.js` del commit anterior rompía la app entera y ninguna prueba lo veía).
 
 - **Textos con las palabras que te tocan, y más variados**: la IA usa hasta 8 de las palabras que
   te toca repasar (o tocarán pronto), y el lector te dice cuántas salen; leer el texto las repasa.

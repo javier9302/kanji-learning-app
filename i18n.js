@@ -10,7 +10,6 @@ const LANGS = ["es", "en"];
 
 const EN = {
   "Automático (nivel a nivel)": "Automatic (level by level)",
-    "Writing level: {level}, {done} of {total} kanji written. Each kanji comes back when it is due for review; new ones come first from the words you have seen, and now and then one from your level.",
   "Hoy: {due} por repasar y {fresh} de {max} kanjis nuevos.": "Today: {due} to review and {fresh} of {max} new kanji.",
   "Práctica extra · {level}": "Extra practice · {level}",
   "Nuevo · {level}": "New · {level}",
