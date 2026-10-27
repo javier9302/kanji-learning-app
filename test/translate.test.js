@@ -34,6 +34,15 @@ test("sin frases válidas devuelve null", () => {
   assert.equal(choose([sentence("a", [N("学校"), WA, N("毎日"), DOT], { en: "", es: "" })]), null);
 });
 
+test("a igualdad, la frase con palabras que toca repasar va antes, también por delante de las que está aprendiendo", () => {
+  const plain = sentence("a", [N("学校"), WA, N("毎日"), DOT]);
+  const due = sentence("b", [N("名前"), WA, N("毎日"), DOT]);
+  const learning = sentence("c", [N("会社"), WA, N("毎日"), DOT]);
+  const wordOf = words({ 名前: { known: true, status: "learning", due: true }, 会社: { known: true, status: "learning" } });
+  assert.equal(choose([plain, learning, due], wordOf).id, "b");
+  assert.equal(choose([plain, learning], wordOf).id, "c"); // sin ninguna que toque, como antes
+});
+
 test("con más palabras desconocidas que el máximo, la frase no sale", () => {
   const hard = sentence("a", [N("経済"), WA, N("政治"), WA, N("社会"), DOT]);
   const unknown = { known: false, status: "unknown" };

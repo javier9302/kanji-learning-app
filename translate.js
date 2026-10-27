@@ -40,6 +40,8 @@ function translateWordState(key, known = knownLemmas()) {
     known: isKnown,
     status: rec?.status || (isKnown ? "mastered" : "unknown"),
     lookups: rec?.lookups || 0,
+    // Le toca repasarla: una frase con ella la practica en contexto (etapa 1.4)
+    due: !!rec?.studied && !!rec.nextReview && rec.nextReview <= today(),
     failures: (rec?.evalWrong || 0) + (rec?.incorrectCount || 0) + (rec?.meaningWrong || 0)
   };
 }

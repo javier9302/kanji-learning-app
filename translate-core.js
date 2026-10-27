@@ -61,6 +61,7 @@ function chooseTranslationSentence(state, config) {
     const score =
       (keys.length - unknown) / keys.length * W.known +
       (W.unknown[unknown] ?? 0) +
+      capped((word) => word.due) * (W.due || 0) +
       capped((word) => word.status === "learning" || word.status === "pre_known") * W.learning +
       capped((word) => word.lookups > 0) * W.lookups +
       capped((word) => word.failures > 0) * W.failed -

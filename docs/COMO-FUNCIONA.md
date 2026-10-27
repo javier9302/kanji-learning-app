@@ -234,6 +234,12 @@ palabras que ya conoce o está aprendiendo. En «Palabras y kanjis» se alternan
 Frases de 4 a 40 caracteres con traducción y como mucho 2 palabras desconocidas. Si la respuesta
 casi coincide con la traducción de referencia se acepta sin llamar a la IA.
 
+Qué frase sale (`chooseTranslationSentence`, pesos en `STUDY_CONFIG.translate.choose`): las que más
+palabras conocidas tienen, con una desconocida mejor que ninguna, y suman **las palabras que le toca
+repasar** (5 cada una, hasta 3), las que está aprendiendo (3), las consultadas (2) y las falladas (3).
+Restan las que salieron hace poco (en 5 días) y las del mismo texto que la anterior. Traducir no
+cambia la fecha de repaso de ninguna palabra.
+
 ### 8. Escribir (`learning-core.js` + `study.js`)
 
 Repaso espaciado con FSRS: cada kanji tiene su **tarjeta de escritura** (`writeFsrs`), aparte de la

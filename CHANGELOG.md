@@ -6,6 +6,8 @@ Cómo funciona todo hoy: [docs/COMO-FUNCIONA.md](docs/COMO-FUNCIONA.md).
 
 ## 2026-10-27
 
+- **Traducir prefiere frases con las palabras que te toca repasar**, para practicarlas en contexto.
+
 - **Escribir, solo con los kanjis que ya has visto en tus palabras**, de simple a complejo: primero
   los de las palabras que mejor conoces, luego los más útiles y, entre ellos, los de menos trazos. Ya
   no sale de vez en cuando un kanji que no has visto. La cabecera dice cuántos de los que has visto

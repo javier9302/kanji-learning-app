@@ -176,6 +176,8 @@ const STUDY_CONFIG = {
     /* Qué frase sale primero: gana la suma más alta.
          known      proporción de sus palabras que el usuario conoce (0 a 1)
          unknown    puntos según cuántas NO conoce: [ninguna, una, dos]
+         due        por cada palabra que le toca repasar (pesa más que lo demás: se
+                    practica en contexto lo que toca)
          learning   por cada palabra en "aprendiendo" o "por confirmar"
          lookups    por cada palabra que ha consultado alguna vez
          failed     por cada palabra que ha fallado (evaluación, repaso o traducción)
@@ -184,7 +186,7 @@ const STUDY_CONFIG = {
                     hasta 0 pasados recentDays días
          sameText   se RESTA si es del mismo texto que la frase anterior */
     choose: {
-      known: 10, unknown: [0, 4, 2], learning: 3, lookups: 2, failed: 3, perWordMax: 3,
+      known: 10, unknown: [0, 4, 2], due: 5, learning: 3, lookups: 2, failed: 3, perWordMax: 3,
       recent: 30, recentDays: 5, sameText: 4
     }
   },
