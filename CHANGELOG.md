@@ -10,7 +10,8 @@ Cómo funciona todo hoy: [docs/COMO-FUNCIONA.md](docs/COMO-FUNCIONA.md).
   te toca repasar (o tocarán pronto), y el lector te dice cuántas salen; leer el texto las repasa.
   El texto recomendado de la biblioteca es el que tiene más de ellas. Los textos rotan tipo (ahora
   también instrucciones y opinión), tema y un grupo de personajes fijos, evitan las frases gastadas
-  («お腹が空きました», «公園に行きました»…) y, si uno repite frases de los últimos, se pide otro.
+  («お腹が空きました», «公園に行きました»…) y, si uno repite frases de los últimos, se pide otro
+  (`bcb799c`).
 - Arreglado un fallo que a veces rompía Repasar con palabras estudiadas sin fecha de repaso.
 
 - **Leer cuenta como repaso**: al terminar un texto, las palabras que te tocaba repasar cuentan como
