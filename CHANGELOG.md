@@ -8,7 +8,8 @@ Cómo funciona todo hoy: [docs/COMO-FUNCIONA.md](docs/COMO-FUNCIONA.md).
 
 - **Hoy, la nueva pantalla de inicio**: la sesión del día en una lista. Un texto con las palabras
   que te toca repasar, Repasar, 4 kanjis que escribir y 3 frases que traducir, con el siguiente
-  paso resaltado y cada uno marcado al hacerlo. Al terminar un repaso o un texto, «Volver a Hoy».
+  paso resaltado y cada uno marcado al hacerlo. Al terminar un repaso o un texto, «Volver a Hoy»
+  (`8b02585`).
 
 - **Traducir prefiere frases con las palabras que te toca repasar**, para practicarlas en contexto (`5857fea`).
 
