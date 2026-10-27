@@ -40,6 +40,7 @@
   <script src="translate.js" defer></script>
   <script src="progress.js" defer></script>
   <script src="kanji-table.js" defer></script>
+  <script src="today.js" defer></script>
   <script src="dictionary.js" defer></script>
   <script src="app.js" defer></script>
 </head>
@@ -102,7 +103,8 @@
     </nav>
 
     <nav class="subtabs" data-group="study" aria-label="Modos de estudio">
-      <button class="subtab active" data-view="read" type="button">Leer</button>
+      <button class="subtab active" data-view="today" type="button">Hoy</button>
+      <button class="subtab" data-view="read" type="button">Leer</button>
       <button class="subtab" data-view="study" type="button">Repasar</button>
       <button class="subtab" data-view="translate" type="button">Traducir</button>
       <button class="subtab" data-view="draw" type="button">Escribir</button>
@@ -114,6 +116,17 @@
       <button class="subtab" data-view="kanji" type="button">Kanjis</button>
       <button class="subtab" data-view="add" type="button">Agregar palabra</button>
     </nav>
+
+    <!-- HOY: la sesión del día (pantalla de inicio) -->
+    <section id="view-today" class="view hidden">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">TU SESIÓN DE HOY</p>
+          <h2>Hoy</h2>
+        </div>
+      </div>
+      <div id="todayArea"></div>
+    </section>
 
     <!-- LECTURA -->
     <section id="view-read" class="view hidden">

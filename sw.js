@@ -9,7 +9,7 @@
      versión nueva de la app no lo borra.
    ========================================= */
 
-const CACHE = "kanji-learning-v23";
+const CACHE = "kanji-learning-v24";
 /* Súbelo SOLO si cambian los archivos de vendor/: obliga a descargarlos otra vez */
 const LASTING = "kanji-lasting-v1";
 const SHELL = [
@@ -42,6 +42,7 @@ const SHELL = [
   "translate.js",
   "progress.js",
   "kanji-table.js",
+  "today.js",
   "dictionary.js",
   "app.js",
   "manifest.webmanifest",

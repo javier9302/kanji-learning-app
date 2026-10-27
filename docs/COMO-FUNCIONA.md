@@ -8,6 +8,7 @@ mismo commit que cambie cualquiera de estas reglas. Los cambios, con fecha, est�
 
 | Sección | Qué hace |
 |---|---|
+| **Hoy** (pantalla de inicio) | La sesión del día en una lista: un texto con las palabras que tocan, Repasar, unos kanjis que escribir y unas frases que traducir. Cada paso abre su sección. |
 | **Leer** | Textos en japonés (generados por IA, de la comunidad o pegados) con furigana según el nivel. Tocar una palabra enseña su lectura y su significado. Al terminar, una evaluación corta de las palabras del texto. |
 | **Repasar** | Repaso espaciado (FSRS) de palabras y kanjis. Modo «Escribir la lectura» o «Tarjetas»; presentación «Palabra sola» o «En una frase». |
 | **Traducir** | El usuario traduce frases de sus textos y lo corrige la IA (o él mismo con la traducción de referencia). Mide si entiende el significado; no mueve el calendario de repaso. |
@@ -364,6 +365,23 @@ guarda aparte, se calcula al abrir la tabla.
   la has acertado y fallado al escribirla), las palabras
   que conoces con él y, por cada lectura que falta, las 3 palabras más frecuentes que te la enseñan.
 
+### 11. Hoy (`today.js` + `learning-core.js`, `planToday`)
+
+La pantalla con la que se abre la app (si quedó un texto a medias al recargar, se vuelve a él).
+Junta lo del día en este orden, y el siguiente paso sin hacer va resaltado:
+
+1. **Leer un texto**: el suyo a medias o el recomendado (el que tiene más palabras que tocan); sin
+   ninguno y con cuenta, crear uno con IA, que llevará las palabras que tocan. Leerlo las repasa.
+2. **Repasar**: las que siguen tocando después del texto y hasta las palabras nuevas por sesión.
+   El botón empieza la sesión directamente.
+3. **Escribir 4 kanjis** (de los que ya ha visto, de simple a complejo).
+4. **Traducir 3 frases** (con las palabras que tocan).
+
+No guarda nada propio: lo hecho se deduce de lo de hoy (un texto terminado hoy; nada que toque en
+Repasar y alguna respuesta hoy; kanjis escritos hoy; traducciones de hoy). Un paso sin nada que
+hacer (sin texto posible, sin kanjis o sin frases) no sale. Sin la evaluación inicial, solo sale
+ella. Encima, cuántas respuestas lleva de su meta diaria.
+
 ## Dónde cambiar cada número
 
 Casi todo lo ajustable está en `study-config.js`: palabras nuevas por sesión, pesos del orden,
@@ -376,6 +394,11 @@ días de dominio, reglas de Escribir y de Traducir. Lo que no:
   cuándo una estructura cuenta como entendida (3 lecturas sin consultar) o dominada (2 días), y las
   metas y avisos de la hoja de ruta: `STUDY_CONFIG.analysis` en `study-config.js`. El peso de la
   hoja de ruta en el orden del repaso: `STUDY_CONFIG.weights.roadmap`.
+- Hoy: kanjis que escribir (4) y frases que traducir (3) al día: `STUDY_CONFIG.today`.
+- Textos con las palabras que tocan: cuántas (8), con cuántos días de adelanto (2), textos que se
+  miran para variar y no repetir (10) y cuándo un texto se repite: `STUDY_CONFIG.stories`.
+- Leer cuenta como repaso: valoración (Difícil), tope de crecimiento (×1,5), días mínimos (1) y
+  tarjeta cada 2 lecturas: `STUDY_CONFIG.readingReview`.
 - Orden de las palabras nuevas: pesos de frecuencia, puente, abre vocabulario, lecturas que faltan
   y tema, la tabla del puente, λ y tamaño de la variedad (MMR) y las filas de la depuración:
   `STUDY_CONFIG.ranking`. Cuánto pesa todo eso frente a las razones del estudiante: `weights.ranking`.

@@ -163,7 +163,7 @@ function formatDate(iso) {
 
 /* Secciones principales y las vistas que agrupa cada una */
 const NAV = {
-  study: ["read", "study", "translate", "draw"],
+  study: ["today", "read", "study", "translate", "draw"],
   library: ["library"],
   words: ["progress", "analysis", "kanji", "add"],
   settings: ["data"],
@@ -186,6 +186,7 @@ function switchView(name) {
   document.querySelectorAll(".subtab").forEach((t) =>
     t.classList.toggle("active", t.dataset.view === name));
   document.body.dataset.view = name;
+  if (name === "today") renderToday();
   if (name === "read") renderRead();
   if (name === "library") renderLibrary();
   if (name === "study") renderStudyHome();
@@ -1080,6 +1081,7 @@ async function init() {
   bindShortcuts();
   bindSettings();
   bindKanjiTable();
+  bindToday();
   bindLibrary();
   bindDictionary();
   bindTranslate();
@@ -1089,7 +1091,8 @@ async function init() {
 
   setSyncState("off");
   renderAll();
-  switchView("read"); // la lectura es la pantalla principal
+  // Hoy es la pantalla de inicio; con un texto a medias, se vuelve a él
+  switchView(readingInProgress() ? "read" : "today");
 
   // Una sola vez: significados equivocados de una versión anterior; después, las
   // frases de ejemplo de los textos que ya había (solo la primera vez o si cambian las reglas)

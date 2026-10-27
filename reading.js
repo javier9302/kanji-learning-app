@@ -1125,6 +1125,7 @@ function renderReadSummary(summary) {
       <div class="row-actions">
         ${hard && easier ? `<button id="readEasierBtn" class="button button-outline" type="button">
           ${t("Cambiar a {level}", { level: easier })}</button>` : ""}
+        <button class="button button-outline" data-go="today" type="button">${t("Volver a Hoy")}</button>
         <button id="readMoreBtn" class="button button-primary" type="button">${t("Siguiente texto")}</button>
       </div>
     </div>

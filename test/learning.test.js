@@ -184,3 +184,31 @@ test("readingInterval: lo de FSRS, pero como mucho 1,5 veces el intervalo anteri
   assert.equal(readingInterval(0, 4, READ), 1);    // recién aprendida: un día
   assert.equal(readingInterval(3, 0, READ), 1);
 });
+
+const { planToday } = require("../learning-core.js");
+const TODAY = { writing: 4, sentences: 3 };
+const day = (more = {}) => ({
+  placed: true, story: { kind: "text", due: 3 }, read: false, due: 12, fresh: 5, answered: 0, goal: 20,
+  writing: { available: true, done: 0 }, sentences: { available: true, done: 0 }, ...more
+});
+
+test("planToday: texto, Repasar, escribir y traducir, en ese orden; sin evaluación, solo ella", () => {
+  const plan = planToday(day(), TODAY);
+  assert.deepEqual(plan.steps.map((step) => step.kind), ["story", "reviews", "writing", "sentences"]);
+  assert.equal(plan.next, "story");
+  assert.equal(plan.steps[1].count, 17);
+  assert.deepEqual(planToday(day({ placed: false }), TODAY), { steps: [{ kind: "placement", count: 1, done: false, progress: 0 }], next: "placement" });
+});
+
+test("planToday: lo hecho se deduce de lo de hoy; lo que no hay no sale", () => {
+  const plan = planToday(day({ read: true, due: 0, answered: 15, writing: { available: true, done: 4 }, sentences: { available: true, done: 1 } }), TODAY);
+  assert.deepEqual(plan.steps.map((step) => [step.kind, step.done]), [["story", true], ["reviews", true], ["writing", true], ["sentences", false]]);
+  assert.equal(plan.next, "sentences");
+  // Sin texto posible, sin kanjis que escribir y sin frases: solo Repasar
+  const bare = planToday(day({ story: { kind: "none" }, writing: { available: false, done: 0 }, sentences: { available: false, done: 0 } }), TODAY);
+  assert.deepEqual(bare.steps.map((step) => step.kind), ["reviews"]);
+  // Sin nada que repasar pero sin haber respondido nada hoy: queda por hacer (las nuevas)
+  assert.equal(planToday(day({ due: 0, answered: 0 }), TODAY).steps[1].done, false);
+  // Todo hecho
+  assert.equal(planToday(day({ read: true, due: 0, answered: 3, writing: { available: false, done: 2 }, sentences: { available: true, done: 3 } }), TODAY).next, null);
+});

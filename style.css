@@ -3084,3 +3084,71 @@ body[data-view="dict"] .intro {
 .read-review.read-again {
   border-left: 3px dashed var(--red);
 }
+
+/* =========================================
+   HOY (la sesión del día)
+   ========================================= */
+
+.today-steps {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.today-step {
+  display: grid;
+  grid-template-columns: 28px 1fr auto;
+  gap: 12px;
+  align-items: center;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--white);
+}
+
+/* El siguiente paso, con borde grueso; los hechos, punteados (también en blanco y negro) */
+.today-step.today-next {
+  border: 2px solid var(--primary);
+}
+
+.today-step.today-step-done {
+  border-style: dashed;
+  color: var(--muted);
+}
+
+.today-mark {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 2px solid var(--line-strong);
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  color: var(--ok);
+}
+
+.today-step-done .today-mark {
+  border-color: var(--ok);
+}
+
+.today-body {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+@media (max-width: 560px) {
+  .today-step {
+    grid-template-columns: 28px 1fr;
+  }
+
+  .today-step .button {
+    grid-column: 1 / -1;
+  }
+}
+
+.today-done {
+  margin-top: 12px;
+}

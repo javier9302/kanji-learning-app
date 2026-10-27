@@ -7,6 +7,7 @@
    1. Palabras nuevas: kanjiGate decide si una palabra se puede proponer.
    2. Escribir: writingLevel, nextWritingKanji, writingRating y writingTestResult.
    3. Leer cuenta como repaso: readingCredit y readingInterval.
+   4. Hoy: planToday, la sesión del día.
    Los números (repaso cada cuántos kanjis, tamaño de la prueba…) vienen de
    STUDY_CONFIG.
    ========================================= */
@@ -197,10 +198,48 @@ function readingInterval(previousDays, fsrsDays, config) {
   return Math.max(config.minDays, Math.min(fsrsDays, cap));
 }
 
+/* =========================================
+   4. HOY
+   -----------------------------------------
+   La pantalla de inicio junta lo del día en una lista, en este orden:
+     1. un texto con las palabras que tocan (leerlo las repasa; sección 3);
+     2. Repasar: las que siguen tocando después del texto, y las nuevas;
+     3. unos kanjis que escribir;
+     4. unas frases que traducir.
+   Lo hecho se deduce de lo que ya se guarda (lecturas terminadas hoy, respuestas
+   del día, kanjis escritos y traducciones de hoy): no hace falta guardar nada más.
+   ========================================= */
+
+/* Los pasos de hoy.
+     s.placed      ha hecho la evaluación inicial (sin ella, solo ese paso)
+     s.story       { kind: "text" | "create" | "none", due }: hay un texto que leer o se
+                   puede crear uno; due, cuántas palabras que tocan salen en él
+     s.read        ha terminado algún texto hoy
+     s.due         tarjetas de Repasar que tocan ahora;  s.fresh  nuevas que saldrían
+     s.answered    respuestas de hoy en Repasar;  s.goal  la meta diaria
+     s.writing     { available, done }: si hay kanji que escribir y cuántos ha escrito hoy
+     s.sentences   { available, done }: si hay frases que traducir y cuántas ha traducido hoy
+     config        { writing, sentences }: cuántos kanjis y frases por día
+   Devuelve { steps: [{ kind, count, done, progress }], next } (next: el primer paso sin hacer). */
+function planToday(s, config) {
+  if (!s.placed) return { steps: [{ kind: "placement", count: 1, done: false, progress: 0 }], next: "placement" };
+  const steps = [];
+  if (s.story.kind !== "none" || s.read) steps.push({ kind: "story", count: 1, done: !!s.read, progress: s.read ? 1 : 0, due: s.story.due || 0 });
+  // Repasar está hecho cuando no queda nada que toque y ya ha respondido algo hoy
+  steps.push({ kind: "reviews", count: s.due + s.fresh, done: s.due === 0 && s.answered > 0, progress: s.answered, due: s.due, fresh: s.fresh });
+  if (s.writing.available || s.writing.done) {
+    steps.push({ kind: "writing", count: config.writing, done: s.writing.done >= config.writing || !s.writing.available, progress: Math.min(s.writing.done, config.writing) });
+  }
+  if (s.sentences.available || s.sentences.done) {
+    steps.push({ kind: "sentences", count: config.sentences, done: s.sentences.done >= config.sentences || !s.sentences.available, progress: Math.min(s.sentences.done, config.sentences) });
+  }
+  return { steps, next: steps.find((step) => !step.done)?.kind || null };
+}
+
 /* Para las pruebas (Node); en el navegador son globales */
 if (typeof module !== "undefined") {
   module.exports = {
     kanjiGate, writingLevel, nextWritingKanji, writingRating, writingTestResult, writingTestKanji,
-    readingCredit, readingInterval
+    readingCredit, readingInterval, planToday
   };
 }

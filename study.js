@@ -646,6 +646,7 @@ function endSession() {
       ${missedList ? `<ul class="missed-list">${missedList}</ul>` : ""}
       <div class="row-actions">
         <button id="againBtn" class="button button-primary" type="button">${t("Otra sesión")}</button>
+        <button class="button button-outline" data-go="today" type="button">${t("Volver a Hoy")}</button>
         <button class="button button-outline" data-go="progress" type="button">${t("Ver progreso")}</button>
       </div>
     </div>`;

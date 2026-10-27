@@ -90,6 +90,10 @@ const STUDY_CONFIG = {
                          Con 2, 名 pide めい, な y みょう; con 3, solo めい y な. */
   kanji: { relevantMinWords: 2 },
 
+  /* Hoy (la pantalla de inicio; learning-core.js, planToday): cuántos kanjis
+     escribir y cuántas frases traducir cada día */
+  today: { writing: 4, sentences: 3 },
+
   /* Textos que practican lo que toca repasar (story-core.js).
        max          palabras que se le piden a la IA como mucho (más hace el texto forzado)
        soonDays     también las que tocarán en estos días

@@ -1246,4 +1246,21 @@ export default async function extra({ page, step, check }) {
       });
     }
   });
+
+  await step("Hoy: es la pantalla de inicio, lista lo del día y cada paso abre su sección", async () => {
+    await page.evaluate(() => { localStorage.removeItem("kanji-reader"); });
+    await page.reload({ waitUntil: "networkidle2" });
+    await page.waitForFunction(() => document.body.dataset.view === "today" && document.querySelector(".today-step"), { timeout: 30000 });
+    await shot(page, "hoy");
+    const plan = await page.evaluate(() => ({
+      steps: [...document.querySelectorAll("[data-today]")].map((button) => button.dataset.today),
+      next: document.querySelector(".today-next [data-today]")?.dataset.today,
+      tab: document.querySelector('.subtab[data-view="today"]').classList.contains("active")
+    }));
+    check(plan.tab && plan.steps.includes("reviews") && plan.next, JSON.stringify(plan));
+    // Repasa: empieza la sesión directamente
+    await page.evaluate(() => document.querySelector('[data-today="reviews"]').click());
+    await page.waitForFunction(() => document.body.dataset.view === "study" && (session || document.querySelector("#studyArea .empty-state")), { timeout: 15000 });
+    await page.evaluate(() => { session = null; document.body.classList.remove("studying"); switchView("today"); });
+  });
 }
