@@ -27,6 +27,7 @@
   <script src="grammar-core.js" defer></script>
   <script src="ja-core.js" defer></script>
   <script src="sentences-core.js" defer></script>
+  <script src="capture-core.js" defer></script>
   <script src="kanji-core.js" defer></script>
   <script src="ranking-core.js" defer></script>
   <script src="story-core.js" defer></script>
@@ -42,6 +43,7 @@
   <script src="kanji-table.js" defer></script>
   <script src="today.js" defer></script>
   <script src="dictionary.js" defer></script>
+  <script src="capture.js" defer></script>
   <script src="app.js" defer></script>
 </head>
 <body>
@@ -494,6 +496,17 @@
         </div>
       </div>
 
+      <div id="capturePanel" class="panel capture hidden">
+        <p class="eyebrow">DE LA WEB</p>
+        <p id="captureSentence" class="capture-sentence" lang="ja"></p>
+        <p id="captureSource" class="helper"></p>
+        <p id="captureStatus" class="helper" role="status"></p>
+        <div class="inline-form">
+          <button id="captureSaveBtn" class="button button-primary hidden" type="button">Guardar la frase como ejemplo</button>
+          <button id="captureDropBtn" class="button button-outline" type="button">Descartar</button>
+        </div>
+      </div>
+
       <form id="addWordForm" class="panel add-word" autocomplete="off">
         <label class="field">
           <span>Escritura</span>
@@ -661,6 +674,22 @@
         <div class="import-actions">
           <input id="goalInput" class="search goal-input" type="number"
             min="1" max="500" step="1" aria-label="Meta diaria">
+        </div>
+      </div>
+
+      <div class="panel import-panel">
+        <div>
+          <h3>Añadir palabras desde la web</h3>
+          <p class="helper">Selecciona una palabra en cualquier página y llévala a Agregar palabra con su frase, que será su ejemplo en Repasar. Nada se guarda hasta que lo confirmas.</p>
+          <p class="helper"><strong>Ordenador:</strong> arrastra el botón «+ Kanji» a la barra de marcadores. En una página, selecciona la palabra y pulsa el marcador.</p>
+          <p class="helper"><strong>Android:</strong> con la app instalada, selecciona el texto, toca «Compartir» y elige Kanji. Si compartes una frase, tocas en ella la palabra.</p>
+          <p class="helper"><strong>iPhone, o el móvil sin instalar la app:</strong> copia el código, guarda cualquier página como marcador, edítalo y pega el código como dirección (nómbralo «kanji»). En una página, selecciona la palabra, escribe «kanji» en la barra de direcciones y toca el marcador.</p>
+          <p id="bookmarkletMessage" class="message" role="status"></p>
+          <textarea id="bookmarkletCode" class="search bookmarklet-code hidden" rows="3" readonly aria-label="Código del marcador"></textarea>
+        </div>
+        <div class="import-actions">
+          <a id="bookmarkletLink" class="button button-primary" href="#">+ Kanji</a>
+          <button id="bookmarkletCopyBtn" class="button button-outline" type="button">Copiar el código</button>
         </div>
       </div>
 

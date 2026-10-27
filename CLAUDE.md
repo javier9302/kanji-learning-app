@@ -18,9 +18,9 @@ Scripts clásicos (no módulos) que comparten variables globales. El orden de ca
 `index.html` importa:
 
 `config.js` → `i18n.js` → `vendor/ts-fsrs` → `bank/*.js` → `study-config.js` → `learning-core.js`
-→ `ja-core.js` → `sentences-core.js` → `kanji-core.js` → `ranking-core.js` → `story-core.js` → `translate-core.js` → `texts.js` → `reading.js`
+→ `ja-core.js` → `sentences-core.js` → `capture-core.js` → `kanji-core.js` → `ranking-core.js` → `story-core.js` → `translate-core.js` → `texts.js` → `reading.js`
 → `reading-stats.js` → `reading-sync.js` → `study.js` → `sentences.js` → `translate.js`
-→ `progress.js` → `kanji-table.js` → `today.js` → `dictionary.js` → `app.js` (`progress-core.js` y `grammar-core.js` van justo
+→ `progress.js` → `kanji-table.js` → `today.js` → `dictionary.js` → `capture.js` → `app.js` (`progress-core.js` y `grammar-core.js` van justo
 después de `learning-core.js`)
 
 - **`*-core.js`**: reglas puras, sin DOM ni datos del usuario. Las usan el navegador y Node
@@ -38,6 +38,10 @@ después de `learning-core.js`)
 - **`texts.js`, `reading*.js`**: textos (IA, comunidad o pegados), lector, nivel de lectura y su sincronización.
 - **`translate*.js`**: sección Traducir, corregida con IA (Edge Function `grade-translation`).
 - **`dictionary.js`**: búsqueda por escritura, kana, rōmaji o significado.
+- **`capture.js` / `capture-core.js`**: palabras desde la web (`?add=…`, marcador «+ Kanji»,
+  `share_target` de Android). Abre Agregar palabra relleno y guarda la frase como frase del usuario
+  (`source: "web"`), que manda en el repaso de su palabra (`chooseCapturedSentence`). Nunca se
+  comparte.
 - **`progress.js` / `progress-core.js`**: Mis palabras → Análisis (solo premium, `isPremium`): lo
   demostrado por nivel JLPT, nivel estimado y foto semanal (`meta.snapshots`, tabla
   `progress_snapshots`). Fases 1 a 3 hechas (la hoja de ruta, `buildRoadmap`, guarda `meta.roadmap`:

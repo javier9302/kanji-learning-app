@@ -45,7 +45,7 @@ function browser(stores = new Map()) {
     return pending;
   };
   const get = async (url) => {
-    const request = { url, method: "GET", mode: url.endsWith("/") ? "navigate" : "cors" };
+    const request = { url, method: "GET", mode: new URL(url).pathname.endsWith("/") ? "navigate" : "cors" };
     const answer = await run("fetch", { request });
     return answer ? await (await answer).text() : null; // null: el SW no la intercepta
   };
@@ -97,4 +97,15 @@ test("lo que se guarda para siempre: vendor/ y las librerías con versión; nada
   for (const url of fresh) assert.equal(b.downloads.filter((u) => u === url).length, 2, url);
   // Supabase y la IA no pasan por el service worker
   assert.equal(await b.get("https://rilizudwepfmxbwrorxl.supabase.co/rest/v1/texts"), null);
+});
+
+test("la app abierta con ?add=… (palabras de la web) funciona sin conexión y no llena la caché", async () => {
+  const b = browser();
+  const HOME = `${ORIGIN}/kanji-learning-app/`;
+  await b.get(`${HOME}?add=%E7%8C%AB&source=https%3A%2F%2Fa.jp%2F`);
+  await b.get(`${HOME}?share_text=%E9%9B%A8`);
+  const saved = [...b.stores.get("kanji-learning-v25").keys()].filter((url) => url.startsWith(HOME) && !url.slice(HOME.length).includes("."));
+  assert.deepEqual(saved, [HOME]);                        // una sola copia de la página
+  b.offline();
+  assert.equal(await b.get(`${HOME}?add=%E7%8A%AC`), `body of ${HOME}?share_text=%E9%9B%A8`);
 });

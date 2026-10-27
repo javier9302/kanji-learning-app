@@ -14,7 +14,7 @@ mismo commit que cambie cualquiera de estas reglas. Los cambios, con fecha, est�
 | **Traducir** | El usuario traduce frases de sus textos y lo corrige la IA (o él mismo con la traducción de referencia). Mide si entiende el significado; no mueve el calendario de repaso. |
 | **Escribir** | Trazos de kanjis (KanjiVG) con repaso espaciado: primero los kanjis que ya has visto y los que toca repasar, y una prueba para saltarse un nivel. |
 | **Diccionario** | Búsqueda por kanji, kana, rōmaji o significado (español o inglés). |
-| **Mis palabras** | Agregar palabras a mano, progreso y estadísticas. **Análisis** (solo premium): lo demostrado por nivel JLPT, nivel estimado y evolución semanal. **Kanjis** (solo premium): tabla de kanjis dominados, parciales y sin conocer según las palabras que conoces. |
+| **Mis palabras** | Agregar palabras a mano o desde la web (marcador «+ Kanji», «Compartir» de Android o un enlace `?add=`), progreso y estadísticas. **Análisis** (solo premium): lo demostrado por nivel JLPT, nivel estimado y evolución semanal. **Kanjis** (solo premium): tabla de kanjis dominados, parciales y sin conocer según las palabras que conoces. |
 | **Cuenta** (opcional) | Sincronización con Supabase, plan gratuito (10 textos de IA al día) o premium (30). |
 | **admin.html** | Aprobar textos de la comunidad, revisar palabras, traducciones y frases compartidas, cambiar planes y ver el progreso de cada estudiante (pestaña Progreso). |
 
@@ -59,7 +59,8 @@ Se guardan en el dispositivo (IndexedDB) y, con cuenta, se sincronizan con Supab
   lecturas acertadas en frases; las de «Lecturas de kanji practicadas» de antes se copiaron aquí
   una vez por dispositivo).
 - `texts`, `words`, `sentences`, `translations`: textos, el diccionario propio, las frases
-  sacadas de los textos y las traducciones respondidas.
+  sacadas de los textos (y las guardadas de la web, con `source: "web"`, `word` y `url`) y las
+  traducciones respondidas.
 - `meta`: historial diario, perfil de lectura (`reading.level`, `reading.assumed`),
   «Lecturas de kanji practicadas» (`practice`, solo en el dispositivo) y niveles de Escribir aprobados.
 - Preferencias (localStorage, por dispositivo): modo, presentación, contenido y número de
@@ -171,6 +172,11 @@ palabras que ya conoce o está aprendiendo. En «Palabras y kanjis» se alternan
 ### 5. Frases de ejemplo (`sentences.js` + `sentences-core.js`)
 
 - **Orden de búsqueda** (`findSentence`, `sentences.js`):
+  0. **La suya de la web**: si el usuario guardó una frase para esa palabra al agregarla desde la
+     web (apartado 12), sale esa (`chooseCapturedSentence`), aunque tenga varias palabras que no
+     conoce: llevan furigana salvo con «Furigana: siempre», que lo pone en todo. Con varias, la que
+     hace más que no sale. Debajo, un enlace a su página. Con «Palabra sola» o «Tarjetas» sale con
+     la respuesta.
   1. **Comunes**: `bank/sentences/<nivel>.json` y las **compartidas** (tabla `shared_sentences`,
      copia local en el almacén `sharedSentences`; se descarga al empezar una sesión con frases,
      como mucho cada 10 minutos, también sin sesión).
@@ -364,6 +370,34 @@ guarda aparte, se calcula al abrir la tabla.
 - **Ficha de un kanji**: significados, cada lectura relevante (vista o que te falta, y cuántas veces
   la has acertado y fallado al escribirla), las palabras
   que conoces con él y, por cada lectura que falta, las 3 palabras más frecuentes que te la enseñan.
+
+### 12. Palabras desde la web (`capture.js` + `capture-core.js`)
+
+Tres formas de llegar, que abren la app con la palabra en Agregar palabra:
+
+- **Enlace** `?add=<palabra>&sentence=<frase>&source=<página>`; es lo que construye el **marcador
+  «+ Kanji»** (Ajustes → Añadir palabras desde la web): la selección, la oración que la rodea
+  (`sentenceAround`: del fin de la anterior a su 。！？ o al salto de línea, 300 caracteres como
+  mucho) y la dirección de la página. En el móvil el marcador se guarda copiando su código.
+- **Compartir de Android** (`share_target` en `manifest.webmanifest`, solo con la app instalada):
+  llega `?share_text=…` (y a veces `share_url`). Si el texto lleva una dirección, se separa.
+- **Qué se acepta** (`readCapture`): texto sin caracteres de control; palabra de hasta 30
+  caracteres y frase de hasta 300, con japonés; la página solo si es `http(s)`. Lo seleccionado
+  que parece una frase (más de 15 caracteres, espacios o puntuación) pasa a ser la frase, y se
+  elige la palabra dentro. Una frase que no contiene la palabra se descarta.
+
+Después: la dirección se limpia (`history.replaceState`), la frase se analiza como un texto pegado
+(kuromoji, banco y diccionario) y la palabra pasa a su forma de diccionario con la lectura que
+tiene en esa frase (`findWordUnit`: la unidad que más se solapa con la selección). El formulario
+sale relleno y la frase con la palabra resaltada; tocar otra palabra de la frase la cambia.
+**Nada se guarda** hasta pulsar «Quiero aprenderla» o «Ya la domino»; si ya es de sus palabras,
+«Guardar la frase como ejemplo». La frase se guarda en `sentences` con `source: "web"`, `word`
+y `url` solo si la palabra está en ella y se lee igual. Se sincroniza con su cuenta (tabla
+`user_sentences`), **nunca se comparte** con otros usuarios y no sale en Traducir (no tiene
+traducción). Rehacer las frases de los textos no la borra. Lo recibido se escribe siempre como
+texto, nunca como HTML. El service worker guarda una sola copia de la página para todas estas
+direcciones, así que también se abre sin conexión (pero analizar la frase necesita el analizador
+ya descargado).
 
 ### 11. Hoy (`today.js` + `learning-core.js`, `planToday`)
 

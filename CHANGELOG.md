@@ -6,6 +6,17 @@ Cómo funciona todo hoy: [docs/COMO-FUNCIONA.md](docs/COMO-FUNCIONA.md).
 
 ## 2026-10-27
 
+- **Agregar palabras desde la web**: selecciona una palabra en cualquier página y llévala a
+  Agregar palabra con su frase. En el ordenador, con el marcador «+ Kanji»; en Android, con
+  «Compartir» (con la app instalada); en el iPhone, con el mismo marcador copiado (Ajustes →
+  Añadir palabras desde la web). La palabra llega en su forma de diccionario (食べました → 食べる)
+  y con la lectura que tiene en esa frase. Si compartes una frase entera, tocas la palabra. Nada
+  se guarda sin pulsar «Quiero aprenderla» o «Ya la domino»; si ya la tienes, puedes guardar la
+  frase como otro ejemplo. Esa frase pasa a ser su ejemplo en Repasar, con un enlace a la página,
+  y se sincroniza con tu cuenta, pero nunca se comparte con otros usuarios.
+- Interno: `capture-core.js` y `capture.js`, con sus pruebas; el service worker guarda una sola
+  copia de la app para los enlaces con `?…`.
+
 - **Hoy, la nueva pantalla de inicio**: la sesión del día en una lista. Un texto con las palabras
   que te toca repasar, Repasar, 4 kanjis que escribir y 3 frases que traducir, con el siguiente
   paso resaltado y cada uno marcado al hacerlo. Al terminar un repaso o un texto, «Volver a Hoy»

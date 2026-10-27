@@ -1088,11 +1088,14 @@ async function init() {
   bindReader();
   bindReadingStats();
   bindSync();
+  bindCapture();
 
   setSyncState("off");
   renderAll();
   // Hoy es la pantalla de inicio; con un texto a medias, se vuelve a él
   switchView(readingInProgress() ? "read" : "today");
+  // Llegó una palabra de la web (?add=… o Compartir): Agregar palabra con ella
+  receiveCapture().catch((error) => console.error("No se pudo recibir la palabra:", error));
 
   // Una sola vez: significados equivocados de una versión anterior; después, las
   // frases de ejemplo de los textos que ya había (solo la primera vez o si cambian las reglas)

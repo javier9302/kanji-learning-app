@@ -9,7 +9,8 @@
    Almacenes de IndexedDB:
      sentences        frases del usuario, con la forma de sentences-core.js más
                       { updatedAt, local }. local: su texto no se sube (texto
-                      pegado), así que la frase tampoco.
+                      pegado), así que la frase tampoco. Las guardadas de la web
+                      (capture.js) llevan source "web", word (su palabra) y url.
      sentenceStats    { id, shown, lastShown, updatedAt }: veces que se ha enseñado
                       cada frase, sea del usuario o común.
      sharedSentences  copia de las frases compartidas (sección 6).
@@ -73,14 +74,7 @@ function sentencesOfText(text, source = text.source === "paste" ? "article" : "t
   for (const sentence of text.data.sentences) Object.assign(dictionary, sentence.dictionary);
   const list = [];
   text.data.sentences.forEach((sentence, index) => {
-    const tokens = sentence.tokens.map((token) => {
-      if (UNCOUNTED_POS.has(token.pos)) return { ...token, key: "" };
-      // La palabra que anotó el texto; si la escritura tiene varias lecturas, la que suena en la frase
-      // La palabra que anotó el texto: la de la unidad (textos nuevos) o la del diccionario por lema
-      const entry = dictionary[token.lemma];
-      const noted = token.key || (entry && isKana(entry.reading || "") ? wordKey(token.lemma, entry.reading) : "");
-      return { ...token, key: resolveKey(token, (form) => BANK.sensesOf(form), noted) };
-    });
+    const tokens = textSentenceTokens(sentence, dictionary);
     const built = buildSentence({
       id: `${text.id}:${sentence.id ?? index + 1}`, tokens, en: sentence.en || "", es: sentence.es || "",
       source, sourceId: text.id, attribution: "",
@@ -90,6 +84,18 @@ function sentencesOfText(text, source = text.source === "paste" ? "article" : "t
     if (validateSentence(built, { minUnits, maxUnits, wordOf: sentenceWordOf }).ok) list.push(built);
   });
   return list;
+}
+
+/* Las unidades de una oración de un texto, cada una con la clave de su palabra:
+   la que anotó el texto (la de la unidad en los textos nuevos, o la del
+   diccionario por lema) o, si la escritura tiene varias lecturas, la que suena en la frase */
+function textSentenceTokens(sentence, dictionary) {
+  return sentence.tokens.map((token) => {
+    if (UNCOUNTED_POS.has(token.pos)) return { ...token, key: "" };
+    const entry = dictionary[token.lemma];
+    const noted = token.key || (entry && isKana(entry.reading || "") ? wordKey(token.lemma, entry.reading) : "");
+    return { ...token, key: resolveKey(token, (form) => BANK.sensesOf(form), noted) };
+  });
 }
 
 /* Hace falta el banco entero (para el nivel de cada palabra) y sus lecturas de kanji */
@@ -141,9 +147,9 @@ async function rebuildSentencesIfNeeded() {
   const visible = texts.filter((text) => !text.hiddenAt);
   if (visible.length) {
     await indexTexts(visible);
-    // Frases de textos que ya no están
+    // Frases de textos que ya no están (las guardadas de la web no son de ningún texto)
     const alive = new Set(visible.map((text) => text.id));
-    for (const id of new Set([...userSentences.values()].map((sentence) => sentence.sourceId))) {
+    for (const id of new Set([...userSentences.values()].filter((sentence) => sentence.source !== "web").map((sentence) => sentence.sourceId))) {
       if (!alive.has(id)) await dropTextSentences(id);
     }
   }
@@ -248,10 +254,21 @@ const kanjiSentencesFor = (c) => {
   return [...common, ...stories];
 };
 
+/* Las frases que el usuario guardó de la web para una palabra */
+const capturedSentencesOf = (wordId) =>
+  [...userSentences.values()].filter((sentence) => sentence.source === "web" && sentence.word === wordId);
+
+/* La frase guardada de la web para una palabra (chooseCapturedSentence), o null */
+const capturedPick = (card) => card.kind === "kanji" ? null
+  : chooseCapturedSentence({ id: card.id }, { candidates: capturedSentencesOf(card.id), statsOf: (id) => sentenceStats.get(id) });
+
 /* La frase para una tarjeta (palabra o kanji) según lo que el usuario conoce:
-   primero entre las comunes y, si ninguna vale, entre las de sus historias.
+   la que guardó de la web para esa palabra, si hay; si no, primero entre las
+   comunes y, si ninguna vale, entre las de sus historias.
    Devuelve { pick, story } (story: salió de una historia); pick es null si no hay. */
 function findSentence(card) {
+  const captured = capturedPick(card);
+  if (captured) return { pick: captured, story: false };
   const groups = card.kind === "kanji" ? kanjiSentenceGroupsFor(card.id) : sentenceGroupsFor(card.id);
   if (!groups.common.length && !groups.stories.length) return { pick: null, story: false };
   const known = knownLemmas();
@@ -349,8 +366,14 @@ function renderKanjiReadings() {
     : `<li><span>${t("Aquí verás las lecturas de kanji que aciertes al repasar «En una frase».")}</span></li>`;
 }
 
-/* De dónde es la frase: las de Tatoeba llevan su autor y su licencia */
+/* De dónde es la frase: las de Tatoeba llevan su autor y su licencia; las
+   guardadas de la web, un enlace a su página */
 function sentenceCreditHTML(sentence) {
+  const url = sentence.source === "web" ? safeSourceUrl(sentence.url) : "";
+  if (url) {
+    return `<p class="helper sent-credit">${t("Tu frase, de")} <a href="${escapeHTML(url)}" target="_blank"
+      rel="noopener noreferrer">${escapeHTML(new URL(url).hostname)}</a></p>`;
+  }
   return sentence.attribution ? `<p class="helper sent-credit">${escapeHTML(sentence.attribution)}</p>` : "";
 }
 

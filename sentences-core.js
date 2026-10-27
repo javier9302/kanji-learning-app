@@ -410,6 +410,23 @@ function scUsable(candidate, skip, state) {
     shown: stats.shown || 0, lastShown: stats.lastShown || 0 };
 }
 
+/* Una frase que el usuario guardó de la web para esta palabra (source "web",
+   word = la palabra). Manda sobre las demás y no sigue la regla i+1: la eligió
+   él y recordar dónde la encontró ayuda a recordar la palabra. Solo hace falta
+   que la palabra esté y se lea como la tarjeta. Entre varias, la que hace más
+   que no sale. Devuelve { sentence, target, extra: -1, captured: true } o null. */
+function chooseCapturedSentence(card, state) {
+  const [lemma, reading] = scKeyParts(card.id);
+  const usable = [];
+  for (const sentence of state.candidates || []) {
+    if (sentence.source !== "web" || sentence.word !== card.id) continue;
+    const target = sentence.tokens.findIndex((token) => token.key === card.id && readingMatches(token, lemma, reading));
+    if (target >= 0) usable.push({ sentence, target, lastShown: state.statsOf?.(sentence.id)?.lastShown || 0 });
+  }
+  usable.sort((a, b) => a.lastShown - b.lastShown || (a.sentence.id < b.sentence.id ? -1 : 1));
+  return usable.length ? { sentence: usable[0].sentence, target: usable[0].target, extra: -1, captured: true } : null;
+}
+
 /* La mejor de las frases que sirven, o null */
 function scBest(usable) {
   if (!usable.length) return null;
@@ -429,6 +446,7 @@ function scBest(usable) {
 if (typeof module !== "undefined") {
   module.exports = {
     kanjiVariants, canonicalReading, alignReading, tagsFromFurigana, packTags, unpackTags, kanjiSounds,
-    readingMatches, resolveKey, buildSentence, validateSentence, sentenceFingerprint, chooseSentence, chooseKanjiSentence
+    readingMatches, resolveKey, buildSentence, validateSentence, sentenceFingerprint, chooseSentence, chooseKanjiSentence,
+    chooseCapturedSentence
   };
 }

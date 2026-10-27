@@ -1263,4 +1263,60 @@ export default async function extra({ page, step, check }) {
     await page.waitForFunction(() => document.body.dataset.view === "study" && (session || document.querySelector("#studyArea .empty-state")), { timeout: 15000 });
     await page.evaluate(() => { session = null; document.body.classList.remove("studying"); switchView("today"); });
   });
+
+  await step("web: una palabra que llega por enlace se agrega con su frase, que manda en el repaso", async () => {
+    const home = page.url().split(/[?#]/)[0];
+    const open = async (params) => {
+      await page.goto(`${home}?${new URLSearchParams(params)}`, { waitUntil: "networkidle2" });
+      await page.waitForFunction(() => document.body.dataset.view === "add" && !!capture, { timeout: 30000 });
+    };
+    await open({ add: "食べました", sentence: "昨日、友達と寿司を食べました。", source: "https://example.com/news" });
+    await page.waitForFunction(() => capture.key, { timeout: 60000 });
+    await shot(page, "web-palabra");
+    const shown = await page.evaluate(() => ({
+      search: location.search, writing: $("addWriting").value, reading: $("addReading").value,
+      mark: document.querySelector("#captureSentence mark")?.textContent, host: document.querySelector("#captureSource a")?.textContent
+    }));
+    check(shown.search === "" && shown.writing === "食べる" && shown.reading === "たべる", JSON.stringify(shown));
+    check(shown.mark === "食べました" && shown.host === "example.com", JSON.stringify(shown));
+    // Nada se guarda hasta pulsar el botón
+    check(await page.evaluate(() => !userWords.get("食べる|たべる")?.status && ![...userSentences.values()].some((s) => s.source === "web")), "se guardó sin confirmar");
+    await page.evaluate(() => document.querySelector('#addWordForm [value="learn"]').click());
+    await page.waitForFunction(() => [...userSentences.values()].some((s) => s.source === "web"), { timeout: 10000 });
+    const saved = await page.evaluate(() => {
+      const sentence = [...userSentences.values()].find((s) => s.source === "web");
+      return { word: sentence.word, url: sentence.url, status: userWords.get("食べる|たべる")?.status, panel: $("capturePanel").classList.contains("hidden") };
+    });
+    check(saved.word === "食べる|たべる" && saved.url === "https://example.com/news" && saved.status === "learning" && saved.panel, JSON.stringify(saved));
+
+    // Ya es suya: se ofrece guardar otra frase como ejemplo
+    await open({ add: "食べる", sentence: "毎朝パンを食べる。" });
+    await page.waitForFunction(() => capture.key && !$("captureSaveBtn").classList.contains("hidden"), { timeout: 30000 });
+    await page.click("#captureSaveBtn");
+    await page.waitForFunction(() => [...userSentences.values()].filter((s) => s.source === "web").length === 2, { timeout: 10000 });
+
+    // Compartido desde Android: llega la frase y se toca la palabra
+    await open({ share_text: "今日は雨が降っています。 https://example.com/tiempo" });
+    await page.waitForSelector("[data-capture-unit]", { timeout: 30000 });
+    await page.evaluate(() => [...document.querySelectorAll("[data-capture-unit]")].find((b) => b.textContent === "雨").click());
+    const shared = await page.evaluate(() => ({ writing: $("addWriting").value, key: capture.key, source: capture.source }));
+    check(shared.writing === "雨" && shared.key === "雨|あめ" && shared.source === "https://example.com/tiempo", JSON.stringify(shared));
+
+    // Lo de fuera nunca se ejecuta como HTML
+    await open({ add: "<img/src=x/onerror=window.xss=1>猫です。" });
+    await page.waitForFunction(() => capture.tokens || $("captureStatus").textContent, { timeout: 30000 });
+    check(await page.evaluate(() => !window.xss && !document.querySelector("#capturePanel img")), "se insertó HTML recibido");
+
+    // Al rehacer las frases de los textos, las de la web siguen; y mandan en el repaso de su palabra
+    await page.goto(home, { waitUntil: "networkidle2" });
+    await page.evaluate(() => { prefs.sentenceIndex = 0; return rebuildSentencesIfNeeded(); });
+    const review = await page.evaluate(() => {
+      const pick = findSentence({ kind: "word", id: "食べる|たべる" }).pick;
+      return { web: [...userSentences.values()].filter((s) => s.source === "web").length, captured: !!pick?.captured,
+        credit: sentenceCreditHTML([...userSentences.values()].find((s) => s.url)), bookmarklet: $("bookmarkletLink").href.startsWith("javascript:") };
+    });
+    check(review.web === 2 && review.captured && review.credit.includes("example.com") && review.bookmarklet, JSON.stringify(review));
+    await page.evaluate(() => switchView("data"));
+    await shot(page, "web-ajustes");
+  });
 }

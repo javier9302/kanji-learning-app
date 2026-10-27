@@ -9,7 +9,7 @@
      versión nueva de la app no lo borra.
    ========================================= */
 
-const CACHE = "kanji-learning-v24";
+const CACHE = "kanji-learning-v25";
 /* Súbelo SOLO si cambian los archivos de vendor/: obliga a descargarlos otra vez */
 const LASTING = "kanji-lasting-v1";
 const SHELL = [
@@ -29,6 +29,7 @@ const SHELL = [
   "bank/n5.js",
   "ja-core.js",
   "sentences-core.js",
+  "capture-core.js",
   "kanji-core.js",
   "ranking-core.js",
   "story-core.js",
@@ -44,6 +45,7 @@ const SHELL = [
   "kanji-table.js",
   "today.js",
   "dictionary.js",
+  "capture.js",
   "app.js",
   "manifest.webmanifest",
   "icons/icon.svg",
@@ -113,15 +115,18 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
+  // Abrir la app con ?add=… o ?share_text=… (palabras de la web) es la misma
+  // página: se guarda una sola copia, sin la parte de después de "?"
+  const key = request.mode === "navigate" ? new URL(request.url).origin + new URL(request.url).pathname : request;
   event.respondWith(
     fetch(request)
       .then((response) => {
         if (response.ok || response.type === "opaque") {
           const copy = response.clone();
-          caches.open(CACHE).then((cache) => cache.put(request, copy));
+          caches.open(CACHE).then((cache) => cache.put(key, copy));
         }
         return response;
       })
-      .catch(() => caches.match(request, { ignoreSearch: request.mode === "navigate" }))
+      .catch(() => caches.match(key, { ignoreSearch: request.mode === "navigate" }))
   );
 });

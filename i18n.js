@@ -961,6 +961,38 @@ const EN = {
   "Si hay una cuenta con ese correo, recibirás un enlace para cambiar la contraseña.":
     "If there is an account with that email, you will receive a link to change the password.",
   "Contraseña actualizada.": "Password updated.",
+  // Palabras de la web (capture.js)
+  "DE LA WEB": "FROM THE WEB",
+  "Guardar la frase como ejemplo": "Save the sentence as an example",
+  "Descartar": "Discard",
+  "Añadir palabras desde la web": "Add words from the web",
+  "Selecciona una palabra en cualquier página y llévala a Agregar palabra con su frase, que será su ejemplo en Repasar. Nada se guarda hasta que lo confirmas.":
+    "Select a word on any page and bring it to Add a word with its sentence, which becomes its example in Review. Nothing is saved until you confirm.",
+  "Ordenador:": "Computer:",
+  "arrastra el botón «+ Kanji» a la barra de marcadores. En una página, selecciona la palabra y pulsa el marcador.":
+    "drag the “+ Kanji” button to the bookmarks bar. On a page, select the word and click the bookmark.",
+  "Android:": "Android:",
+  "con la app instalada, selecciona el texto, toca «Compartir» y elige Kanji. Si compartes una frase, tocas en ella la palabra.":
+    "with the app installed, select the text, tap “Share” and choose Kanji. If you share a sentence, you tap the word in it.",
+  "iPhone, o el móvil sin instalar la app:": "iPhone, or a phone without the app installed:",
+  "copia el código, guarda cualquier página como marcador, edítalo y pega el código como dirección (nómbralo «kanji»). En una página, selecciona la palabra, escribe «kanji» en la barra de direcciones y toca el marcador.":
+    "copy the code, bookmark any page, edit the bookmark and paste the code as its address (name it “kanji”). On a page, select the word, type “kanji” in the address bar and tap the bookmark.",
+  "Copiar el código": "Copy the code",
+  "Código del marcador": "Bookmark code",
+  "No se pudo analizar la frase. Puedes agregar la palabra igualmente.": "The sentence could not be analysed. You can still add the word.",
+  "De": "From",
+  "Analizando la frase…": "Analysing the sentence…",
+  "Toca la palabra que quieres agregar.": "Tap the word you want to add.",
+  "{word} ya está en tus palabras. Puedes guardar esta frase como otro ejemplo.": "{word} is already in your words. You can save this sentence as another example.",
+  "Comprueba la palabra y elige un botón. La frase será su ejemplo en Repasar.": "Check the word and choose a button. The sentence will be its example in Review.",
+  "La frase no se guardó: no se pudo enlazar con la palabra.": "The sentence was not saved: it could not be linked to the word.",
+  "Esa frase ya estaba guardada.": "That sentence was already saved.",
+  "La frase será su ejemplo en Repasar.": "The sentence will be its example in Review.",
+  "Selecciona primero la palabra (o la frase) que quieres agregar.": "First select the word (or sentence) you want to add.",
+  "Arrástralo a la barra de marcadores; no se pulsa aquí.": "Drag it to the bookmarks bar; it does nothing here.",
+  "Código copiado. Pégalo como dirección de un marcador nuevo.": "Code copied. Paste it as the address of a new bookmark.",
+  "Cópialo a mano desde el cuadro.": "Copy it by hand from the box.",
+  "Tu frase, de": "Your sentence, from",
   "No se pudo abrir el almacenamiento local": "Local storage could not be opened",
   "Abre la aplicación desde un navegador compatible con IndexedDB.":
     "Open the app in a browser that supports IndexedDB."
