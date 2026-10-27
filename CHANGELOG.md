@@ -13,7 +13,7 @@ Cómo funciona todo hoy: [docs/COMO-FUNCIONA.md](docs/COMO-FUNCIONA.md).
   y con la lectura que tiene en esa frase. Si compartes una frase entera, tocas la palabra. Nada
   se guarda sin pulsar «Quiero aprenderla» o «Ya la domino»; si ya la tienes, puedes guardar la
   frase como otro ejemplo. Esa frase pasa a ser su ejemplo en Repasar, con un enlace a la página,
-  y se sincroniza con tu cuenta, pero nunca se comparte con otros usuarios.
+  y se sincroniza con tu cuenta, pero nunca se comparte con otros usuarios (`e916aef`).
 - Interno: `capture-core.js` y `capture.js`, con sus pruebas; el service worker guarda una sola
   copia de la app para los enlaces con `?…`.
 
