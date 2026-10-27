@@ -492,13 +492,14 @@ async function loadProgress() {
 
 /* ---------- Frases compartidas ---------- */
 
-const SENTENCE_SOURCE = { text: "De una historia", ai: "Escrita por la IA" };
+const SENTENCE_SOURCE = { text: "De una historia", ai: "Escrita por la IA", curated: "Propia (de un administrador)" };
 
-/* Las 200 frases compartidas más recientes */
+/* Las 200 frases compartidas más recientes, de un origen o de todos */
 async function loadSentences() {
   $("sentencesList").innerHTML = `<p class="message">Cargando…</p>`;
-  const { data, error } = await sb.from("shared_sentences").select("id, source, level, words, data, created_at")
-    .is("deleted_at", null).order("created_at", { ascending: false }).limit(200);
+  let query = sb.from("shared_sentences").select("id, source, level, words, data, created_at").is("deleted_at", null);
+  if ($("sentencesSource").value) query = query.eq("source", $("sentencesSource").value);
+  const { data, error } = await query.order("created_at", { ascending: false }).limit(200);
   if (error) {
     $("sentencesList").innerHTML = "";
     return say(`No se pudieron cargar las frases (${error.message}). ¿Ejecutaste supabase/schema.sql?`, true);
@@ -582,6 +583,7 @@ function bind() {
     const button = event.target.closest("[data-save-plan]");
     if (button) savePlan(button.closest("[data-user]"));
   });
+  $("sentencesSource").addEventListener("change", loadSentences);
   $("sentencesList").addEventListener("click", (event) => {
     const button = event.target.closest("[data-delete-sentence]");
     if (button) deleteSentence(button.closest("[data-sentence]"));

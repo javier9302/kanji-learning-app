@@ -1319,4 +1319,56 @@ export default async function extra({ page, step, check }) {
     await page.evaluate(() => switchView("data"));
     await shot(page, "web-ajustes");
   });
+
+  await step("frases propias: un administrador comprueba y comparte una frase; Tatoeba lleva su crédito", async () => {
+    if (!await page.evaluate(() => !!sb)) return; // sin config.js no hay cuentas
+    await page.evaluate(() => {
+      window.realFrom = sb.from;
+      window.upserted = [];
+      // Supabase de mentira: acepta la frase compartida; el diccionario común no añade nada
+      sb.from = () => ({
+        upsert: async (rows) => { window.upserted.push(...rows); return { error: null }; },
+        select: () => ({ in: async () => ({ data: [], error: null }) })
+      });
+      sync.user = { id: "u", email: "admin@ejemplo.com" };
+      sync.isAdmin = true;
+      switchView("data");
+      renderDataView();
+    });
+    try {
+      check(await page.evaluate(() => !$("curatedPanel").classList.contains("hidden")), "no se ve el panel");
+      await page.evaluate(() => {
+        $("curatedJa").value = "毎朝、駅まで歩きます。";
+        $("curatedEs").value = "Cada mañana camino hasta la estación.";
+        $("curatedEn").value = "Every morning I walk to the station.";
+        $("curatedForm").requestSubmit();
+      });
+      await page.waitForFunction(() => !$("curatedShareBtn").classList.contains("hidden") || /incorrect/.test($("curatedMessage").className), { timeout: 60000 });
+      const checked = await page.evaluate(() => ({ message: $("curatedMessage").textContent, preview: $("curatedPreview").textContent }));
+      check(checked.preview.includes("駅") && /駅/.test(checked.preview.split(/:/).pop() || ""), JSON.stringify(checked));
+      await shot(page, "frases-propias");
+      await page.click("#curatedShareBtn");
+      await page.waitForFunction(() => window.upserted.length === 1, { timeout: 10000 });
+      const shared = await page.evaluate(() => {
+        const row = window.upserted[0];
+        return { source: row.source, targets: row.words, local: sharedSentences.get(row.id)?.source, order: SOURCE_ORDER.curated < SOURCE_ORDER.ai };
+      });
+      check(shared.source === "curated" && shared.local === "curated" && shared.targets.includes("駅|えき") && shared.order, JSON.stringify(shared));
+      // Una frase sin traducciones o sin kanji no se comparte
+      await page.evaluate(() => { $("curatedJa").value = "これはペンです。"; $("curatedForm").requestSubmit(); });
+      await page.waitForFunction(() => /incorrect/.test($("curatedMessage").className), { timeout: 10000 });
+      check(await page.evaluate(() => $("curatedShareBtn").classList.contains("hidden")), "se podía compartir una frase que no vale");
+      // Tatoeba: enlace a la frase y a la licencia
+      const credit = await page.evaluate(() => sentenceCreditHTML({ source: "tatoeba", attribution: "Tatoeba #4703 · Swift · CC BY 2.0 FR" }));
+      check(credit.includes("tatoeba.org/sentences/show/4703") && credit.includes("creativecommons.org/licenses/by/2.0/fr") && credit.includes("Swift"), credit);
+    } finally {
+      await page.evaluate(() => {
+        sb.from = window.realFrom;
+        sync.user = null;
+        sync.isAdmin = false;
+        sharedSentences.forEach((sentence, id) => { if (sentence.source === "curated") sharedSentences.delete(id); });
+        renderDataView();
+      });
+    }
+  });
 }

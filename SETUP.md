@@ -295,8 +295,10 @@ repasos no cambian. Sustituye al antiguo ajuste «Repasar con frases»: quien lo
 empieza en «En una frase».
 
 - **De dónde sale la frase de cada palabra**, en este orden:
-  1. Las comunes: `bank/sentences/<nivel>.json` y las **compartidas** (tabla `shared_sentences`,
-     que lee cualquiera, también sin sesión).
+  0. La que el usuario guardó de la web para esa palabra (Agregar palabra desde la web).
+  1. Las comunes: `bank/sentences/<nivel>.json` (de **Tatoeba**, revisadas por la IA, y de IA) y las
+     **compartidas** (tabla `shared_sentences`, que lee cualquiera, también sin sesión). Dentro de
+     ellas van primero las revisadas: las propias de un administrador y las de Tatoeba.
   2. Las de las **historias**: al guardar un texto (escrito por la IA, de la comunidad o pegado) se
      quedan sus frases de 4 a 20 unidades con todas las palabras resueltas. La que se usa al
      repasar se copia a las compartidas, para todos. Las de un texto pegado nunca se comparten.
@@ -317,12 +319,48 @@ empieza en «En una frase».
      que añadir nada. Opcionales: `SENTENCE_DAILY_WORDS` (palabras con frases nuevas por usuario y
      día, 40 por defecto) y `SENTENCE_DAILY_CALLS` (llamadas al día, 20 por defecto). No gasta la
      cuota de textos del usuario.
-- **Revisar las frases compartidas:** `admin.html`, pestaña **Frases**. Al borrar una desaparece de
+- **Frases propias:** un administrador las escribe en la app (**Ajustes → Frases propias**, solo se
+  ve con una cuenta de administrador), con su traducción al español y al inglés. Se comprueban como
+  todas y se comparten al momento con el origen `curated`. La base de datos solo admite ese origen
+  a un administrador: **vuelve a ejecutar `supabase/schema.sql`** para que lo acepte.
+- **Revisar las frases compartidas:** `admin.html`, pestaña **Frases** (se pueden filtrar por origen). Al borrar una desaparece de
   todos los dispositivos en su siguiente repaso con frases. Cada usuario puede añadir como mucho
   200 frases compartidas al día.
 - El prompt de las frases tiene una sola fuente, `tools/lib/sentence-batches.js`; la función lleva
   una copia. Si lo cambias, ejecuta `node tools/sync-prompt.mjs` y vuelve a desplegar la función
   (`npm test` avisa si las copias no coinciden).
+### Frases de Tatoeba
+
+Tatoeba (licencia CC BY 2.0 FR) tiene frases con errores, así que **ninguna llega a la app sin que
+la IA la apruebe**: comprueba que el japonés sea correcto, natural y adecuado (nada vulgar,
+violento, etc.) y corrige o escribe sus traducciones. El japonés nunca se cambia. Cada frase
+enseña su número de Tatoeba, su autor y la licencia, con enlaces.
+
+1. **Despliega la función** `review-sentences` como las demás (pega
+   [`supabase/functions/review-sentences/index.ts`](supabase/functions/review-sentences/index.ts)),
+   pero **desactiva la verificación de JWT**: la llama una herramienta de tu ordenador, sin sesión,
+   y la protege un token propio.
+2. **Secreto** `SENTENCE_REVIEW_TOKEN`: una cadena larga al azar (por ejemplo, la salida de
+   `openssl rand -hex 32`). Sin él la función no responde a nadie. Usa las mismas claves de Gemini
+   que `generate-text`.
+3. Guarda el mismo token en `tools/cache/tatoeba/review-token` (no se sube) o pásalo como
+   `SENTENCE_REVIEW_TOKEN=… ` delante de cada orden.
+4. En tu ordenador:
+   - `node tools/import-tatoeba.mjs analyse`: descarga Tatoeba (unos 135 MB, una vez) y analiza las
+     frases como la app. Tarda bastante (unos 20–30 minutos).
+   - `node tools/import-tatoeba.mjs review --level N5`: elige hasta 3 frases por palabra y manda a
+     revisar las que faltan, de 40 en 40 (`--max-calls`, 50 por defecto; `--dry-run` enseña el
+     prompt sin llamar). Lo revisado se guarda: si se acaba la cuota de Gemini, sigue otro día. Si
+     la IA rechaza una frase, la siguiente ronda elige otra.
+   - `node tools/import-tatoeba.mjs status`: cuántas palabras tienen ya sus frases y cuántas
+     llamadas faltan.
+   - `node tools/import-tatoeba.mjs ingest`: escribe las aprobadas en `bank/sentences/<nivel>.json`
+     (las de IA se conservan). Después, súbelo como cualquier cambio.
+5. El prompt de la revisión tiene su fuente en `tools/lib/tatoeba.js`; si lo cambias, ejecuta
+   `node tools/sync-prompt.mjs` y vuelve a desplegar la función.
+
+### Otros
+
 - En **Biblioteca** se puede pegar cualquier texto en japonés tal cual. Se analiza en el
   dispositivo con kuromoji, **no se sube ni se propone a la comunidad** y no tiene traducción.
 - **Vuelve a ejecutar `supabase/schema.sql`**: crea la tabla `user_sentences`, donde se guardan las

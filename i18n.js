@@ -961,6 +961,31 @@ const EN = {
   "Si hay una cuenta con ese correo, recibirás un enlace para cambiar la contraseña.":
     "If there is an account with that email, you will receive a link to change the password.",
   "Contraseña actualizada.": "Password updated.",
+  // Frases de Tatoeba y frases propias (sentences.js)
+  "(Apache 2.0) con el diccionario IPADIC. Muchas frases de ejemplo son de": "(Apache 2.0) with the IPADIC dictionary. Many example sentences are from",
+  "): cada una enlaza a su página y a su autor. Antes de publicarlas, una IA comprueba que sean correctas y adecuadas y revisa o escribe sus traducciones; el japonés no se cambia.":
+    "): each one links to its page and its author. Before they are published, an AI checks that they are correct and suitable and reviews or writes their translations; the Japanese is never changed.",
+  "traducción revisada por IA": "translation reviewed by AI",
+  "Frases propias": "Own sentences",
+  "Solo administradores. Escribe una frase con sus dos traducciones: se comprueba como todas y, al compartirla, sale antes que las demás en los repasos de sus palabras, para todos. Se borra en el panel de administración → Frases.":
+    "Admins only. Write a sentence with both translations: it is checked like all the others and, once shared, it comes first in the reviews of its words, for everyone. Delete it in the admin panel → Sentences.",
+  "Frase en japonés": "Sentence in Japanese",
+  "Traducción al español": "Spanish translation",
+  "Traducción al inglés": "English translation",
+  "Compartir con todos": "Share with everyone",
+  "Escribe una frase en japonés con alguna palabra en kanji.": "Write a Japanese sentence with at least one word in kanji.",
+  "Escribe las dos traducciones.": "Write both translations.",
+  "No se pudo analizar bien la frase.": "The sentence could not be analysed properly.",
+  "Tiene que tener entre {min} y {max} palabras.": "It must have between {min} and {max} words.",
+  "Sin letras latinas.": "No Latin letters.",
+  "Sin paréntesis ni comillas sin cerrar.": "No brackets or unclosed quotes.",
+  "No tiene ninguna palabra con kanji que se pueda preguntar.": "It has no kanji word that can be asked.",
+  "Palabras que no se reconocen: {words}.": "Words that are not recognised: {words}.",
+  "Sirve para preguntar": "Can be used to ask",
+  "Esa frase ya está compartida.": "That sentence is already shared.",
+  "La frase vale. Revísala y compártela.": "The sentence is valid. Check it and share it.",
+  "Compartida: ya sale en los repasos de {words}.": "Shared: it now appears in the reviews of {words}.",
+  "No se pudo compartir. Comprueba la conexión y que tu cuenta sea de administrador.": "It could not be shared. Check the connection and that your account is an admin account.",
   // Palabras de la web (capture.js)
   "DE LA WEB": "FROM THE WEB",
   "Guardar la frase como ejemplo": "Save the sentence as an example",

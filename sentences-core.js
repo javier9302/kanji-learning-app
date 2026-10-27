@@ -202,7 +202,7 @@ function kanjiSounds(surface, reading, tags, kanjiInfo) {
                     reading: lectura de la unidad tal como está escrita
                     key: id de la palabra ("escritura|lectura"), "" si no se resolvió
      source         "text" (textos del usuario) | "article" (texto pegado) |
-                    "tatoeba" | "ai"
+                    "tatoeba" | "ai" | "curated" | "web"
      level          el nivel más alto de sus palabras
      targets        ids de las palabras que la frase sirve para preguntar. Es una
                     lista: hoy se pregunta una por tarjeta, pero una misma frase
@@ -357,7 +357,10 @@ function validateSentence(sentence, options = {}) {
    enseña con furigana y se puede tocar); con dos o más la frase se descarta.
    ========================================= */
 
-const SOURCE_ORDER = { text: 0, article: 0, tatoeba: 1, ai: 2 };
+/* Primero las revisadas: las propias del administrador ("curated") y las de
+   Tatoeba, que solo se publican si la IA las aprobó. Después las de IA y las de
+   las historias (también escritas por la IA). */
+const SOURCE_ORDER = { curated: 0, tatoeba: 0, ai: 1, text: 1, article: 1 };
 
 /* card       { id: "escritura|lectura" }
    state      { candidates  frases posibles (cualquiera; aquí se filtran)
@@ -436,7 +439,7 @@ function scBest(usable) {
   const score = (item) =>
     (item.extra >= 0 ? 1000 : 0) +
     (others && latest > 0 && item.lastShown === latest ? 500 : 0) +
-    (SOURCE_ORDER[item.sentence.source] ?? 3) * 20 +   // primero las de sus textos, luego Tatoeba, luego IA
+    (SOURCE_ORDER[item.sentence.source] ?? 2) * 20 +   // primero las revisadas (propias y Tatoeba), luego las de IA
     Math.min(item.shown, 20) * 8;                      // …salvo que ya la haya visto muchas veces
   return [...usable].sort((a, b) => score(a) - score(b) || a.lastShown - b.lastShown ||
     (a.sentence.id < b.sentence.id ? -1 : a.sentence.id > b.sentence.id ? 1 : 0))[0];

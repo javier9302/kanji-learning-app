@@ -6,6 +6,17 @@ Cómo funciona todo hoy: [docs/COMO-FUNCIONA.md](docs/COMO-FUNCIONA.md).
 
 ## 2026-10-27
 
+- **Frases de Tatoeba, revisadas por la IA**: las frases de ejemplo podrán venir de Tatoeba,
+  frases escritas por personas. Como Tatoeba tiene errores, ninguna se publica sin que la IA
+  compruebe que el japonés es correcto, natural y adecuado; además revisa la traducción inglesa y
+  escribe la española. Cada una enseña su número, su autor y su licencia (CC BY 2.0 FR), y salen
+  antes que las escritas por la IA. Aparecerán al terminar la revisión.
+- **Frases propias** (solo administradores, Ajustes → Frases propias): escribe una frase con sus
+  traducciones, la app la comprueba y, al compartirla, sale antes que las demás para todos. En
+  admin.html → Frases se pueden filtrar por origen.
+- Las frases de las historias ya no van antes que las de IA al elegir la frase de un repaso.
+- Interno: `tools/import-tatoeba.mjs` y la función `review-sentences`, con sus pruebas.
+
 - **Agregar palabras desde la web**: selecciona una palabra en cualquier página y llévala a
   Agregar palabra con su frase. En el ordenador, con el marcador «+ Kanji»; en Android, con
   «Compartir» (con la app instalada); en el iPhone, con el mismo marcador copiado (Ajustes →

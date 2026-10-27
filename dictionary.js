@@ -205,10 +205,9 @@ function dictStatusHTML(entry) {
   return [status, review, lookups].filter(Boolean).join(" · ");
 }
 
-/* Frases de ejemplo de la palabra: primero las de los textos del usuario */
+/* Frases de ejemplo de la palabra: primero las revisadas (propias y Tatoeba), como al repasar */
 function dictSentencesHTML(entry) {
-  const order = { text: 0, article: 0, tatoeba: 1, ai: 2 };
-  const list = [...sentencesFor(entry.id)].sort((a, b) => (order[a.source] ?? 3) - (order[b.source] ?? 3)).slice(0, 3);
+  const list = [...sentencesFor(entry.id)].sort((a, b) => (SOURCE_ORDER[a.source] ?? 2) - (SOURCE_ORDER[b.source] ?? 2)).slice(0, 3);
   if (!list.length) return "";
   return `<ul class="dict-sentences">${list.map((sentence) => {
     const target = sentence.tokens.findIndex((token) => token.key === entry.id);

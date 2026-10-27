@@ -1001,13 +1001,15 @@ alter table public.user_kanji add constraint user_kanji_readings_size_check
 --                  que se usó porque no había ninguna común; nunca de un texto pegado.
 --   source 'ai'    escrita por la IA (función generate-sentences) para una palabra
 --                  que no tenía ninguna.
+--   source 'curated'  escrita por un administrador (Ajustes → Frases propias); sale
+--                  antes que las demás. Solo un administrador puede añadirlas.
 -- data es la frase completa, con la forma de sentences-core.js; words, las palabras
 -- que sirve para preguntar. La lee cualquiera, también sin sesión. Cada usuario solo
 -- añade (con un límite diario); un administrador la borra desde admin.html (deleted_at).
 create table if not exists public.shared_sentences (
   id text primary key,                        -- "idDelTexto:n" (historias) o "ai:huella" (IA)
   user_id uuid default auth.uid() references auth.users (id) on delete set null,
-  source text not null check (source in ('text', 'ai')),
+  source text not null,
   level text,
   words text[] not null default '{}',
   data jsonb not null,
@@ -1017,6 +1019,11 @@ create table if not exists public.shared_sentences (
   constraint shared_sentences_size_check check (
     char_length(id) <= 120 and cardinality(words) <= 20 and octet_length(data::text) <= 20000)
 );
+
+-- Orígenes admitidos (se rehace aparte para que una base ya creada también admita 'curated')
+alter table public.shared_sentences drop constraint if exists shared_sentences_source_check;
+alter table public.shared_sentences add constraint shared_sentences_source_check
+  check (source in ('text', 'ai', 'curated'));
 
 create index if not exists shared_sentences_updated_idx on public.shared_sentences (updated_at, id);
 create index if not exists shared_sentences_user_created_idx on public.shared_sentences (user_id, created_at);
@@ -1041,7 +1048,8 @@ create policy "shared_sentences_select_all" on public.shared_sentences
 
 drop policy if exists "shared_sentences_insert_own" on public.shared_sentences;
 create policy "shared_sentences_insert_own" on public.shared_sentences
-  for insert to authenticated with check ((select auth.uid()) = user_id and deleted_at is null);
+  for insert to authenticated with check (
+    (select auth.uid()) = user_id and deleted_at is null and (source <> 'curated' or (select public.is_admin())));
 
 -- Solo un administrador cambia una frase ya compartida (para borrarla, deleted_at)
 drop policy if exists "shared_sentences_update_admin" on public.shared_sentences;

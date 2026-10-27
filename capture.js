@@ -16,18 +16,6 @@
    frase analizada; target: la unidad de la palabra; key: su clave) */
 let capture = null;
 
-/* La frase analizada como un texto pegado (kuromoji, banco y diccionario),
-   con la clave de cada palabra */
-async function analyseCaptured(sentence) {
-  const tokenizer = await loadTokenizer();
-  const raw = JSON.stringify({ title: "web", sentences: [{ ja: segmentSentence(tokenizer, sentence), en: "", es: "" }] });
-  const { errors, text } = await validateText(raw);
-  if (errors.length) throw new Error(errors[0]);
-  await ensureSentenceData();
-  const analysed = text.sentences[0];
-  return textSentenceTokens(analysed, analysed.dictionary);
-}
-
 /* Al abrir la app: si la dirección trae una palabra, Agregar palabra con ella.
    La dirección se limpia al momento: recargar no la vuelve a proponer. */
 async function receiveCapture() {
@@ -43,7 +31,7 @@ async function receiveCapture() {
   if (!capture.sentence) return baseFormOf(capture.word);
 
   try {
-    const tokens = await analyseCaptured(capture.sentence);
+    const tokens = await analyseSentenceText(capture.sentence);
     if (!capture) return; // lo descartó mientras tanto
     capture.tokens = tokens;
     const index = capture.word ? findWordUnit(tokens, capture.word) : -1;
@@ -59,7 +47,7 @@ async function receiveCapture() {
    Si no se puede analizar, se queda como llegó. */
 async function baseFormOf(word) {
   try {
-    const tokens = await analyseCaptured(word);
+    const tokens = await analyseSentenceText(word);
     const token = tokens[findWordUnit(tokens, word)];
     if (token?.key && capture?.word === word && normalizeText($("addWriting").value) === word) fillAddWord(...token.key.split("|"));
   } catch (error) {

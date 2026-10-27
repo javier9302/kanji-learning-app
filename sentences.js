@@ -98,6 +98,19 @@ function textSentenceTokens(sentence, dictionary) {
   });
 }
 
+/* Una oración suelta, sin segmentar, analizada como un texto pegado (kuromoji,
+   banco y diccionario): sus unidades con la clave de cada palabra. La usan las
+   frases de la web (capture.js) y las propias (sección 7). */
+async function analyseSentenceText(sentence) {
+  const tokenizer = await loadTokenizer();
+  const raw = JSON.stringify({ title: "frase", sentences: [{ ja: segmentSentence(tokenizer, sentence), en: "", es: "" }] });
+  const { errors, text } = await validateText(raw);
+  if (errors.length) throw new Error(errors[0]);
+  await ensureSentenceData();
+  const analysed = text.sentences[0];
+  return textSentenceTokens(analysed, analysed.dictionary);
+}
+
 /* Hace falta el banco entero (para el nivel de cada palabra) y sus lecturas de kanji */
 const ensureSentenceData = () => Promise.all([BANK.loadUpTo("N1"), BANK.loadReadings()]);
 
@@ -373,6 +386,13 @@ function sentenceCreditHTML(sentence) {
   if (url) {
     return `<p class="helper sent-credit">${t("Tu frase, de")} <a href="${escapeHTML(url)}" target="_blank"
       rel="noopener noreferrer">${escapeHTML(new URL(url).hostname)}</a></p>`;
+  }
+  // Tatoeba: la frase enlaza a su página y la licencia a la suya (CC BY pide las dos cosas)
+  const number = sentence.source === "tatoeba" && /^Tatoeba #(\d+)/.exec(sentence.attribution || "")?.[1];
+  if (number) {
+    const rest = escapeHTML(sentence.attribution.replace(/^Tatoeba #\d+/, "").replace(/ · CC BY 2\.0 FR$/, ""));
+    return `<p class="helper sent-credit"><a href="https://tatoeba.org/sentences/show/${number}" target="_blank" rel="noopener">Tatoeba #${number}</a>${rest} ·
+      <a href="https://creativecommons.org/licenses/by/2.0/fr/" target="_blank" rel="noopener">CC BY 2.0 FR</a> · ${t("traducción revisada por IA")}</p>`;
   }
   return sentence.attribution ? `<p class="helper sent-credit">${escapeHTML(sentence.attribution)}</p>` : "";
 }
@@ -657,4 +677,91 @@ async function sentencesFromAI(raw, ids, level) {
     if (sentence && sentence.targets.some((id) => ids.includes(id))) fresh.set(sentence.id, sentence);
   }
   return [...fresh.values()];
+}
+
+/* =========================================
+   7. FRASES PROPIAS (solo administradores)
+   -----------------------------------------
+   Un administrador escribe una frase con sus traducciones (Ajustes → Frases
+   propias). Se analiza como todas y se comprueba con validateSentence; si vale,
+   se comparte al momento con source "curated", que sale antes que las demás al
+   repasar. La base de datos solo admite ese origen a un administrador, y se
+   borran como las demás compartidas (admin.html → Frases).
+   ========================================= */
+
+let curatedDraft = null; // la frase comprobada, a la espera de compartirse
+
+const CURATED_UNITS = [3, 25];
+const CURATED_PROBLEMS = () => ({
+  units_mismatch: t("No se pudo analizar bien la frase."),
+  length: t("Tiene que tener entre {min} y {max} palabras.", { min: CURATED_UNITS[0], max: CURATED_UNITS[1] }),
+  latin: t("Sin letras latinas."),
+  brackets: t("Sin paréntesis ni comillas sin cerrar."),
+  no_target: t("No tiene ninguna palabra con kanji que se pueda preguntar."),
+  tokenize: t("No se pudo analizar bien la frase.")
+});
+
+/* Comprueba la frase del formulario y enseña cómo queda o qué falla */
+async function checkCurated() {
+  const say = (text, cls = "") => { $("curatedMessage").textContent = text; $("curatedMessage").className = `message ${cls}`; };
+  curatedDraft = null;
+  $("curatedShareBtn").classList.add("hidden");
+  $("curatedPreview").innerHTML = "";
+  const ja = $("curatedJa").value.normalize("NFC").replace(/\s+/g, "").trim();
+  const es = $("curatedEs").value.trim(), en = $("curatedEn").value.trim();
+  if (!/\p{Script=Han}/u.test(ja)) return say(t("Escribe una frase en japonés con alguna palabra en kanji."), "incorrect");
+  if (!es || !en) return say(t("Escribe las dos traducciones."), "incorrect");
+  say(t("Analizando la frase…"));
+  let tokens;
+  try {
+    tokens = await analyseSentenceText(ja);
+  } catch (error) {
+    return say(error.message, "incorrect");
+  }
+  const sentence = buildSentence({
+    id: `curated:${textHash(ja)}`, tokens, en, es, source: "curated", sourceId: "", attribution: "",
+    wordOf: sentenceWordOf, tagsOf: sentenceTagsOf, fallbackLevel: "N5"
+  });
+  const check = validateSentence(sentence, { text: ja, minUnits: CURATED_UNITS[0], maxUnits: CURATED_UNITS[1], wordOf: sentenceWordOf });
+  const unknown = sentence.tokens.filter((token) => !token.key && !UNCOUNTED_POS.has(token.pos)).map((token) => token.surface);
+  const problems = check.reasons.map((reason) => reason === "unresolved"
+    ? t("Palabras que no se reconocen: {words}.", { words: unknown.join("、") }) : CURATED_PROBLEMS()[reason] || reason);
+  $("curatedPreview").innerHTML = `<p class="card-sentence answered" lang="ja">${sentenceLineHTML(sentence, { reveal: true })}</p>
+    ${sentence.targets.length ? `<p class="helper">${t("Sirve para preguntar")}: <span lang="ja">${
+      escapeHTML(sentence.targets.map((id) => id.split("|")[0]).join("、"))}</span> · ${escapeHTML(sentence.level)}</p>` : ""}`;
+  if (problems.length) return say(problems.join(" "), "incorrect");
+  if (sharedSentences.has(sentence.id)) return say(t("Esa frase ya está compartida."), "incorrect");
+  curatedDraft = sentence;
+  $("curatedShareBtn").classList.remove("hidden");
+  say(t("La frase vale. Revísala y compártela."), "correct");
+}
+
+async function shareCurated() {
+  if (!curatedDraft) return;
+  const sentence = curatedDraft;
+  $("curatedShareBtn").disabled = true;
+  const ok = await uploadShared([sentence]);
+  $("curatedShareBtn").disabled = false;
+  $("curatedMessage").className = `message ${ok ? "correct" : "incorrect"}`;
+  $("curatedMessage").textContent = ok
+    ? t("Compartida: ya sale en los repasos de {words}.", { words: sentence.targets.map((id) => id.split("|")[0]).join("、") })
+    : t("No se pudo compartir. Comprueba la conexión y que tu cuenta sea de administrador.");
+  if (!ok) return;
+  curatedDraft = null;
+  $("curatedForm").reset();
+  $("curatedPreview").innerHTML = "";
+  $("curatedShareBtn").classList.add("hidden");
+}
+
+function bindCurated() {
+  $("curatedForm").addEventListener("submit", (event) => {
+    event.preventDefault();
+    checkCurated();
+  });
+  // Al cambiar algo hay que volver a comprobarla
+  $("curatedForm").addEventListener("input", () => {
+    curatedDraft = null;
+    $("curatedShareBtn").classList.add("hidden");
+  });
+  $("curatedShareBtn").onclick = shareCurated;
 }

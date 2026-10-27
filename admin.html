@@ -178,8 +178,16 @@
         Frases que la app añadió para todos al repasar «En una frase»: las de una historia que se usó
         porque no había ninguna común, y las que escribió la IA (función generate-sentences) para
         palabras sin ninguna. Ya pasaron la comprobación automática. Al borrar una, desaparece de todos
-        los dispositivos en su siguiente repaso con frases.
+        los dispositivos en su siguiente repaso con frases. Las propias se añaden desde la app
+        (Ajustes → Frases propias). Las de Tatoeba no están aquí: van en bank/sentences
+        (tools/import-tatoeba.mjs).
       </p>
+      <select id="sentencesSource" class="lang-select" aria-label="Origen">
+        <option value="">Todas</option>
+        <option value="curated">Propias</option>
+        <option value="ai">Escritas por la IA</option>
+        <option value="text">De una historia</option>
+      </select>
       <div id="sentencesList" class="items-list"></div>
     </section>
 

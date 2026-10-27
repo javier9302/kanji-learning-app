@@ -912,6 +912,7 @@ function renderDataView() {
     $("profilePlan").title = aiQuotaText();
   }
   $("adminLink").classList.toggle("hidden", !signedIn || !sync.isAdmin);
+  $("curatedPanel").classList.toggle("hidden", !signedIn || !sync.isAdmin);
   $("adminLink").textContent = t("Panel de administración") +
     (sync.pendingTexts ? ` (${plural(sync.pendingTexts, "pendiente", "pendientes")})` : "");
   $("accountDisabled").textContent = accountsReady
@@ -1089,6 +1090,7 @@ async function init() {
   bindReadingStats();
   bindSync();
   bindCapture();
+  bindCurated();
 
   setSyncState("off");
   renderAll();

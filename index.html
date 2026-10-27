@@ -693,6 +693,32 @@
         </div>
       </div>
 
+      <div id="curatedPanel" class="panel hidden">
+        <h3>Frases propias</h3>
+        <p class="helper">Solo administradores. Escribe una frase con sus dos traducciones: se comprueba como todas y, al compartirla, sale antes que las demás en los repasos de sus palabras, para todos. Se borra en el panel de administración → Frases.</p>
+        <form id="curatedForm" class="add-word" autocomplete="off">
+          <label class="field">
+            <span>Frase en japonés</span>
+            <input id="curatedJa" class="search" type="text" lang="ja" maxlength="80" placeholder="毎朝、駅まで歩きます。"
+              autocapitalize="off" spellcheck="false" required>
+          </label>
+          <label class="field">
+            <span>Traducción al español</span>
+            <input id="curatedEs" class="search" type="text" maxlength="300">
+          </label>
+          <label class="field">
+            <span>Traducción al inglés</span>
+            <input id="curatedEn" class="search" type="text" maxlength="300">
+          </label>
+          <div class="inline-form">
+            <button class="button button-outline" type="submit">Comprobar</button>
+            <button id="curatedShareBtn" class="button button-primary hidden" type="button">Compartir con todos</button>
+          </div>
+          <div id="curatedPreview"></div>
+          <p id="curatedMessage" class="message" role="status"></p>
+        </form>
+      </div>
+
       <div class="panel import-panel">
         <div>
           <h3>Tus datos</h3>
@@ -723,6 +749,10 @@
           El repaso espaciado usa <a href="https://github.com/open-spaced-repetition/ts-fsrs" target="_blank" rel="noopener">ts-fsrs</a> (MIT).
           El análisis del japonés lo hace <a href="https://github.com/takuyaa/kuromoji.js" target="_blank" rel="noopener">kuromoji.js</a>
           (Apache 2.0) con el diccionario IPADIC.
+          Muchas frases de ejemplo son de <a href="https://tatoeba.org/" target="_blank" rel="noopener">Tatoeba</a>
+          (<a href="https://creativecommons.org/licenses/by/2.0/fr/" target="_blank" rel="noopener">CC BY 2.0 FR</a>):
+          cada una enlaza a su página y a su autor. Antes de publicarlas, una IA comprueba que sean correctas y
+          adecuadas y revisa o escribe sus traducciones; el japonés no se cambia.
         </p>
       </div>
     </section>

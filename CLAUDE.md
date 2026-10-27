@@ -80,11 +80,12 @@ después de `learning-core.js`)
   `readings.js` (lectura de cada kanji por palabra, generado desde JmdictFurigana con
   `tools/build-readings.mjs`; no se edita a mano).
 - **`supabase/`**: `schema.sql` (tablas y Row Level Security) y Edge Functions
-  (`generate-text`, `generate-sentences`, `grade-translation`, `summarize-progress`, `notify-admin`). No hay CLI de
+  (`generate-text`, `generate-sentences`, `grade-translation`, `summarize-progress`, `notify-admin`,
+  `review-sentences`). No hay CLI de
   Supabase: el usuario ejecuta `schema.sql` y despliega las funciones desde el panel (pasos en
   `SETUP.md`). `admin.html` / `admin.js`: moderación.
-- **Prompts con copia en una función**: la fuente de los textos es `reading.js` y la de las frases,
-  `tools/lib/sentence-batches.js`. Tras cambiar uno, `node tools/sync-prompt.mjs` (una prueba falla
+- **Prompts con copia en una función**: la fuente de los textos es `reading.js`; la de las frases,
+  `tools/lib/sentence-batches.js`, y la de la revisión de Tatoeba, `tools/lib/tatoeba.js`. Tras cambiar uno, `node tools/sync-prompt.mjs` (una prueba falla
   si las copias no coinciden).
 - **`vendor/`**: kuromoji (análisis del japonés) y ts-fsrs, con versión fija.
 - **`sw.js`**: service worker; red primero para la app y caché permanente para `vendor/`.
@@ -129,6 +130,7 @@ cambiado. En el mismo commit de cada cambio:
   se generan por tandas con `tools/generate-sentences.mjs` (copiar el prompt en un chat y pegar la
   respuesta); las que faltan al repasar las pide la app a `generate-sentences` y se comparten al
   momento, con revisión posterior en admin.html.
-- `bank/sentences/<nivel>.json` se rehace con `node tools/generate-sentences.mjs ingest`; no se
-  edita a mano. Las tandas de prompts y respuestas viven en `tools/cache/`, que no se sube.
+- `bank/sentences/<nivel>.json` se rehace con `node tools/generate-sentences.mjs ingest` (las de IA)
+  y `node tools/import-tatoeba.mjs ingest` (las de Tatoeba, solo las que aprobó la IA con la función
+  `review-sentences`); cada una conserva las de la otra. No se edita a mano. Las tandas de prompts y respuestas viven en `tools/cache/`, que no se sube.
 - Rama de trabajo: `desarrollo`; `main` es la publicada. No hagas push sin que se pida.

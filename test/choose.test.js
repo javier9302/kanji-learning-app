@@ -49,12 +49,13 @@ test("mejor la frase sin palabras desconocidas que la que tiene una", () => {
   assert.equal(pick([extra, clean], known("行く|いく")).sentence.id, "ai1");
 });
 
-test("origen: primero las de sus textos, luego Tatoeba, luego IA", () => {
+test("origen: primero las revisadas (propias y Tatoeba aprobada por la IA), luego las de IA y las de historias", () => {
   const make = (id, source) => sentence(id, source, [GAKKOU, NI, IKU, DOT], ["学校|がっこう"]);
-  const all = [make("i", "ai"), make("t", "tatoeba"), make("u", "text")];
-  assert.equal(pick(all, known("行く|いく")).sentence.id, "u");
-  assert.equal(pick(all.slice(0, 2), known("行く|いく")).sentence.id, "t");
-  assert.equal(pick([make("i", "ai"), make("p", "article")], known("行く|いく")).sentence.id, "p");
+  const all = [make("i", "ai"), make("u", "text"), make("t", "tatoeba")];
+  assert.equal(pick(all, known("行く|いく")).sentence.id, "t");
+  assert.equal(pick([make("i", "ai"), make("u", "text"), make("z", "curated")], known("行く|いく")).sentence.id, "z");
+  // Las de historias ya no van antes que las de IA: las escribió la IA también
+  assert.equal(pick([make("u", "text"), make("i", "ai")], known("行く|いく")).sentence.id, "i");
 });
 
 test("no repite la que acaba de salir y va alternando", () => {
@@ -70,13 +71,13 @@ test("no repite la que acaba de salir y va alternando", () => {
   assert.equal(pick([all[0]], known("行く|いく"), { a: { shown: 9, lastShown: 9 } }).sentence.id, "a");
 });
 
-test("una frase propia muy vista cede el sitio a una de Tatoeba", () => {
+test("una frase de Tatoeba muy vista cede el sitio a una de IA", () => {
   const make = (id, source) => sentence(id, source, [GAKKOU, NI, IKU, DOT], ["学校|がっこう"]);
-  // "v" es la que acaba de salir; se compara "u" (propia) con "t" (Tatoeba, sin ver)
-  const all = [make("u", "text"), make("v", "text"), make("t", "tatoeba")];
+  // "v" es la que acaba de salir; se compara "u" (Tatoeba) con "i" (IA, sin ver)
+  const all = [make("u", "tatoeba"), make("v", "tatoeba"), make("i", "ai")];
   const stats = (shown) => ({ u: { shown, lastShown: 1 }, v: { shown: 9, lastShown: 2 } });
   assert.equal(pick(all, known("行く|いく"), stats(2)).sentence.id, "u");
-  assert.equal(pick(all, known("行く|いく"), stats(6)).sentence.id, "t");
+  assert.equal(pick(all, known("行く|いく"), stats(6)).sentence.id, "i");
 });
 
 test("se descarta la frase donde la palabra se lee de otra forma", () => {
