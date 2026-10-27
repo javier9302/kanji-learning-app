@@ -72,7 +72,7 @@ function selectSentences({ candidates, words, verdicts = new Map(), perWord = 3 
    cambia esta y ejecuta node tools/sync-prompt.mjs.
    ========================================= */
 
-const REVIEW_PROMPT_VERSION = "2026-10-27.1";
+const REVIEW_PROMPT_VERSION = "2026-10-27.2";
 
 function renderReviewPrompt({ batch, items }) {
   const list = items.map((item, i) => `${i + 1}. id: ${item.id}
@@ -84,8 +84,9 @@ function renderReviewPrompt({ batch, items }) {
 For EACH sentence decide "keep":
 - keep is true only if ALL of these hold:
   1. The Japanese is correct and sounds natural to a native speaker today: no typos, no wrong kanji, no grammar mistakes, not a stiff word-by-word translation, not oddly old-fashioned.
-  2. The content is suitable for learners of any age: nothing sexual, vulgar, insulting, hateful, violent or cruel; no drugs, self-harm or suicide; no controversial politics or religion; no real people by name.
-  3. It makes sense on its own, without the sentence before it.
+  2. The content is suitable for learners of any age: nothing sexual, vulgar, insulting, hateful, violent or cruel; no drugs, self-harm or suicide; no controversial politics or religion; no famous real people (politicians, celebrities) by name.
+  3. It makes sense on its own: reject it only if it clearly continues an earlier sentence (starts with "but", "so", "that", or refers to something never mentioned, like "the other one").
+- Tatoeba uses everyday first names (Tom, Mary, John, Roger, 直子, 春子…) for ordinary fictional people: a sentence with such a name is fine. So are ordinary everyday sentences about people, family, pets, work or opinions, and casual spoken Japanese (よ, ね, の, わ, contractions like 遊んでる).
 - If keep is false, give "reason": one of "unnatural", "error", "unsuitable", "context".
 - If keep is true, give:
   - "en": a natural English translation that matches the Japanese exactly (tense, politeness, negation, who does what). Start from the English given and change it only if it is wrong, incomplete or unnatural.

@@ -6,9 +6,9 @@
         analiza las frases japonesas con traducción al inglés como lo hace la app:
         de 5 a 12 unidades, todas sus palabras reconocidas y alguna que preguntar.
         Las que alguien valoró mal (-1) en Tatoeba no entran. Deja candidates.json.
-     node tools/import-tatoeba.mjs review [--level N5] [--max-calls 50] [--delay 6000] [--dry-run]
+     node tools/import-tatoeba.mjs review [--level N5] [--max-calls 50] [--delay 6000] [--batch 10] [--parallel 1] [--dry-run]
         elige hasta 3 frases por palabra (selectSentences) y manda las que faltan por
-        revisar a la función review-sentences, de 40 en 40. Cada respuesta se guarda
+        revisar a la función review-sentences, de 10 en 10, una llamada detrás de otra. Cada respuesta se guarda
         en reviews.json: se puede cortar y seguir otro día. Si la IA rechaza una,
         la ronda siguiente elige otra para esa palabra.
         Necesita SENTENCE_REVIEW_TOKEN (el secreto de la función) en el entorno o
@@ -42,7 +42,8 @@ const command = args[0];
 const flag = (name, fallback) => args.includes(name) ? args[args.indexOf(name) + 1] : fallback;
 
 const PER_WORD = 3;        // frases por palabra
-const BATCH = 40;          // frases por llamada a la IA
+// Frases por llamada a la IA: con muchas, la función pasa del tiempo máximo de Supabase (504)
+const BATCH = Number(flag("--batch", 10));
 const UNITS = [5, 12];     // unidades sin contar la puntuación (como las de la IA)
 const EXPORTS = "https://downloads.tatoeba.org/exports";
 const FILES = {
@@ -139,12 +140,16 @@ function wordTable() {
   return words;
 }
 
-/* El veredicto de cada candidata, solo si se revisó este mismo texto */
+/* El veredicto de cada candidata, solo si se revisó este mismo texto. Una rechazada
+   con un prompt anterior se vuelve a revisar: el 2026-10-27.1 rechazaba por error frases
+   con Tom o Mary ("personas reales") y frases normales ("sin contexto"). */
 function verdictsOf(candidates, reviews) {
   const verdicts = new Map();
   for (const sentence of candidates) {
     const review = reviews[sentence.id];
-    if (review && review.ja === sentence.text) verdicts.set(sentence.id, review.keep ? "approved" : "rejected");
+    if (!review || review.ja !== sentence.text) continue;
+    if (review.keep) verdicts.set(sentence.id, "approved");
+    else if (review.version === REVIEW_PROMPT_VERSION) verdicts.set(sentence.id, "rejected");
   }
   return verdicts;
 }
@@ -180,32 +185,56 @@ async function review() {
   vm.runInContext(fs.readFileSync(path.join(ROOT, "config.js"), "utf8"), context);
   const { url, anonKey } = vm.runInContext("SUPABASE_CONFIG", context);
 
-  for (let call = 1; call <= maxCalls; call++) {
-    const { chosen, verdicts } = choose(candidates, reviews, level);
-    const pending = [...chosen].filter((id) => !verdicts.has(id)).slice(0, BATCH);
-    if (!pending.length) { console.log("No queda nada por revisar."); break; }
-    const batch = `t${Date.now().toString(36)}`;
+  // En el plan gratuito de Supabase varias llamadas a la vez se rechazan (503, 546): por defecto, una
+  const parallel = Math.max(1, Number(flag("--parallel", 1)));
+  // Una llamada: devuelve cuántas revisó, o un error que obliga a parar (sin cuota, token malo)
+  const send = async (pending, call) => {
     const started = Date.now();
     const response = await fetch(`${new URL(url).origin}/functions/v1/review-sentences`, {
       method: "POST",
       headers: { apikey: anonKey, "x-review-token": token, "Content-Type": "application/json" },
-      body: JSON.stringify({ batch, items: pending.map((id) => item(byId.get(id))) })
+      body: JSON.stringify({ batch: `t${Date.now().toString(36)}${call}`, items: pending.map((id) => item(byId.get(id))) })
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
       console.error(`Llamada ${call}: error ${response.status} ${data.error || ""}${data.detail ? ` (${data.detail})` : ""}.`);
-      if (response.status === 503) console.error("La IA no tiene cuota ahora: vuelve a intentarlo más tarde (lo revisado ya está guardado).");
-      break;
+      // Sin cuota, token malo o sin claves: no sirve reintentar. Lo demás (Gemini colgado, 504/546) sí
+      return { done: 0, stop: [401, 500, 503].includes(response.status) && data.error !== undefined };
     }
     const result = parseReview(data.text, pending);
     for (const [id, verdict] of result) {
       reviews[id] = { ...verdict, ja: byId.get(id).text, version: data.promptVersion || REVIEW_PROMPT_VERSION, model: data.model, at: new Date().toISOString() };
     }
-    fs.writeFileSync(REVIEWS, JSON.stringify(reviews));
     const kept = [...result.values()].filter((verdict) => verdict.keep).length;
     console.log(`Llamada ${call}: ${result.size} / ${pending.length} revisadas, ${kept} aprobadas (${Math.round((Date.now() - started) / 1000)} s).`);
-    if (!result.size) { console.error("La respuesta no se pudo leer; se para para no gastar cuota."); break; }
-    if (call < maxCalls) await new Promise((resolve) => setTimeout(resolve, delay));
+    return { done: result.size, stop: false };
+  };
+
+  // Por rondas de varias llamadas a la vez (cada una tarda más de un minuto); después de
+  // cada ronda se vuelve a elegir, por si la IA rechazó alguna y hace falta otra
+  let calls = 0, failures = 0;
+  while (calls < maxCalls) {
+    const { chosen, verdicts } = choose(candidates, reviews, level);
+    const pending = [...chosen].filter((id) => !verdicts.has(id));
+    if (!pending.length) { console.log("No queda nada por revisar."); break; }
+    const round = [];
+    for (let i = 0; i < pending.length && round.length < Math.min(parallel, maxCalls - calls); i += BATCH) {
+      round.push(send(pending.slice(i, i + BATCH), ++calls));
+    }
+    const results = await Promise.all(round);
+    fs.writeFileSync(REVIEWS, JSON.stringify(reviews));
+    if (results.some((result) => result.stop)) {
+      console.error("Se para: sin cuota de la IA o sin acceso a la función. Lo revisado ya está guardado; vuelve a intentarlo más tarde.");
+      break;
+    }
+    // Un fallo suelto (Gemini colgado) se reintenta tras una pausa; 5 rondas seguidas sin nada, se para
+    if (!results.some((result) => result.done)) {
+      if (++failures >= 5) { console.error("5 rondas seguidas sin respuesta: se para. Lo revisado ya está guardado."); break; }
+      await new Promise((resolve) => setTimeout(resolve, 15000 * failures));
+      continue;
+    }
+    failures = 0;
+    if (calls < maxCalls) await new Promise((resolve) => setTimeout(resolve, delay));
   }
   status();
 }

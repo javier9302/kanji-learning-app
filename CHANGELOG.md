@@ -6,6 +6,12 @@ Cómo funciona todo hoy: [docs/COMO-FUNCIONA.md](docs/COMO-FUNCIONA.md).
 
 ## 2026-10-27
 
+- **Las primeras frases de Tatoeba, en N5**: 567 frases revisadas por la IA, que dan ejemplo a
+  395 de las 520 palabras de N5. Los demás niveles irán llegando según se revisen (la cuota
+  gratuita de la IA da para unas 600 frases al día).
+- Interno: la revisión de Tatoeba va de 10 en 10 y deja de esperar a la IA si se cuelga; el prompt
+  ya no rechaza frases por llevar nombres como Tom o Mary.
+
 - **Frases de Tatoeba, revisadas por la IA**: las frases de ejemplo podrán venir de Tatoeba,
   frases escritas por personas. Como Tatoeba tiene errores, ninguna se publica sin que la IA
   compruebe que el japonés es correcto, natural y adecuado; además revisa la traducción inglesa y

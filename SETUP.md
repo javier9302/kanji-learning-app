@@ -348,10 +348,16 @@ enseña su número de Tatoeba, su autor y la licencia, con enlaces.
 4. En tu ordenador:
    - `node tools/import-tatoeba.mjs analyse`: descarga Tatoeba (unos 135 MB, una vez) y analiza las
      frases como la app. Tarda bastante (unos 20–30 minutos).
-   - `node tools/import-tatoeba.mjs review --level N5`: elige hasta 3 frases por palabra y manda a
-     revisar las que faltan, de 40 en 40 (`--max-calls`, 50 por defecto; `--dry-run` enseña el
-     prompt sin llamar). Lo revisado se guarda: si se acaba la cuota de Gemini, sigue otro día. Si
-     la IA rechaza una frase, la siguiente ronda elige otra.
+   - `node tools/import-tatoeba.mjs review --level N5 --max-calls 120`: elige hasta 3 frases por
+     palabra y manda a revisar las que faltan, de 10 en 10 y una llamada detrás de otra (`--batch`,
+     `--parallel`; `--dry-run` enseña el prompt sin llamar). Lo revisado se guarda: si se acaba la
+     cuota de Gemini (con las claves gratuitas, unas 60 llamadas al día), sigue otro día. Si la IA
+     rechaza una frase, la siguiente ronda elige otra; las rechazadas con un prompt anterior se
+     vuelven a revisar.
+   - Límites de Supabase (plan gratuito): una función se corta a los 150 s y varias llamadas a la vez
+     se rechazan (503, 546). Por eso van de 10 en 10, de una en una, y la IA piensa lo mínimo (con
+     más, 10 frases tardaban más de 100 s). Gemini a veces se queda colgado: la función deja de
+     esperarlo a los 45 s y prueba otra clave o el modelo de reserva, y la herramienta reintenta.
    - `node tools/import-tatoeba.mjs status`: cuántas palabras tienen ya sus frases y cuántas
      llamadas faltan.
    - `node tools/import-tatoeba.mjs ingest`: escribe las aprobadas en `bank/sentences/<nivel>.json`

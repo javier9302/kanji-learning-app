@@ -73,6 +73,8 @@ test("el prompt lleva cada frase con sus traducciones y prohíbe cambiar el japo
   const prompt = renderReviewPrompt({ batch: "t1", items: [{ id: "tatoeba-1", ja: "猫が好きです。", en: "I like cats.", es: "" }] });
   assert.ok(prompt.includes("ja: 猫が好きです。") && prompt.includes("en: I like cats.") && prompt.includes("es: —"));
   assert.ok(prompt.includes("Never change, correct or rewrite the Japanese"));
+  // Tom y Mary son los personajes de siempre de Tatoeba, no personas reales
+  assert.ok(prompt.includes("Tatoeba uses everyday first names"));
   assert.equal(attributionOf("123", "Swift"), "Tatoeba #123 · Swift · CC BY 2.0 FR");
   assert.equal(attributionOf("123", "\\N"), "Tatoeba #123 · CC BY 2.0 FR");
 });
