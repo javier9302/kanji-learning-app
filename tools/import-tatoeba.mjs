@@ -13,6 +13,14 @@
         la ronda siguiente elige otra para esa palabra.
         Necesita SENTENCE_REVIEW_TOKEN (el secreto de la función) en el entorno o
         en tools/cache/tatoeba/review-token.
+     node tools/import-tatoeba.mjs export [--level N4] [--batch 25] [--files 20]
+        lo mismo que review, pero sin la función: escribe cada tanda como un prompt en
+        tools/cache/tatoeba/manual/prompts/ para pegarlo en otra IA (por ejemplo, una
+        local). Su respuesta se guarda en manual/answers/, con cualquier nombre.
+     node tools/import-tatoeba.mjs import [--model nombre]
+        lee las respuestas de manual/answers/ y las guarda en reviews.json como las
+        de la función (con la misma lectura, parseReview). Las tandas leídas se
+        borran; lo que la respuesta no decidió vuelve a salir en el próximo export.
      node tools/import-tatoeba.mjs ingest
         escribe en bank/sentences/<nivel>.json las frases elegidas y aprobadas, con
         las traducciones de la IA (las frases de IA del archivo se conservan).
@@ -35,7 +43,7 @@ const { sentenceFrom, wordOf } = require("./lib/analyse.js");
 const { loadTokenizer } = require("./lib/tokenizer.js");
 const { segmentSentence } = require("../ja-core.js");
 const { validateSentence } = require("../sentences-core.js");
-const { quickFilter, selectSentences, parseReview, attributionOf, REVIEW_PROMPT_VERSION, renderReviewPrompt } = require("./lib/tatoeba.js");
+const { quickFilter, selectSentences, parseReview, answerBatch, attributionOf, REVIEW_PROMPT_VERSION, renderReviewPrompt } = require("./lib/tatoeba.js");
 
 const args = process.argv.slice(2);
 const command = args[0];
@@ -240,6 +248,79 @@ async function review() {
 }
 
 /* =========================================
+   REVISIÓN A MANO, CON OTRA IA
+   -----------------------------------------
+   Para no gastar la cuota de Gemini: export deja los prompts en archivos, el
+   administrador los pega en otra IA y guarda cada respuesta en answers/.
+   manual/pending.json recuerda qué frases lleva cada tanda (la respuesta solo
+   trae ids, y parseReview necesita saber cuáles se pidieron).
+   ========================================= */
+
+const MANUAL = cachePath("tatoeba", "manual", "pending.json");
+const PROMPTS = path.join(path.dirname(MANUAL), "prompts");
+const ANSWERS = path.join(path.dirname(MANUAL), "answers");
+const loadManual = () => fs.existsSync(MANUAL) ? JSON.parse(fs.readFileSync(MANUAL, "utf8")) : { next: 1, batches: {} };
+
+function exportPrompts() {
+  const level = flag("--level", "") && String(flag("--level")).toUpperCase();
+  const size = Number(flag("--batch", 25)), files = Number(flag("--files", 20));
+  const candidates = loadCandidates(), reviews = loadReviews(), manual = loadManual();
+  const byId = new Map(candidates.map((sentence) => [sentence.id, sentence]));
+  // Las que ya van en una tanda sin contestar no se vuelven a mandar
+  const waiting = new Set(Object.values(manual.batches).flatMap((batch) => batch.ids));
+  fs.mkdirSync(PROMPTS, { recursive: true });
+  fs.mkdirSync(ANSWERS, { recursive: true });
+  let written = 0;
+  for (const current of level ? [level] : BANK.LEVELS) {
+    const { chosen, verdicts } = choose(candidates, reviews, current);
+    const pending = [...chosen].filter((id) => !verdicts.has(id) && !waiting.has(id));
+    for (let i = 0; i < pending.length && written < files; i += size) {
+      const ids = pending.slice(i, i + size);
+      const batch = `${current.toLowerCase()}-${String(manual.next++).padStart(3, "0")}`;
+      const items = ids.map((id) => ({ id, ja: byId.get(id).text, en: byId.get(id).en, es: byId.get(id).es }));
+      fs.writeFileSync(path.join(PROMPTS, `${batch}.txt`), renderReviewPrompt({ batch, items }) + "\n");
+      manual.batches[batch] = { ids, at: new Date().toISOString() };
+      written++;
+    }
+  }
+  fs.writeFileSync(MANUAL, JSON.stringify(manual, null, 1));
+  const total = Object.keys(manual.batches).length;
+  console.log(`${written} prompts nuevos en ${path.relative(process.cwd(), PROMPTS)} (${total} esperando respuesta).`);
+  if (total) console.log(`Pega cada uno en la IA y guarda su respuesta en ${path.relative(process.cwd(), ANSWERS)}/ ` +
+    "(por ejemplo n4-001.txt); luego: node tools/import-tatoeba.mjs import");
+}
+
+function importAnswers() {
+  const model = flag("--model", "manual");
+  const candidates = loadCandidates(), reviews = loadReviews(), manual = loadManual();
+  const byId = new Map(candidates.map((sentence) => [sentence.id, sentence]));
+  const files = fs.existsSync(ANSWERS) ? fs.readdirSync(ANSWERS).filter((name) => !name.startsWith(".")) : [];
+  if (!files.length) { console.log(`No hay respuestas en ${path.relative(process.cwd(), ANSWERS)}/.`); return; }
+  let reviewed = 0, kept = 0;
+  for (const name of files) {
+    const raw = fs.readFileSync(path.join(ANSWERS, name), "utf8");
+    const batch = [answerBatch(raw), path.parse(name).name].find((id) => id && manual.batches[id]);
+    if (!batch) { console.error(`${name}: no es la respuesta de ninguna tanda pendiente; se deja.`); continue; }
+    const { ids } = manual.batches[batch];
+    const result = parseReview(raw, ids);
+    if (!result.size) { console.error(`${name}: no se entiende la respuesta (¿JSON incompleto?); se deja.`); continue; }
+    for (const [id, verdict] of result) {
+      reviews[id] = { ...verdict, ja: byId.get(id).text, version: REVIEW_PROMPT_VERSION, model, at: new Date().toISOString() };
+      if (verdict.keep) kept++;
+    }
+    reviewed += result.size;
+    console.log(`${batch}: ${result.size} / ${ids.length} revisadas, ${[...result.values()].filter((v) => v.keep).length} aprobadas.`);
+    delete manual.batches[batch];
+    fs.rmSync(path.join(ANSWERS, name));
+    fs.rmSync(path.join(PROMPTS, `${batch}.txt`), { force: true });
+  }
+  fs.writeFileSync(REVIEWS, JSON.stringify(reviews));
+  fs.writeFileSync(MANUAL, JSON.stringify(manual, null, 1));
+  console.log(`En total: ${reviewed} revisadas, ${kept} aprobadas.`);
+  status();
+}
+
+/* =========================================
    PUBLICAR
    ========================================= */
 
@@ -280,9 +361,11 @@ function status() {
 
 if (command === "analyse") await analyse();
 else if (command === "review") await review();
+else if (command === "export") exportPrompts();
+else if (command === "import") importAnswers();
 else if (command === "ingest") ingest();
 else if (command === "status") status();
 else {
-  console.log("Uso: node tools/import-tatoeba.mjs analyse|review|ingest|status [--level N5] [--max-calls 50] [--delay 6000] [--dry-run]");
+  console.log("Uso: node tools/import-tatoeba.mjs analyse|review|export|import|ingest|status [--level N5] [--max-calls 50] [--delay 6000] [--dry-run]");
   process.exit(command ? 1 : 0);
 }

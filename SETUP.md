@@ -358,6 +358,14 @@ enseña su número de Tatoeba, su autor y la licencia, con enlaces.
      se rechazan (503, 546). Por eso van de 10 en 10, de una en una, y la IA piensa lo mínimo (con
      más, 10 frases tardaban más de 100 s). Gemini a veces se queda colgado: la función deja de
      esperarlo a los 45 s y prueba otra clave o el modelo de reserva, y la herramienta reintenta.
+   - **Sin la función, con otra IA** (por ejemplo, una local, para no gastar la cuota de Gemini):
+     `node tools/import-tatoeba.mjs export --level N4` deja en `tools/cache/tatoeba/manual/prompts/`
+     hasta 20 prompts de 25 frases (`--files`, `--batch`). Pega cada uno en la IA y guarda su
+     respuesta tal cual en `tools/cache/tatoeba/manual/answers/`, con cualquier nombre (la tanda se
+     reconoce por el `"batch"` de la respuesta). Luego `node tools/import-tatoeba.mjs import`
+     (`--model nombre` para anotar qué IA revisó) las guarda como las de la función y borra las
+     tandas leídas; lo que una respuesta no decidió vuelve a salir en el próximo `export`. La IA
+     tiene que saber bien japonés: una pequeña aprobará frases que no debería.
    - `node tools/import-tatoeba.mjs status`: cuántas palabras tienen ya sus frases y cuántas
      llamadas faltan.
    - `node tools/import-tatoeba.mjs ingest`: escribe las aprobadas en `bank/sentences/<nivel>.json`

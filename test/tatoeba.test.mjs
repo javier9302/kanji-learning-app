@@ -6,7 +6,7 @@ import { createRequire } from "node:module";
 import { readReviewParams, sameToken } from "../supabase/functions/review-sentences/index.ts";
 
 const require = createRequire(import.meta.url);
-const { quickFilter, selectSentences, parseReview, renderReviewPrompt, attributionOf } = require("../tools/lib/tatoeba.js");
+const { quickFilter, selectSentences, parseReview, answerBatch, renderReviewPrompt, attributionOf } = require("../tools/lib/tatoeba.js");
 
 test("quickFilter: descarta sin analizar lo que nunca valdría", () => {
   assert.ok(quickFilter("私は毎朝学校に行きます。"));
@@ -67,6 +67,16 @@ test("parseReview: decisiones completas de los ids pedidos; lo demás queda sin 
     "tatoeba-4": { keep: false, reason: "other" }
   });
   assert.equal(parseReview("no es json", ["tatoeba-1"]).size, 0);
+  // Pegada a mano con comillas tipográficas: se lee igual, y el apóstrofo se queda
+  const curly = parseReview('{“batch”:”t1",”reviews”:[{“id”:”tatoeba-1",”keep”:true,”en”:”Tom’s cat.”,”es”:”El gato de Tom.”}]}', ["tatoeba-1"]);
+  assert.deepEqual(curly.get("tatoeba-1"), { keep: true, en: "Tom’s cat.", es: "El gato de Tom." });
+});
+
+test("answerBatch: la tanda de una respuesta pegada a mano, se llame como se llame el archivo", () => {
+  assert.equal(answerBatch('Aquí tienes:\n```json\n{"batch": "n4-007", "reviews": []}\n```'), "n4-007");
+  assert.equal(answerBatch('{“batch”:”n5-001",”reviews”:[]}'), "n5-001");
+  assert.equal(answerBatch('{"reviews":[]}'), null);
+  assert.equal(answerBatch('{"batch":"../x"}'), null);
 });
 
 test("el prompt lleva cada frase con sus traducciones y prohíbe cambiar el japonés", () => {

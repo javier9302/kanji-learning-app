@@ -132,5 +132,5 @@ cambiado. En el mismo commit de cada cambio:
   momento, con revisión posterior en admin.html.
 - `bank/sentences/<nivel>.json` se rehace con `node tools/generate-sentences.mjs ingest` (las de IA)
   y `node tools/import-tatoeba.mjs ingest` (las de Tatoeba, solo las que aprobó la IA con la función
-  `review-sentences`); cada una conserva las de la otra. No se edita a mano. Las tandas de prompts y respuestas viven en `tools/cache/`, que no se sube.
+  `review-sentences` o a mano con `export` / `import`); cada una conserva las de la otra. No se edita a mano. Las tandas de prompts y respuestas viven en `tools/cache/`, que no se sube.
 - Rama de trabajo: `desarrollo`; `main` es la publicada. No hagas push sin que se pida.

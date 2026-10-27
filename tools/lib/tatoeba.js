@@ -104,6 +104,8 @@ Return ONLY this JSON (no explanations, no markdown), one review per sentence, i
 ]}`;
 }
 
+const straightQuotes = (text) => text.replace(/[“”„″]/g, '"');
+
 /* La respuesta de la IA -> Map id -> { keep, reason } o { keep, en, es }.
    Solo entran los ids pedidos con una decisión completa: una frase aprobada sin
    sus dos traducciones queda sin decidir y se vuelve a pedir. */
@@ -111,11 +113,18 @@ const REVIEW_REASONS = ["unnatural", "error", "unsuitable", "context"];
 function parseReview(raw, ids) {
   const text = String(raw ?? "");
   const start = text.search(/[{[]/), end = Math.max(text.lastIndexOf("}"), text.lastIndexOf("]"));
+  const json = start >= 0 && end > start ? text.slice(start, end + 1) : text;
   let data;
   try {
-    data = JSON.parse(start >= 0 && end > start ? text.slice(start, end + 1) : text);
+    data = JSON.parse(json);
   } catch {
-    return new Map();
+    // Pegada a mano, el editor puede cambiar las comillas por las tipográficas (“ ”):
+    // solo entonces se cambian por las normales (los apóstrofos ’ de Tom’s no se tocan)
+    try {
+      data = JSON.parse(straightQuotes(json));
+    } catch {
+      return new Map();
+    }
   }
   const list = Array.isArray(data) ? data : data?.reviews;
   const wanted = new Set(ids), result = new Map();
@@ -132,8 +141,16 @@ function parseReview(raw, ids) {
   return result;
 }
 
+/* La tanda a la que pertenece una respuesta pegada a mano (revisión con otra IA,
+   export / import de tools/import-tatoeba.mjs): el "batch" que el prompt pide
+   devolver. Sirve aunque el archivo se guarde con otro nombre. */
+function answerBatch(raw) {
+  const match = straightQuotes(String(raw ?? "")).match(/"batch"\s*:\s*"([\w-]{1,40})"/);
+  return match ? match[1] : null;
+}
+
 /* Quién escribió la frase y su licencia: va con la frase y se enseña en la app */
 const attributionOf = (number, username) =>
   `Tatoeba #${number}${username && username !== "\\N" ? ` · ${username}` : ""} · CC BY 2.0 FR`;
 
-module.exports = { quickFilter, selectSentences, REVIEW_PROMPT_VERSION, renderReviewPrompt, parseReview, attributionOf };
+module.exports = { quickFilter, selectSentences, REVIEW_PROMPT_VERSION, renderReviewPrompt, parseReview, answerBatch, attributionOf };

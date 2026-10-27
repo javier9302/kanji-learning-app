@@ -204,7 +204,7 @@ palabras que ya conoce o está aprendiendo. En «Palabras y kanjis» se alternan
   unidades con todas sus palabras reconocidas. Para cada palabra (las más frecuentes primero) se
   eligen hasta **3** de su mismo nivel; una frase cuenta para todas las palabras de su nivel que
   lleva. Van primero las ya aprobadas y las bien valoradas en Tatoeba. Cada elegida la revisa la
-  IA (función `review-sentences`): si el japonés no es correcto y natural, o el contenido no es
+  IA (función `review-sentences`, o a mano con otra IA: `export` / `import`): si el japonés no es correcto y natural, o el contenido no es
   adecuado, se rechaza y se elige otra; si vale, corrige su traducción al inglés y escribe o
   corrige la española. El japonés no se cambia. Cada una enseña «Tatoeba #número · autor · CC BY
   2.0 FR» con enlaces al repasar, en el diccionario y en Traducir.
