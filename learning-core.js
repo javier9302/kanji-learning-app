@@ -12,6 +12,8 @@
    ========================================= */
 
 const LC_LEVELS = ["N5", "N4", "N3", "N2", "N1"];
+/* Tramos de importancia de un kanji (como en la tabla de kanjis): los 100 primeros, los 250… */
+const LC_BANDS = [100, 250, 500, 1000, 1500, 2000, 2500];
 /* ¿Este nivel está dentro del pedido? (un nivel desconocido, nunca) */
 const lcWithin = (level, max) => !!level && LC_LEVELS.indexOf(level) >= 0 && LC_LEVELS.indexOf(level) <= LC_LEVELS.indexOf(max);
 
@@ -47,11 +49,14 @@ function kanjiGate(entry, ctx) {
    la de su significado. Cada vez sale, por este orden:
      1. un repaso que toca: su tarjeta ya venció (los recién aprendidos vuelven
         a los pocos minutos, en la misma sesión), el más atrasado primero;
-     2. un kanji nuevo, si hoy no ha llegado a newPerDay. Primero los que el
+     2. un kanji nuevo, si hoy no ha llegado a newPerDay, de los que el
         estudiante ya ha visto (en palabras que conoce o repasa, o estudiados en
-        Repasar), de los niveles más bajos primero y hasta uno por encima de su
-        nivel de escritura; cada unseenEvery nuevos, uno que aún no ha visto de
-        su nivel de escritura, para ir completándolo;
+        Repasar): un kanji se aprende por sus palabras. De simple a complejo:
+        primero los de palabras que mejor conoce, después los más importantes
+        (tramos de 100, 250, 500…: cuánto vocabulario frecuente abren) y, en el
+        mismo tramo, los de menos trazos. Los de un nivel aprobado con la prueba
+        no salen. Con unseenEvery > 0, cada tantos nuevos uno que aún no ha visto
+        de su nivel de escritura (por defecto, nunca);
      3. si no queda nada de eso, práctica extra: el ya escrito que vence antes.
    El nivel de escritura es el primero que no ha terminado (todos sus kanjis
    escritos alguna vez) ni aprobado con la prueba.
@@ -76,6 +81,7 @@ function writingLevel(kanjiByLevel, written, skipped = []) {
      kanjiByLevel   { N5: ["日", …], … } en el orden del banco
      dueAt(c)       cuándo vence su tarjeta de escritura (ms), o null si nunca lo escribió
      seen(c)        cuánto lo ha visto: 0 nada; más, más cerca le queda (palabras que domina > que repasa > lecturas)
+     strokes(c)     sus trazos (0 si no se sabe);  importance(c)  su puesto por el vocabulario que abre
      skipped        niveles aprobados con la prueba
      newToday       kanjis nuevos que ya ha empezado hoy
      avoid          el kanji anterior, para no repetirlo seguido
@@ -94,11 +100,12 @@ function nextWritingKanji(state, config) {
 
   if (state.newToday < config.newPerDay) {
     const level = writingLevel(state.kanjiByLevel, (c) => state.dueAt(c) !== null, state.skipped);
-    const top = level ? LC_LEVELS.indexOf(level) + 1 : LC_LEVELS.length - 1; // hasta un nivel por encima
-    const fresh = all.filter((c) => state.dueAt(c) === null);
-    const seen = fresh.filter((c) => state.seen(c) > 0 && rank(c) <= top)
-      .sort((a, b) => rank(a) - rank(b) || state.seen(b) - state.seen(a));
-    const unseen = level ? fresh.filter((c) => levelOf.get(c) === level && !(state.seen(c) > 0)) : [];
+    const fresh = all.filter((c) => state.dueAt(c) === null && !state.skipped.includes(levelOf.get(c)));
+    const strokes = state.strokes || (() => 0), importance = (c) => (state.importance && state.importance(c)) || Infinity;
+    const band = (c) => { const i = LC_BANDS.findIndex((top) => importance(c) <= top); return i < 0 ? LC_BANDS.length : i; };
+    const seen = fresh.filter((c) => state.seen(c) > 0).sort((a, b) => state.seen(b) - state.seen(a) ||
+      band(a) - band(b) || strokes(a) - strokes(b) || importance(a) - importance(b) || rank(a) - rank(b));
+    const unseen = level && config.unseenEvery > 0 ? fresh.filter((c) => levelOf.get(c) === level && !(state.seen(c) > 0)) : [];
     const discoverTurn = config.unseenEvery > 0 && state.newToday % config.unseenEvery === config.unseenEvery - 1;
     const pick = unseen.length && (discoverTurn || !seen.length) ? unseen[0] : seen[0];
     if (pick) return { c: pick, level: levelOf.get(pick), kind: "new", seen: state.seen(pick) > 0 };

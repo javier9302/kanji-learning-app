@@ -10,10 +10,6 @@ const LANGS = ["es", "en"];
 
 const EN = {
   "Automático (nivel a nivel)": "Automatic (level by level)",
-  "Todo escrito": "All written",
-  "Practicas los kanjis de {level} sin orden. En automático se avanza nivel a nivel.": "You are practising the {level} kanji in random order. In automatic mode you advance level by level.",
-  "Ya has escrito los kanjis de todos los niveles: ahora salen los repasos.": "You have written the kanji of every level: now your reviews come up.",
-  "Nivel de escritura: {level}, {done} de {total} kanjis escritos. Cada kanji vuelve cuando toca repasarlo; los nuevos, primero los que ya has visto en tus palabras y de vez en cuando uno de tu nivel.":
     "Writing level: {level}, {done} of {total} kanji written. Each kanji comes back when it is due for review; new ones come first from the words you have seen, and now and then one from your level.",
   "Hoy: {due} por repasar y {fresh} de {max} kanjis nuevos.": "Today: {due} to review and {fresh} of {max} new kanji.",
   "Práctica extra · {level}": "Extra practice · {level}",
@@ -195,6 +191,9 @@ const EN = {
   "Para activarlo, pide el plan premium al administrador.": "To turn it on, ask the administrator for the premium plan.",
   "Inicia sesión con una cuenta premium para verlo.": "Sign in with a premium account to see it.",
   "Tus datos": "Your data",
+  "Practicas los kanjis de {level} sin orden. En automático salen los que ya has visto en tus palabras, de simple a complejo.": "You practise the kanji of {level} in no particular order. In automatic mode you get the ones you've seen in your words, from simple to complex.",
+  "Escribes los kanjis que ya has visto en tus palabras: {done} de {total} escritos. Cada uno vuelve cuando toca repasarlo; los nuevos van de simple a complejo (los de palabras que mejor conoces, los más útiles y los de menos trazos primero).": "You write the kanji you've seen in your words: {done} of {total} written. Each one comes back when it's due; new ones go from simple to complex (those from words you know best, the most useful and those with fewer strokes first).",
+  "Aún no has visto kanjis en tus palabras: lee un texto o repasa palabras en Repasar, y sus kanjis saldrán aquí. También puedes elegir un nivel arriba.": "You haven't seen any kanji in your words yet: read a text or review words in Review, and their kanji will show up here. You can also choose a level above.",
   "Instrucciones": "Instructions",
   "Opinión": "Opinion",
   "Salud": "Health",

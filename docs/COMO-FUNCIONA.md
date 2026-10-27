@@ -241,16 +241,21 @@ de su significado. En el modo automático sale, por este orden (`nextWritingKanj
 
 1. **Un repaso que toca**: su tarjeta ya venció, el más atrasado primero. Un kanji recién aprendido
    vuelve a los pocos minutos, en la misma sesión, y después a días, semanas o meses.
-2. **Un kanji nuevo**, como mucho 10 al día. Primero los que el estudiante ya ha visto
-   (`seenKanji`): en palabras que domina o acierta, o cuyo significado sabe (más cerca); en palabras
-   que repasa o que se dan por sabidas por su nivel; en palabras que vio al leer o en Repasar (más
-   lejos). Antes los de niveles más bajos, y como mucho un nivel por encima de su nivel de
-   escritura. De cada 4 nuevos, uno que aún no ha visto de su nivel de escritura, para ir
-   completándolo.
+2. **Un kanji nuevo**, como mucho 10 al día, **solo de los que el estudiante ya ha visto**
+   (`seenKanji`), de cualquier nivel salvo los aprobados con la prueba. De simple a complejo:
+   - primero los de palabras que mejor conoce: que domina o acierta, o cuyo significado sabe; después
+     los de palabras que repasa o que se dan por sabidas por su nivel; al final, los de palabras que
+     vio al leer o en Repasar;
+   - después, por importancia en tramos (los 100 primeros, los 250, 500, 1000…: cuánto vocabulario
+     frecuente abren, `bank/kanji-info.js`) y, en el mismo tramo, **los de menos trazos** (KANJIDIC2).
+   Un kanji que no ha visto nunca no sale en automático (`writing.unseenEvery` = 0; con un número,
+   cada tantos nuevos saldría uno sin ver de su nivel de escritura). Para practicar un nivel entero,
+   se elige en el selector.
 3. **Práctica extra**: si no queda nada de lo anterior, el ya escrito que vence antes. Bien hecha
    no cambia cuándo vuelve.
 
-El **nivel de escritura** es el primero que no ha terminado (todos sus kanjis escritos alguna vez)
+La cabecera dice cuántos de los kanjis que ha visto ha escrito («34 / 120»). El **nivel de
+escritura**, para la prueba que lo salta, es el primero que no ha terminado (todos sus kanjis escritos alguna vez)
 ni aprobado con la prueba (8 kanjis, 7 bien escritos sin ayuda; los bien escritos entran con un
 intervalo largo).
 

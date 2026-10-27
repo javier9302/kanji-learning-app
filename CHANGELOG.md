@@ -6,6 +6,11 @@ Cómo funciona todo hoy: [docs/COMO-FUNCIONA.md](docs/COMO-FUNCIONA.md).
 
 ## 2026-10-27
 
+- **Escribir, solo con los kanjis que ya has visto en tus palabras**, de simple a complejo: primero
+  los de las palabras que mejor conoces, luego los más útiles y, entre ellos, los de menos trazos. Ya
+  no sale de vez en cuando un kanji que no has visto. La cabecera dice cuántos de los que has visto
+  has escrito.
+
 - **Textos con las palabras que te tocan, y más variados**: la IA usa hasta 8 de las palabras que
   te toca repasar (o tocarán pronto), y el lector te dice cuántas salen; leer el texto las repasa.
   El texto recomendado de la biblioteca es el que tiene más de ellas. Los textos rotan tipo (ahora

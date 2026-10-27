@@ -67,9 +67,10 @@ const STUDY_CONFIG = {
 
   /* Escribir: repaso espaciado (FSRS) con una tarjeta de escritura por kanji
      (reglas en learning-core.js, nextWritingKanji y writingRating).
-       newPerDay    kanjis nuevos al día como mucho; después, solo repasos y práctica extra
+       newPerDay    kanjis nuevos al día como mucho; después, solo repasos y práctica extra.
+                    Los nuevos, solo de los que ha visto en sus palabras, de simple a complejo
        unseenEvery  de cada tantos nuevos, uno que aún no ha visto de su nivel de
-                    escritura (los demás, de los que ya ha visto en sus palabras)
+                    escritura (0 = nunca: un kanji se aprende por sus palabras)
        rating       forgiveMistakes: fallos que no cuentan (el primero);
                     againMistakes: fallos de más con los que cuenta como Otra vez.
                     Con una pista, o algún fallo de más, es Difícil; con "Mostrar",
@@ -78,7 +79,7 @@ const STUDY_CONFIG = {
                     con pass bien escritos (sin "Mostrar", sin pistas y con
                     como mucho maxMistakes trazos fallados) */
   writing: {
-    newPerDay: 10, unseenEvery: 4, rating: { forgiveMistakes: 1, againMistakes: 3 },
+    newPerDay: 10, unseenEvery: 0, rating: { forgiveMistakes: 1, againMistakes: 3 },
     test: { size: 8, pass: 7, maxMistakes: 1 }
   },
 

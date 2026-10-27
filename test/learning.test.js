@@ -80,13 +80,31 @@ test("escribir: primero los repasos que vencieron, el más atrasado antes", () =
   assert.equal(core.nextWritingKanji(writer({ due: { 三: NOW + 999 } }), W).kind, "new");
 });
 
-test("escribir: los nuevos, primero los que ya ha visto (no la lista del nivel en orden)", () => {
+test("escribir: los nuevos, primero los de las palabras que mejor conoce (no la lista del nivel en orden)", () => {
   const state = writer({ seen: { 四: 3, 三: 1, 会: 3 } });
   assert.deepEqual(core.nextWritingKanji(state, W), { c: "四", level: "N5", kind: "new", seen: true });
-  // A igual nivel, el que más cerca le queda; un nivel más bajo va antes
-  assert.equal(core.nextWritingKanji({ ...state, avoid: "四" }, W).c, "三");
-  // Un kanji visto muy por encima de su nivel no sale todavía
-  assert.equal(core.nextWritingKanji(writer({ seen: { 政: 3 } }), W).c, "一");
+  // Lo que más cerca le queda va antes que el nivel: 会 (lo conoce de palabras que domina) antes que 三
+  assert.equal(core.nextWritingKanji({ ...state, avoid: "四" }, W).c, "会");
+  // Un kanji de un nivel alto que ya ha visto también sale: lo conoce por sus palabras
+  assert.equal(core.nextWritingKanji(writer({ seen: { 政: 3 } }), W).c, "政");
+});
+
+test("escribir: de simple a complejo, por importancia (en tramos) y trazos; sin vistos no hay nuevos", () => {
+  const W0 = { ...W, unseenEvery: 0 };
+  const strokes = { 二: 2, 三: 3, 四: 5, 会: 6 }, importance = { 二: 300, 三: 50, 四: 60, 会: 80 };
+  const state = writer({ seen: { 二: 2, 三: 2, 四: 2, 会: 2 }, strokes: (c) => strokes[c], importance: (c) => importance[c] });
+  const order = [];
+  for (let avoid = ""; order.length < 4;) {
+    const next = core.nextWritingKanji({ ...state, avoid, dueAt: (c) => order.includes(c) ? NOW + 9999 : null }, W0);
+    order.push(next.c);
+    avoid = next.c;
+  }
+  // 三, 四 y 会 están entre los 100 más importantes: de menos a más trazos; 二 (puesto 300), después
+  assert.deepEqual(order, ["三", "四", "会", "二"]);
+  // Sin nada visto: ningún kanji nuevo (y sin nada escrito, nada)
+  assert.equal(core.nextWritingKanji(writer(), W0), null);
+  // Un nivel aprobado con la prueba no sale aunque lo haya visto
+  assert.equal(core.nextWritingKanji(writer({ seen: { 一: 3, 会: 1 }, skipped: ["N5"] }), W0).c, "会");
 });
 
 test("escribir: de vez en cuando uno sin ver de su nivel, para completarlo; sin vistos, solo esos", () => {

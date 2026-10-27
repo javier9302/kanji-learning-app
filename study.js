@@ -1182,20 +1182,23 @@ function pickDrawKanji() {
   const seen = seenKanji();
   const next = nextWritingKanji({
     now: Date.now(), kanjiByLevel: byLevel, dueAt: writeDueAt, seen: (c) => seen.get(c) || 0,
+    // De simple a complejo: trazos e importancia de bank/kanji-info.js (sin él, por cómo lo conoce y su nivel)
+    strokes: (c) => BANK.kanjiInfo.get(c)?.strokes || 0, importance: (c) => BANK.kanjiInfo.get(c)?.importance || 0,
     skipped: writingSkipped(), newToday: newWritingToday(), avoid
   }, STUDY_CONFIG.writing);
   return next ? { kanji: BANK.kanji.get(next.c), kind: next.kind } : null;
 }
 
-/* Cuánto lleva del nivel actual y qué toca hoy, para la cabecera */
+/* Cuánto lleva y qué toca hoy, para la cabecera: de los kanjis que ha visto en
+   sus palabras (sin los de los niveles aprobados con la prueba), cuántos ha
+   escrito. level: el primer nivel sin terminar, para ofrecer su prueba. */
 function writingProgress() {
   const byLevel = kanjiByLevel();
-  const now = Date.now();
+  const now = Date.now(), seen = seenKanji(), skipped = writingSkipped();
+  const all = BANK.LEVELS.filter((level) => !skipped.includes(level)).flatMap((level) => byLevel[level]);
   const due = Object.values(byLevel).flat().filter((c) => writtenKanji(c) && writeDueAt(c) <= now).length;
-  const level = writingLevel(byLevel, writtenKanji, writingSkipped());
-  if (!level) return { level: null, done: 0, total: 0, due };
-  const list = byLevel[level];
-  return { level, done: list.filter(writtenKanji).length, total: list.length, due };
+  const mine = all.filter((c) => seen.get(c) > 0);
+  return { level: writingLevel(byLevel, writtenKanji, skipped), done: mine.filter(writtenKanji).length, total: mine.length, due };
 }
 
 /* Palabra de ejemplo: mejor una que el estudiante conozca; si no, la más fácil */
@@ -1210,7 +1213,8 @@ function exampleWord(kanji) {
 
 /* La pantalla de Escribir. En mitad de una prueba, o con un kanji a medias, no se cambia */
 async function renderDraw() {
-  await BANK.loadUpTo("N1").catch(() => {}); // los kanjis de todos los niveles, para saber qué toca
+  // Los kanjis de todos los niveles, para saber qué toca, y sus trazos e importancia (de simple a complejo)
+  await Promise.all([BANK.loadUpTo("N1"), BANK.loadKanjiInfo()]).catch(() => {});
   if (document.body.dataset.view !== "draw") return;
   renderDrawStatus();
   if (draw?.test || draw?.kanji && $("drawArea").querySelector(".draw-card")) return;
@@ -1221,21 +1225,19 @@ async function renderDraw() {
 function renderDrawStatus() {
   const auto = $("drawLevel").value === "auto";
   const { level, done, total, due } = writingProgress();
-  $("drawCount").textContent = !auto ? $("drawLevel").value : level ? `${level} · ${done} / ${total}` : t("Todo escrito");
+  $("drawCount").textContent = !auto ? $("drawLevel").value : `${done} / ${total}`;
   const status = $("drawStatus");
   if (!auto) {
-    status.textContent = t("Practicas los kanjis de {level} sin orden. En automático se avanza nivel a nivel.", { level: $("drawLevel").value });
+    status.textContent = t("Practicas los kanjis de {level} sin orden. En automático salen los que ya has visto en tus palabras, de simple a complejo.", { level: $("drawLevel").value });
     return;
   }
   const today = t("Hoy: {due} por repasar y {fresh} de {max} kanjis nuevos.",
     { due, fresh: newWritingToday(), max: STUDY_CONFIG.writing.newPerDay });
-  if (!level) {
-    status.textContent = `${t("Ya has escrito los kanjis de todos los niveles: ahora salen los repasos.")} ${today}`;
-    return;
-  }
-  status.innerHTML = `${escapeHTML(t("Nivel de escritura: {level}, {done} de {total} kanjis escritos. Cada kanji vuelve cuando toca repasarlo; los nuevos, primero los que ya has visto en tus palabras y de vez en cuando uno de tu nivel.", { level, done, total }))}
+  status.innerHTML = `${escapeHTML(total
+    ? t("Escribes los kanjis que ya has visto en tus palabras: {done} de {total} escritos. Cada uno vuelve cuando toca repasarlo; los nuevos van de simple a complejo (los de palabras que mejor conoces, los más útiles y los de menos trazos primero).", { done, total })
+    : t("Aún no has visto kanjis en tus palabras: lee un texto o repasa palabras en Repasar, y sus kanjis saldrán aquí. También puedes elegir un nivel arriba."))}
     ${escapeHTML(today)}
-    ${draw?.test ? "" : `<button id="drawTestBtn" class="link-btn" type="button">${escapeHTML(t("¿Ya sabes escribir los de {level}? Haz la prueba para saltarlo", { level }))}</button>`}`;
+    ${draw?.test || !level ? "" : `<button id="drawTestBtn" class="link-btn" type="button">${escapeHTML(t("¿Ya sabes escribir los de {level}? Haz la prueba para saltarlo", { level }))}</button>`}`;
   if ($("drawTestBtn")) $("drawTestBtn").onclick = () => startWritingTest(level);
 }
 

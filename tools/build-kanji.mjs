@@ -1,7 +1,7 @@
 /* Genera bank/kanji-info.js: lo que hace falta para saber qué se sabe de cada
    kanji a partir de las palabras (kanji-core.js) y para la tabla de kanjis.
      node tools/build-kanji.mjs
-   Por cada kanji: nivel JLPT, grado escolar y frecuencia en prensa (KANJIDIC2),
+   Por cada kanji: nivel JLPT, grado escolar, frecuencia en prensa y trazos (KANJIDIC2),
    su importancia (cuánto vocabulario frecuente abre) y sus lecturas en las
    palabras del banco, con cuántas palabras usa cada una.
    Fuentes: KANJIDIC2 (EDRDG, CC BY-SA 4.0) y bank/readings.js (JmdictFurigana).
@@ -38,6 +38,7 @@ function fromXML(xml) {
     const c = body.match(/<literal>(.*?)<\/literal>/)[1];
     out.set(c, {
       grade: Number(body.match(/<grade>(\d+)<\/grade>/)?.[1]) || null,
+      strokes: Number(body.match(/<stroke_count>(\d+)<\/stroke_count>/)?.[1]) || null,
       freq: Number(body.match(/<freq>(\d+)<\/freq>/)?.[1]) || null,
       on: all(/<reading r_type="ja_on">(.*?)<\/reading>/g), kun: all(/<reading r_type="ja_kun">(.*?)<\/reading>/g),
       en: all(/<meaning>(.*?)<\/meaning>/g), es: all(/<meaning m_lang="es">(.*?)<\/meaning>/g)
@@ -62,7 +63,7 @@ function fromTgz(buffer, wanted) {
 function fromJSON(list) {
   return {
     kanji: new Map(list.map((k) => [k.literal, {
-      grade: k.grade || null, freq: k.freq || null, on: k.readings?.ja_on || [], kun: k.readings?.ja_kun || [],
+      grade: k.grade || null, freq: k.freq || null, strokes: k.strokeCounts?.[0] || null, on: k.readings?.ja_on || [], kun: k.readings?.ja_kun || [],
       en: k.meanings?.en || [], es: k.meanings?.es || []
     }])),
     source: `KANJIDIC2 (copia de kanjidic2-json ${NPM_VERSION})`
@@ -132,7 +133,7 @@ const rows = [...chars].sort((a, b) => (rankOf.get(a) || 1e9) - (rankOf.get(b) |
   const kd = KD.get(c) || {};
   const item = stats.get(c);
   const readings = item ? [...item.readings].sort((a, b) => b[1][0] - a[1][0] || b[1][1] - a[1][1]).map(([r, [words, list]]) => [r, words, list]) : [];
-  const row = [levelOf(c), kd.grade || 0, kd.freq || 0, rankOf.get(c) || 0, readings];
+  const row = [levelOf(c), kd.grade || 0, kd.freq || 0, rankOf.get(c) || 0, readings, kd.strokes || 0];
   // Los que no están en el banco llevan su significado y sus lecturas (para la ficha)
   if (!BANK.kanji.has(c)) row.push(kd.en?.slice(0, 4) || [], kd.es?.slice(0, 4) || [], kd.on || [], kd.kun || []);
   return `${JSON.stringify(c)}:${JSON.stringify(row)}`;
@@ -143,7 +144,7 @@ fs.writeFileSync(path.join(ROOT, "bank/kanji-info.js"),
 `/* Información de cada kanji para la tabla de kanjis y su estado (kanji-core.js).
    Kanjis: carácter -> [nivel JLPT, grado escolar (1-6, 8 secundaria, 9-10 nombres; 0 sin grado),
    frecuencia en prensa (0 sin dato), importancia (puesto por el vocabulario frecuente que abre),
-   lecturas [[lectura, palabras del banco, de ellas en la lista de frecuencia]]
+   lecturas [[lectura, palabras del banco, de ellas en la lista de frecuencia]], trazos (0 sin dato)
    (y, si el kanji no está en el banco: significados en/es, on, kun)].
    Palabras: id -> las lecturas de sus kanjis cuando no son las de bank/readings.js
    (上手 -> "上じょう,手ず"; "" si no ejercita ninguna, お兄さん).

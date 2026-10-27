@@ -61,9 +61,10 @@ después de `learning-core.js`)
   conectado. Hecho: 1.2, leer cuenta como repaso (`readingCredit` / `readingInterval` en
   `learning-core.js`, `applyReadingReview` en `study.js`, `reviewByReading` en `reading.js`), y
   1.1 + 4.2, textos con las palabras que tocan y más variados (`story-core.js`: `storyTargets`,
-  `nextVariety`, `textSimilarity`; personajes en `CAST` dentro de `renderPromptSeg`). Quedan 1.3
-  (Escribir solo con lo visto, de simple a complejo), 1.4 (Traducir con las que tocan) y 1.5
-  (pantalla «Hoy», la de inicio).
+  `nextVariety`, `textSimilarity`; personajes en `CAST` dentro de `renderPromptSeg`), y 1.3,
+  Escribir solo con lo visto y de simple a complejo (`nextWritingKanji`; trazos en
+  `bank/kanji-info.js`). Quedan 1.4 (Traducir con las que tocan) y 1.5 (pantalla «Hoy», la de
+  inicio).
   Orden acordado de las demás: 3 (añadir palabras desde la web), 2 (lo que falta de pegar textos),
   4.1, 5, 6, 7, 8.
 - **`grammar-core.js`**: catálogo de gramática (`GRAMMAR`, hoy solo N5), detector sobre las piezas
