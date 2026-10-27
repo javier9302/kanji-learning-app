@@ -7,7 +7,7 @@ Cómo funciona todo hoy: [docs/COMO-FUNCIONA.md](docs/COMO-FUNCIONA.md).
 ## 2026-10-27
 
 - **Más frases de N4**: 434 frases de Tatoeba revisadas; 256 de sus 516 palabras tienen ejemplo,
-  141 con tres.
+  141 con tres (`694fb7d`).
 - **Más frases de Tatoeba, y las primeras de N4**: N5 pasa a 786 frases revisadas (465 de sus
   520 palabras tienen ejemplo, 398 con tres) y N4 estrena 366 (231 palabras con ejemplo) (`b901553`). Las
   demás de N4 y los otros niveles irán llegando.
