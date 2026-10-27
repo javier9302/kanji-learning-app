@@ -65,10 +65,11 @@ const srsFromRow = (row) => ({
    (falta ejecutar supabase/schema.sql) se sube sin ellas y no se marca como
    subido, para volver a enviarlo completo cuando existan. */
 const PHASE2_COLUMNS = ["fsrs", "origin", "meaning", "seen_at"];
-/* Columnas de Traducir (significado), de Escribir y las lecturas acertadas de
-   cada kanji. Si faltan solo se quitan estas: el resto del progreso, también el
-   de la fase 2, se sigue subiendo. */
-const MEANING_COLUMNS = ["meaning_correct", "meaning_wrong", "last_meaning_at", "last_written_at", "write_fsrs", "kanji_readings"];
+/* Columnas de Traducir (significado), de Escribir, las lecturas acertadas de
+   cada kanji y el repaso al leer. Si faltan solo se quitan estas: el resto del
+   progreso, también el de la fase 2, se sigue subiendo. */
+const MEANING_COLUMNS = ["meaning_correct", "meaning_wrong", "last_meaning_at", "last_written_at", "write_fsrs", "kanji_readings",
+  "read_streak", "last_read_review"];
 const NEWER_ORIGINS = ["diccionario", "traducir"]; // orígenes que una base de datos sin actualizar no admite
 const without = (rows, columns) => rows.map((row) => Object.fromEntries(Object.entries(row).filter(([key]) => !columns.includes(key))));
 
@@ -190,6 +191,7 @@ async function pullReading(userId) {
       seen: row.seen, lookups: row.lookups, evalCorrect: row.eval_correct, evalWrong: row.eval_wrong,
       firstSeen: msOf(row.first_seen), lastSeen: msOf(row.last_seen), updatedAt: stamp,
       ...(row.origin ? { origin: row.origin } : {}), ...(row.meaning ? { meaning: row.meaning } : {}),
+      ...(row.read_streak ? { readStreak: row.read_streak } : {}), ...(row.last_read_review ? { lastReadReview: row.last_read_review } : {}),
       ...srsFromRow(row)
     };
     userWords.set(record.id, record);
@@ -232,13 +234,13 @@ async function pullReading(userId) {
     const local = new Map((await getAll("sessions")).map((s) => [s.id, s]));
     const fresh = [];
     for (const row of rows) {
-      sync.pushed.sessions[row.id] = row.evaluation ? "e" : "s";
+      sync.pushed.sessions[row.id] = sessionPrint({ evaluation: row.evaluation, reviews: row.reviews });
       const mine = local.get(row.id);
       if (mine && (mine.evaluation || !row.evaluation)) continue;
       fresh.push({
         id: row.id, textId: row.text_id, startedAt: msOf(row.started_at), finishedAt: msOf(row.finished_at),
         discarded: row.discarded, clicks: row.clicks || {},
-        ...(row.evaluation ? { evaluation: row.evaluation } : {})
+        ...(row.evaluation ? { evaluation: row.evaluation } : {}), ...(row.reviews ? { reviews: row.reviews } : {})
       });
     }
     if (fresh.length) { await putRecords("sessions", fresh); changed = true; }
@@ -313,6 +315,7 @@ async function pushReading(userId) {
     eval_correct: whole(word.evalCorrect), eval_wrong: whole(word.evalWrong),
     first_seen: isoOf(word.firstSeen), last_seen: isoOf(word.lastSeen),
     origin: word.origin || null, meaning: word.meaning || null,
+    read_streak: whole(word.readStreak), last_read_review: /^\d{4}-\d{2}-\d{2}$/.test(word.lastReadReview || "") ? word.lastReadReview : null,
     client_updated_at: Math.round(word.updatedAt), ...srsToRow(word)
   })), changed.map((word) => [word.id, String(word.updatedAt)]), pushed.words);
 
@@ -327,13 +330,25 @@ async function pushReading(userId) {
   })), kanjiChanged.map((k) => [k.id, String(k.updatedAt)]), pushed.kanji);
 
   // Sesiones
-  const sessions = (await getAll("sessions")).filter((s) => pushed.sessions[s.id] !== (s.evaluation ? "e" : "s"));
-  await pushRows("reading_sessions", "user_id,id", sessions.map((s) => ({
+  const sessions = (await getAll("sessions")).filter((s) => pushed.sessions[s.id] !== sessionPrint(s));
+  const sessionRows = sessions.map((s) => ({
     user_id: userId, id: s.id, text_id: s.textId,
     started_at: isoOf(s.startedAt), finished_at: isoOf(s.finishedAt),
-    discarded: !!s.discarded, clicks: s.clicks || {}, evaluation: s.evaluation || null
-  })), sessions.map((s) => [s.id, s.evaluation ? "e" : "s"]), pushed.sessions);
+    discarded: !!s.discarded, clicks: s.clicks || {}, evaluation: s.evaluation || null,
+    ...(s.reviews ? { reviews: s.reviews } : {})
+  }));
+  try {
+    await pushRows("reading_sessions", "user_id,id", sessionRows, sessions.map((s) => [s.id, sessionPrint(s)]), pushed.sessions);
+  } catch (error) {
+    // Falta la columna reviews (no se ha vuelto a ejecutar schema.sql): sin ella y sin marcar, para enviarla cuando exista
+    if (error?.code !== "PGRST204") throw error;
+    console.warn("Faltan columnas en reading_sessions: ejecuta supabase/schema.sql.");
+    await pushRows("reading_sessions", "user_id,id", without(sessionRows, ["reviews"]), [], pushed.sessions);
+  }
 }
+
+/* Lo que se ha subido de una sesión: con evaluación o sin ella, y lo que valió leer (se puede cambiar después) */
+const sessionPrint = (s) => `${s.evaluation ? "e" : "s"}${s.reviews ? JSON.stringify(s.reviews) : ""}`;
 
 /* Tras descargar cambios se actualiza lo que esté a la vista, sin cortar una lectura en curso */
 function refreshReadingViews() {

@@ -188,6 +188,11 @@ si todos sus kanjis son de tu nivel o inferior, o ya los conoces; o si tiene var
 al menos uno y la palabra es de tu nivel. Las que agregas a mano no tienen esta limitación. La vista
 de depuración enseña las que esperan y qué kanji las bloquea. Reglas en `learning-core.js`.
 
+**Leer cuenta como repaso**: al terminar un texto, las palabras que tocaba repasar cuentan como un
+repaso (reglas en `docs/COMO-FUNCIONA.md`, números en `STUDY_CONFIG.readingReview`). Para
+sincronizarlo, **vuelve a ejecutar `supabase/schema.sql`** (añade `read_streak` y `last_read_review`
+a `user_words` y `reviews` a `reading_sessions`); sin las columnas, se sincroniza el resto.
+
 **Una casilla por kanji**: al escribir la lectura de una palabra sola, cada kanji tiene su casilla y
 lo acertado o fallado se guarda por lectura en cada kanji. Para sincronizarlo, **vuelve a ejecutar
 `supabase/schema.sql`** (añade `kanji_readings` a `user_kanji`, de 4 KB como mucho); sin la

@@ -243,3 +243,16 @@ test("lecturas de cada kanji: kanji_readings en user_kanji, con tamaño máximo"
   await assert.rejects(db.query("insert into public.user_kanji (user_id, id, kanji_readings) values ($1, '前', $2::jsonb)",
     [USER, JSON.stringify({ x: "a".repeat(4001) })]), /user_kanji_readings_size_check/);
 });
+
+test("leer cuenta como repaso: read_streak y last_read_review en user_words, reviews en reading_sessions", async () => {
+  const db = await database();
+  const USER = "00000000-0000-0000-0000-000000000001";
+  await db.exec(`insert into auth.users (id) values ('${USER}') on conflict do nothing; delete from public.user_words; delete from public.reading_sessions;`);
+  await db.query("insert into public.user_words (user_id, id, lemma, reading) values ($1, '名前|なまえ', '名前', 'なまえ')", [USER]);
+  const { rows } = await db.query("select read_streak, last_read_review from public.user_words");
+  assert.deepEqual(rows, [{ read_streak: 0, last_read_review: null }]); // las que ya existían, a 0
+  await db.query("insert into public.reading_sessions (user_id, id, text_id, reviews) values ($1, 's1', 't1', $2::jsonb)",
+    [USER, JSON.stringify({ "名前|なまえ": "good" })]);
+  const { rows: sessions } = await db.query("select reviews from public.reading_sessions");
+  assert.deepEqual(sessions[0].reviews, { "名前|なまえ": "good" });
+});

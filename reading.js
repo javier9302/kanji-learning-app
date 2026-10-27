@@ -683,8 +683,9 @@ async function openText(id) {
   // Lo que ya se había consultado en este mismo texto (antes de recargar o de salir)
   const saved = savedReader();
   const resume = saved.textId === id && !text.readAt;
+  // rubyShown: palabras que han salido con furigana (al leer no cuentan como repaso: la lectura estaba a la vista)
   reader = { text, dictionary, entries, canSkip, clicks: new Map(resume ? saved.clicks : []), panel: null,
-    startedAt: resume && saved.startedAt || Date.now() };
+    startedAt: resume && saved.startedAt || Date.now(), rubyShown: new Set() };
   saveReaderState();
   switchView("read");
 }
@@ -720,6 +721,7 @@ function sentenceHTML(sentence, index, known) {
     const hasKanji = /\p{Script=Han}/u.test(token.surface);
     const unknown = !UNCOUNTED_POS.has(token.pos) && !isKnownKey(key, known);
     const furigana = hasKanji && (mode === "all" || mode === "unknown" && unknown);
+    if (furigana) reader.rubyShown.add(key);
     const mark = reader.clicks.get(key);
     const active = open?.kind === "word" && open.s === index && open.t === tokenIndex;
     return `<span class="tok${mark ? ` tok-${mark}` : ""}${active ? " active" : ""}" role="button" tabindex="0"
@@ -917,6 +919,7 @@ async function finishReading(discarded) {
 
   // Un texto descartado no se leyó: sus palabras no cambian de estado
   const candidates = discarded ? [] : await markSeenWords(text, clicks);
+  if (!discarded) summary.reviews = await reviewByReading(text, clicks, reader.rubyShown, record);
   reader = null;
   clearReaderState();
   scheduleSync();
@@ -962,7 +965,67 @@ async function markSeenWords(text, clicks) {
     .sort((a, b) => clicks.has(b.id) - clicks.has(a.id) || hasKanji(b) - hasKanji(a));
 }
 
-function renderReadSummary({ discarded, looked, hard, easier, mastered, learning }) {
+/* Leer cuenta como repaso (learning-core.js, sección 3): las palabras del texto
+   que tocaba repasar. Devuelve [{ key, result, before }] (before: el registro
+   como estaba, para poder deshacerlo desde el resumen) y lo apunta en la sesión
+   (record.reviews = { clave: "good" | "again" }). */
+async function reviewByReading(text, clicks, rubyShown, record) {
+  const day = today(), done = [];
+  for (const key of Object.keys(text.lemmas)) {
+    const rec = userWords.get(key);
+    const { result } = readingCredit({
+      rec, tapped: clicks.has(key), checked: clicks.get(key) === "check", furigana: rubyShown.has(key), day
+    }, STUDY_CONFIG.readingReview);
+    if (!result) continue;
+    const before = structuredClone(rec);
+    applyReadingReview(rec, result);
+    rec.updatedAt = Date.now();
+    done.push({ key, result, before });
+  }
+  if (!done.length) return done;
+  await putRecords("userWords", done.map(({ key }) => userWords.get(key)));
+  record.reviews = Object.fromEntries(done.map(({ key, result }) => [key, result]));
+  await putRecords("sessions", [record]);
+  updateCounts();
+  return done;
+}
+
+/* Deshacer desde el resumen: una palabra tocada sin querer cuenta como acertada,
+   y una que no se tocó pero no se sabía, como fallada */
+async function flipReadingReview(item, record) {
+  const rec = structuredClone(item.before);
+  item.result = item.result === "good" ? "again" : "good";
+  applyReadingReview(rec, item.result);
+  rec.updatedAt = Date.now();
+  userWords.set(rec.id, rec);
+  await putRecords("userWords", [rec]);
+  record.reviews = { ...record.reviews, [item.key]: item.result };
+  await putRecords("sessions", [record]);
+  scheduleSync();
+}
+
+/* Las palabras repasadas al leer, con su botón para cambiarlo */
+function readingReviewsHTML(reviews) {
+  if (!reviews?.length) return "";
+  const row = (item, i) => {
+    const [lemma, reading] = item.key.split("|");
+    return `<li class="read-review read-${item.result}">
+      <span><strong lang="ja">${escapeHTML(lemma)}</strong> <span lang="ja">${escapeHTML(reading)}</span>
+        · ${item.result === "good" ? t("bien") : t("a repasar")}</span>
+      <button class="link-btn" type="button" data-flip="${i}">${item.result === "good" ? t("No la sabía") : t("La toqué sin querer")}</button>
+    </li>`;
+  };
+  const good = reviews.filter((item) => item.result === "good").length;
+  return `
+    <div class="panel read-reviews">
+      <h3>${t("Repasadas al leer: {good} bien, {again} a repasar", { good, again: reviews.length - good })}</h3>
+      <p class="helper">${t("Palabras que te tocaba repasar. Las que no tocaste cuentan como acertadas (su próximo repaso se aleja un poco menos que en Repasar); las que tocaste vuelven a repaso.")}</p>
+      <ul class="read-review-list">${reviews.map(row).join("")}</ul>
+    </div>`;
+}
+
+function renderReadSummary(summary) {
+  const { discarded, looked, hard, easier, mastered, learning } = summary;
   $("readArea").innerHTML = `
     <div class="empty-state">
       <div class="empty-icon">${discarded ? "…" : "✓"}</div>
@@ -971,14 +1034,23 @@ function renderReadSummary({ discarded, looked, hard, easier, mastered, learning
         ${mastered === undefined ? "" : t("En la evaluación: {mastered} y {learning}.", {
           mastered: plural(mastered, "palabra dominada", "palabras dominadas"),
           learning: plural(learning, "por aprender", "por aprender") })}
-        ${hard && easier ? t("Parece que este nivel te queda difícil. ¿Quieres textos de {level}?", { level: easier }) : ""}</p>
+        ${hard && easier ? t("Parece que este nivel te queda difícil. ¿Quieres textos de {level}?", { level: easier }) : ""}
+        ${summary.reviews?.length ? t("Además repasaste {n} al leer (debajo).", { n: plural(summary.reviews.length, "palabra", "palabras") }) : ""}</p>
       <div class="row-actions">
         ${hard && easier ? `<button id="readEasierBtn" class="button button-outline" type="button">
           ${t("Cambiar a {level}", { level: easier })}</button>` : ""}
         <button id="readMoreBtn" class="button button-primary" type="button">${t("Siguiente texto")}</button>
       </div>
-    </div>`;
+    </div>
+    ${readingReviewsHTML(summary.reviews)}`;
   $("readMoreBtn").onclick = renderRead;
+  $("readArea").querySelectorAll("[data-flip]").forEach((button) => {
+    button.onclick = async () => {
+      button.disabled = true;
+      await flipReadingReview(summary.reviews[Number(button.dataset.flip)], summary.record);
+      renderReadSummary(summary);
+    };
+  });
   if ($("readEasierBtn")) $("readEasierBtn").onclick = async () => {
     await setReadLevel(easier);
     renderRead();

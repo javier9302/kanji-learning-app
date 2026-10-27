@@ -1028,6 +1028,55 @@ export default async function extra({ page, step, check }) {
     }
   });
 
+  await step("leer cuenta como repaso: la que toca y no se toca, bien (con tope); la tocada, otra vez; se puede deshacer", async () => {
+    const setup = await page.evaluate(async () => {
+      prefs.furigana = "none";
+      const text = texts.find((x) => x.data.sentences.length && Object.keys(x.lemmas).filter((key) => /\p{Script=Han}/u.test(key)).length >= 3);
+      text.readAt = null;
+      const [tapKey, readKey, laterKey] = Object.keys(text.lemmas).filter((key) => /\p{Script=Han}/u.test(key));
+      // Las dos primeras tocaba repasarlas ayer (con 10 días de intervalo); la tercera vence dentro de una semana
+      const yesterday = new Date(Date.now() - DAY_MS);
+      for (const [key, last] of [[tapKey, 11], [readKey, 11], [laterKey, 3]]) {
+        const [lemma, reading] = key.split("|");
+        const rec = userWords.get(key) || blankUserWord(lemma, reading);
+        applyCard(rec, masteredCard(10, new Date(Date.now() - last * DAY_MS)));
+        Object.assign(rec, { status: "learning", readStreak: 0, lastReadReview: "" });
+        await saveUserWord(rec);
+      }
+      await openText(text.id);
+      const index = text.data.sentences.findIndex((sentence) => sentence.tokens.some((token) => tokenKey(token) === tapKey));
+      showPanel({ kind: "word", s: index, t: text.data.sentences[index].tokens.findIndex((token) => tokenKey(token) === tapKey) });
+      return { tapKey, readKey, laterKey, before: userWords.get(readKey).nextReview, laterBefore: userWords.get(laterKey).nextReview };
+    });
+    await page.evaluate(() => $("readerFinishBtn").click());
+    await page.waitForFunction(() => !reader, { timeout: 5000 });
+    // Si sale la evaluación de palabras nuevas, se deja para luego
+    await page.evaluate(() => { if (evaluation) { const summary = evaluation.summary; evaluation = null; renderReadSummary(summary); } });
+    await page.waitForSelector(".read-reviews", { timeout: 5000 });
+    await shot(page, "leer-repaso");
+    const after = await page.evaluate(({ tapKey, readKey, laterKey }) => {
+      const session = [...document.querySelectorAll(".read-review")].map((li) => li.className);
+      const read = userWords.get(readKey), tap = userWords.get(tapKey), later = userWords.get(laterKey);
+      return { session, readNext: read.nextReview, readInterval: read.interval, readStreak: read.readStreak, readStatus: read.status,
+        tapInterval: tap.interval, tapIncorrect: tap.incorrectCount, laterNext: later.nextReview };
+    }, setup);
+    check(after.session.length === 2, JSON.stringify(after.session));
+    // Acertada al leer: intervalo de 10 días como mucho 15, nunca dominada
+    check(after.readNext > setup.before && after.readInterval <= 15 && after.readStreak === 1 && after.readStatus !== "mastered", JSON.stringify(after));
+    check(after.tapInterval === 0 && after.tapIncorrect >= 1, `tocada: ${JSON.stringify(after)}`);
+    check(after.laterNext === setup.laterBefore, "la que aún no tocaba cambió de fecha");
+    // «La toqué sin querer»: pasa a acertada
+    await page.evaluate(() => document.querySelector(".read-again [data-flip]").click());
+    await page.waitForFunction((key) => userWords.get(key).interval > 0, { timeout: 5000 }, setup.tapKey);
+    const flipped = await page.evaluate(async (key) => {
+      const sessions = await getAll("sessions");
+      const last = sessions.sort((a, b) => b.finishedAt - a.finishedAt)[0];
+      return { review: last.reviews?.[key], rows: document.querySelectorAll(".read-review.read-good").length };
+    }, setup.tapKey);
+    check(flipped.review === "good" && flipped.rows === 2, JSON.stringify(flipped));
+    await page.evaluate(() => { prefs.furigana = "unknown"; });
+  });
+
   await step("lectura: al recargar en mitad de un texto se vuelve a él, con lo consultado", async () => {
     const before = await page.evaluate(async () => {
       const text = texts.find((x) => !x.readAt && !x.hiddenAt && x.data.sentences.length) || texts[0];

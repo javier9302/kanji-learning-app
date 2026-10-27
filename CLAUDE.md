@@ -57,6 +57,13 @@ después de `learning-core.js`)
   `resolveQueue` en `ranking-core.js`, que se guarda en `meta.queue` y va primero; formatos en
   `README.md`); queda D (temas con embeddings: el componente `topic`, hoy con peso 0;
   `topicProfile` del archivo, hoy `null`).
+- **Plan «Siguiente nivel»** (chat del 2026-10-27, el prompt con 8 etapas): etapa 1, aprender todo
+  conectado. Hecho: 1.2, leer cuenta como repaso (`readingCredit` / `readingInterval` en
+  `learning-core.js`, `applyReadingReview` en `study.js`, `reviewByReading` en `reading.js`).
+  Quedan 1.1 (textos con las palabras que tocan, y más variados), 1.3 (Escribir solo con lo visto,
+  de simple a complejo), 1.4 (Traducir con las que tocan) y 1.5 (pantalla «Hoy», la de inicio).
+  Orden acordado de las demás: 3 (añadir palabras desde la web), 2 (lo que falta de pegar textos),
+  4.1, 5, 6, 7, 8.
 - **`grammar-core.js`**: catálogo de gramática (`GRAMMAR`, hoy solo N5), detector sobre las piezas
   de kuromoji de la frase entera (`detectGrammar`) y medición (`grammarStates`). Una estructura
   nueva lleva su regla, su ejemplo y, si se parece a otra, un caso en «no confunde» de

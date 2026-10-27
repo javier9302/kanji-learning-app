@@ -991,6 +991,34 @@ function extraOutcome(card, rating, now = new Date()) {
   return new Date(next.due) > new Date(fsrsCard(card.rec, now).due) ? { next } : { keep: true };
 }
 
+/* Leer cuenta como repaso (reglas en learning-core.js, sección 3). Aplica a una
+   palabra lo que valió en un texto terminado: "good" (no la tocó) o "again"
+   (la tocó). No cuenta en el historial del día ni la da por dominada. */
+function applyReadingReview(rec, result, now = new Date()) {
+  withSRS(rec);
+  const config = STUDY_CONFIG.readingReview;
+  if (result === "again") {
+    applyCard(rec, nextCard(rec, "again", now));
+    Object.assign(rec, { status: "learning", canReadKanji: false, streakDays: 0 });
+    rec.incorrectCount++;
+    rec.readStreak = 0;
+  } else {
+    const before = fsrsCard(rec, now);
+    const next = nextCard(rec, config.rating, now);
+    // Lo que tenía antes, en días: el intervalo de su tarjeta o, si no lo guarda, lo que iba de su último repaso a su fecha
+    const previous = before.scheduled_days ||
+      (before.last_review ? Math.round((new Date(before.due) - new Date(before.last_review)) / DAY_MS) : 0);
+    const days = readingInterval(previous, next.scheduled_days, config);
+    if (days !== next.scheduled_days) Object.assign(next, { scheduled_days: days, due: new Date(now.getTime() + days * DAY_MS) });
+    applyCard(rec, next);
+    rec.correctCount++;
+    rec.readStreak = (rec.readStreak || 0) + 1;
+  }
+  rec.lastReadReview = isoDate(now);
+  rec.lastReviewed = now.toISOString();
+  return rec;
+}
+
 /* Registra la respuesta: repaso espaciado, historial del día y estado del elemento */
 async function gradeCard(card, rating) {
   const correct = rating !== "again";
@@ -1030,6 +1058,7 @@ async function gradeCard(card, rating) {
   }
   rec.lastReviewed = new Date().toISOString();
   rec.lastSeen = Date.now();
+  if (card.kind === "word") rec.readStreak = 0; // una tarjeta de verdad: vuelven a valer las lecturas
 
   // Dominada: tres aciertos seguidos en días distintos o un intervalo largo. Un fallo la devuelve a "learning".
   if (card.kind === "word") rec.canReadKanji = correct; else if (!card.byReading) rec.knowsMeaning = correct;

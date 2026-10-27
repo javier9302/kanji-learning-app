@@ -6,6 +6,7 @@
 
    1. Palabras nuevas: kanjiGate decide si una palabra se puede proponer.
    2. Escribir: writingLevel, nextWritingKanji, writingRating y writingTestResult.
+   3. Leer cuenta como repaso: readingCredit y readingInterval.
    Los números (repaso cada cuántos kanjis, tamaño de la prueba…) vienen de
    STUDY_CONFIG.
    ========================================= */
@@ -144,7 +145,55 @@ function writingTestKanji(kanjiList, written, size, random = Math.random) {
   return list.slice(0, size);
 }
 
+/* =========================================
+   3. LEER CUENTA COMO REPASO
+   -----------------------------------------
+   Una palabra que toca repasar y aparece en un texto que se termina de leer
+   cuenta como repaso. Reconocerla en contexto es más fácil que recordarla en
+   una tarjeta, así que vale menos:
+     - solo si toca repasarla (no las que vencen más tarde);
+     - si no se tocó: como «Difícil», y su intervalo crece como mucho maxGrowth
+       veces (y al menos minDays días);
+     - si se tocó para ver su lectura o su significado: «Otra vez»;
+     - «La conocía, solo comprobaba»: ni suma ni resta (lo dice el estudiante);
+     - con furigana encima no cuenta: la lectura estaba a la vista;
+     - una vez al día como mucho, y tras flashcardEvery seguidas leyendo, la
+       siguiente tiene que ser una tarjeta en Repasar (para seguir recordando);
+     - nunca la da por dominada (eso solo lo hace Repasar).
+   Los números vienen de STUDY_CONFIG.readingReview.
+   ========================================= */
+
+/* Qué vale leer una palabra en un texto terminado.
+     rec       su registro en userWords
+     tapped    se tocó en el texto (para ver lectura o significado)
+     checked   se marcó «La conocía, solo comprobaba»
+     furigana  salió con furigana encima
+     day       hoy ("2026-10-27")
+   Devuelve { result: "good" | "again" | null, reason } (reason dice por qué:
+   notDue, checked, tapped, furigana, today, flashcard, good). */
+function readingCredit({ rec, tapped, checked, furigana, day }, config) {
+  if (!rec?.studied || !rec.nextReview || rec.nextReview > day) return { result: null, reason: "notDue" };
+  if (checked) return { result: null, reason: "checked" };
+  if (tapped) return { result: "again", reason: "tapped" };
+  if (furigana) return { result: null, reason: "furigana" };
+  if (rec.lastReadReview === day) return { result: null, reason: "today" };
+  if ((rec.readStreak || 0) >= config.flashcardEvery) return { result: null, reason: "flashcard" };
+  return { result: "good", reason: "good" };
+}
+
+/* Días hasta el próximo repaso tras una lectura acertada: los que diga FSRS
+   (con la valoración de config.rating), pero como mucho maxGrowth veces el
+   intervalo que tenía, y al menos minDays. Una palabra que volvía a los 10
+   días y FSRS mandaría a 30 vuelve a los 15. */
+function readingInterval(previousDays, fsrsDays, config) {
+  const cap = Math.max(config.minDays, Math.round(Math.max(0, previousDays) * config.maxGrowth));
+  return Math.max(config.minDays, Math.min(fsrsDays, cap));
+}
+
 /* Para las pruebas (Node); en el navegador son globales */
 if (typeof module !== "undefined") {
-  module.exports = { kanjiGate, writingLevel, nextWritingKanji, writingRating, writingTestResult, writingTestKanji };
+  module.exports = {
+    kanjiGate, writingLevel, nextWritingKanji, writingRating, writingTestResult, writingTestKanji,
+    readingCredit, readingInterval
+  };
 }

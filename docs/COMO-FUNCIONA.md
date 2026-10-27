@@ -200,6 +200,20 @@ palabras que ya conoce o está aprendiendo. En «Palabras y kanjis» se alternan
   conocidas, las que está aprendiendo (primero las buscadas en el diccionario) y 40 palabras en
   kana frecuentes que ha visto poco. Al alumno premium, además, las estructuras de gramática de su
   hoja de ruta, para que el texto las use al menos una vez.
+- **Leer cuenta como repaso** (`learning-core.js`, `readingCredit`; números en
+  `STUDY_CONFIG.readingReview`). Al terminar un texto, cada palabra suya que **tocaba repasar**
+  (estudiada en Repasar y con la fecha de hoy o atrasada) cuenta como un repaso:
+  - **sin tocarla**: como «Difícil», y su intervalo crece **como mucho 1,5 veces** (al menos 1 día):
+    una que volvía a los 10 días y FSRS mandaría a 30 vuelve a los 15. Reconocerla en contexto es
+    más fácil que recordarla en una tarjeta, por eso vale menos;
+  - **tocada** para ver su lectura o significado (o marcada «Nueva»): «Otra vez», vuelve a repaso;
+  - **«La conocía, solo comprobaba»**: ni suma ni resta;
+  - **con furigana encima** no cuenta (la lectura estaba a la vista), ni dos veces el mismo día, y
+    tras **2 seguidas leyendo** la siguiente tiene que ser una tarjeta en Repasar. Leer nunca la da
+    por dominada y no suma al historial del día.
+  - Las que vencen más tarde, los kanjis sueltos y la escritura no cambian.
+  - El resumen de la lectura las lista; «La toqué sin querer» la da por acertada y «No la sabía»,
+    por fallada. Se guarda en la sesión (`reviews`) y en la palabra (`readStreak`, `lastReadReview`).
 
 ### 7. Traducir (`translate.js` + `translate-core.js`)
 

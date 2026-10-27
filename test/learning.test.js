@@ -133,3 +133,36 @@ test("prueba para saltar un nivel: cuenta solo lo escrito sin ayuda y con pocos 
   assert.equal(list.length, 3);
   assert.ok(!list.includes("一") && new Set(list).size === 3);
 });
+
+const { readingCredit, readingInterval } = require("../learning-core.js");
+const READ = { rating: "hard", maxGrowth: 1.5, minDays: 1, flashcardEvery: 2 };
+
+test("readingCredit: solo cuenta lo que toca repasar; tocarla es Otra vez", () => {
+  const day = "2026-10-27";
+  const due = { studied: true, nextReview: "2026-10-27" };
+  assert.deepEqual(readingCredit({ rec: due, day }, READ), { result: "good", reason: "good" });
+  assert.equal(readingCredit({ rec: { ...due, nextReview: "2026-10-20" }, day }, READ).result, "good"); // atrasada
+  assert.equal(readingCredit({ rec: { ...due, nextReview: "2026-10-28" }, day }, READ).reason, "notDue"); // vence mañana
+  assert.equal(readingCredit({ rec: { status: "learning" }, day }, READ).reason, "notDue");             // sin estudiar
+  assert.equal(readingCredit({ rec: undefined, day }, READ).reason, "notDue");
+  assert.deepEqual(readingCredit({ rec: due, tapped: true, day }, READ), { result: "again", reason: "tapped" });
+  // «La conocía, solo comprobaba»: ni suma ni resta, aunque se tocara
+  assert.deepEqual(readingCredit({ rec: due, tapped: true, checked: true, day }, READ), { result: null, reason: "checked" });
+});
+
+test("readingCredit: con furigana, dos veces el mismo día o tras dos lecturas seguidas no cuenta", () => {
+  const day = "2026-10-27";
+  const due = { studied: true, nextReview: "2026-10-26" };
+  assert.equal(readingCredit({ rec: due, furigana: true, day }, READ).reason, "furigana");
+  assert.equal(readingCredit({ rec: due, furigana: true, tapped: true, day }, READ).result, "again"); // la tocó: no la sabía
+  assert.equal(readingCredit({ rec: { ...due, lastReadReview: day }, day }, READ).reason, "today");
+  assert.equal(readingCredit({ rec: { ...due, readStreak: 1 }, day }, READ).result, "good");
+  assert.equal(readingCredit({ rec: { ...due, readStreak: 2 }, day }, READ).reason, "flashcard");
+});
+
+test("readingInterval: lo de FSRS, pero como mucho 1,5 veces el intervalo anterior y al menos un día", () => {
+  assert.equal(readingInterval(10, 30, READ), 15);
+  assert.equal(readingInterval(10, 12, READ), 12); // FSRS ya da menos que el tope
+  assert.equal(readingInterval(0, 4, READ), 1);    // recién aprendida: un día
+  assert.equal(readingInterval(3, 0, READ), 1);
+});

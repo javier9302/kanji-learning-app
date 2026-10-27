@@ -1172,3 +1172,15 @@ grant select on public.summary_generations to authenticated;
 drop policy if exists "summary_generations_admin_select" on public.summary_generations;
 create policy "summary_generations_admin_select" on public.summary_generations
   for select to authenticated using ((select public.is_admin()));
+
+-- =========================================
+-- LEER CUENTA COMO REPASO
+-- =========================================
+
+-- Una palabra que toca repasar y sale en un texto terminado cuenta como repaso
+-- (learning-core.js, sección 3). read_streak: lecturas seguidas que han valido
+-- desde la última tarjeta en Repasar; last_read_review: el último día que valió.
+-- reviews: lo que valió en cada sesión, { "名前|なまえ": "good" | "again" }.
+alter table public.user_words add column if not exists read_streak integer not null default 0;
+alter table public.user_words add column if not exists last_read_review date;
+alter table public.reading_sessions add column if not exists reviews jsonb;

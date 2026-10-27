@@ -4,6 +4,15 @@ Lo que cambia para quien usa la app, el más reciente primero. Cada cambio añad
 el mismo commit. El detalle técnico está en el mensaje de cada commit (`git show <commit>`).
 Cómo funciona todo hoy: [docs/COMO-FUNCIONA.md](docs/COMO-FUNCIONA.md).
 
+## 2026-10-27
+
+- **Leer cuenta como repaso**: al terminar un texto, las palabras que te tocaba repasar cuentan como
+  repasadas. Si no las tocaste, como acertadas (su próximo repaso se aleja un poco menos que en
+  Repasar); si las tocaste, vuelven a repaso. Con furigana encima, o tras dos veces seguidas
+  leyendo, no cuentan: la siguiente es en Repasar. El resumen de la lectura te las enseña y puedes
+  corregirlas («La toqué sin querer», «No la sabía»). Para sincronizarlo hay que ejecutar
+  `schema.sql` (ya está hecho en tu proyecto).
+
 ## 2026-10-26
 
 - **Repasar, práctica extra arreglada**: cuando la sesión se completaba con palabras que aún no

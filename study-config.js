@@ -89,6 +89,14 @@ const STUDY_CONFIG = {
                          Con 2, 名 pide めい, な y みょう; con 3, solo めい y な. */
   kanji: { relevantMinWords: 2 },
 
+  /* Leer cuenta como repaso (learning-core.js, sección 3): una palabra que toca
+     repasar y sale en un texto terminado.
+       rating          cómo cuenta si no se tocó (Difícil: reconocer es más fácil que recordar)
+       maxGrowth       su intervalo crece como mucho estas veces
+       minDays         días mínimos hasta el siguiente repaso
+       flashcardEvery  tras estas seguidas leyendo, la siguiente es una tarjeta */
+  readingReview: { rating: "hard", maxGrowth: 1.5, minDays: 1, flashcardEvery: 2 },
+
   /* "Ya la domino": días hasta el primer repaso de una palabra agregada así */
   masteredIntervalDays: 60,
 

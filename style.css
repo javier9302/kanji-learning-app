@@ -3053,3 +3053,34 @@ body[data-view="dict"] .intro {
 .queue-report p {
   margin: 4px 0;
 }
+
+/* Resumen de una lectura: las palabras que contaron como repaso */
+.read-reviews {
+  margin-top: 16px;
+}
+
+.read-review-list {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.read-review {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding-left: 10px;
+}
+
+/* Bien o a repasar: con borde (también en blanco y negro) y color */
+.read-review.read-good {
+  border-left: 3px solid var(--ok);
+}
+
+.read-review.read-again {
+  border-left: 3px dashed var(--red);
+}
