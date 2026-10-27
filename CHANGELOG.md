@@ -11,7 +11,7 @@ Cómo funciona todo hoy: [docs/COMO-FUNCIONA.md](docs/COMO-FUNCIONA.md).
   Repasar); si las tocaste, vuelven a repaso. Con furigana encima, o tras dos veces seguidas
   leyendo, no cuentan: la siguiente es en Repasar. El resumen de la lectura te las enseña y puedes
   corregirlas («La toqué sin querer», «No la sabía»). Para sincronizarlo hay que ejecutar
-  `schema.sql` (ya está hecho en tu proyecto).
+  `schema.sql` (ya está hecho en tu proyecto) (`f90b8be`).
 
 ## 2026-10-26
 
