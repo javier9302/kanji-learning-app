@@ -13,7 +13,7 @@ Cómo funciona todo hoy: [docs/COMO-FUNCIONA.md](docs/COMO-FUNCIONA.md).
   antes que las escritas por la IA. Aparecerán al terminar la revisión.
 - **Frases propias** (solo administradores, Ajustes → Frases propias): escribe una frase con sus
   traducciones, la app la comprueba y, al compartirla, sale antes que las demás para todos. En
-  admin.html → Frases se pueden filtrar por origen.
+  admin.html → Frases se pueden filtrar por origen (`2bef442`).
 - Las frases de las historias ya no van antes que las de IA al elegir la frase de un repaso.
 - Interno: `tools/import-tatoeba.mjs` y la función `review-sentences`, con sus pruebas.
 
