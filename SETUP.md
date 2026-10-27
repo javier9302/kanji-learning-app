@@ -188,6 +188,11 @@ si todos sus kanjis son de tu nivel o inferior, o ya los conoces; o si tiene var
 al menos uno y la palabra es de tu nivel. Las que agregas a mano no tienen esta limitación. La vista
 de depuración enseña las que esperan y qué kanji las bloquea. Reglas en `learning-core.js`.
 
+**Textos con las palabras que tocan**: el prompt de los textos pide las palabras que toca repasar,
+rota tipo, tema y personajes y evita frases gastadas (versión `2026-10-27.1-seg`). Hay que **volver
+a desplegar `generate-text`** con `supabase/functions/generate-text/index.ts` (ya está hecho en tu
+proyecto): acepta los tipos «instructions» y «opinion» y los campos `targets`, `cast` y `avoid`.
+
 **Leer cuenta como repaso**: al terminar un texto, las palabras que tocaba repasar cuentan como un
 repaso (reglas en `docs/COMO-FUNCIONA.md`, números en `STUDY_CONFIG.readingReview`). Para
 sincronizarlo, **vuelve a ejecutar `supabase/schema.sql`** (añade `read_streak` y `last_read_review`

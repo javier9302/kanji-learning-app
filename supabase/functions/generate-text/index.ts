@@ -51,10 +51,13 @@ const MAX_ATTEMPTS = 3; // el primero y dos reintentos
 const MAX_OUTPUT_TOKENS = 30000;
 
 const LEVELS = ["N5", "N4", "N3", "N2", "N1"];
-const TYPES = ["short story", "dialogue", "diary entry", "message or email", "description", "simple news article"];
+const TYPES = ["short story", "dialogue", "diary entry", "message or email", "description", "simple news article", "instructions", "opinion"];
 const LENGTHS = [50, 100, 150];
 // Una palabra, opcionalmente con su lectura entre paréntesis: 角(かど)
 const JAPANESE = /^[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}ー々〆ヶ]{1,20}(\([\p{Script=Hiragana}\p{Script=Katakana}ー]{1,20}\))?$/u;
+
+// Una frase japonesa que no se debe repetir (sin barras): caracteres japoneses y su puntuación, hasta 60
+const SENTENCE = /^[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}ー々〆ヶ、。！？「」『』（）・…〜0-9０-９]{2,60}$/u;
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -168,13 +171,25 @@ RULES
 
 // Copia de SEGMENTED_VERSION y renderPromptSeg de reading.js: si cambias una, cambia la otra.
 /* Versión del prompt segmentado (formato nuevo): súbela al cambiar su texto. */
-const SEGMENTED_VERSION = "2026-10-22.1-seg";
+const SEGMENTED_VERSION = "2026-10-27.1-seg";
 
 /* Prompt del formato nuevo: la IA solo escribe el texto separado en unidades
    con "|" y la traducción de cada oración. Lemas, lecturas y significados los
    pone la app (kuromoji + diccionario). IMPORTANTE: la función generate-text
    lleva una copia de esta función; si cambias una, cambia la otra. */
-function renderPromptSeg({ level, type, topic, length, known, assumedLevels, learning, prefer = [], grammar = [] }: any) {
+function renderPromptSeg({ level, type, topic, length, known, assumedLevels, learning, prefer = [], targets = [], cast = [], avoid = [], grammar = [] }: any) {
+  // Personajes que se repiten de un texto a otro, cada uno con su carácter; la app elige dos (story-core.js, nextVariety)
+  const CAST = [
+    "ゆき (Yuki), a cheerful university student who always wants to try something new",
+    "たなかさん (Mr Tanaka), a calm office worker who notices small details nobody else sees",
+    "はると (Haruto), a curious ten-year-old boy who asks too many questions",
+    "さとうさん (Mrs Sato), a retired neighbour who loves her garden and local gossip",
+    "けん (Ken), a clumsy but very kind cook at a small restaurant",
+    "エマ (Emma), an exchange student from abroad, often surprised by Japanese customs",
+    "もりせんせい (Dr Mori), a busy doctor with a dry sense of humour",
+    "あおい (Aoi), an ambitious high-school student in the music club"
+  ];
+  const characters = cast.map((i) => CAST[i]).filter(Boolean);
   const fresh = Math.round(length * 0.1);
   const minUnits = Math.round(length * 0.9), maxUnits = Math.round(length * 1.25);
   const minSentences = Math.ceil(length / 9), maxSentences = Math.ceil(length / 6.5);
@@ -190,14 +205,15 @@ function renderPromptSeg({ level, type, topic, length, known, assumedLevels, lea
 LEARNER
 - Target level: JLPT ${level}.
 - ${knownLine}
-${learning.length ? `- Words the learner is still learning (reuse a few of them): ${learning.join("、")}\n` : ""}${prefer.length ? `- Common words written in kana, most frequent first. Prefer them when they fit naturally; they do not count as new words: ${prefer.join("、")}\n` : ""}${grammar.length ? `- Grammar the learner is practising: use each of these at least once, naturally: ${grammar.map((point) => `${point.ja} (${point.en})`).join("; ")}\n` : ""}- A word written with its reading in brackets, like 角(かど), has several readings: use it ONLY with that reading and its meaning (角(かど) is "corner", never つの "horn"). Never write the brackets in the text.
+${targets.length ? `- Words due for review: use EACH of these at least once, naturally and with this exact meaning: ${targets.join("、")}\n` : ""}${learning.length ? `- Words the learner is still learning (reuse a few of them): ${learning.join("、")}\n` : ""}${prefer.length ? `- Common words written in kana, most frequent first. Prefer them when they fit naturally; they do not count as new words: ${prefer.join("、")}\n` : ""}${grammar.length ? `- Grammar the learner is practising: use each of these at least once, naturally: ${grammar.map((point) => `${point.ja} (${point.en})`).join("; ")}\n` : ""}- A word written with its reading in brackets, like 角(かど), has several readings: use it ONLY with that reading and its meaning (角(かど) is "corner", never つの "horn"). Never write the brackets in the text.
 
 TEXT
 - Type: ${type}. Topic: ${topic}.
 - LENGTH (strict): the text must contain between ${minUnits} and ${maxUnits} units that are not punctuation, in about ${minSentences}-${maxSentences} sentences. Count them before answering: a text with fewer than ${minUnits} is rejected. If you are short, continue the story with more sentences.
 - Natural Japanese with grammar no harder than JLPT ${level}.
 - Make it enjoyable to read: one concrete situation with a small story arc, a surprise or a touch of humour. Sentences must connect with each other; never a list of unrelated textbook sentences.
-- About 90% of the content words must be known words. Introduce at most ${fresh} new words (about 10%), useful ones at level ${level}.
+${characters.length ? `- Characters (write their names exactly as given, in kana, and keep their personalities): ${characters.join("; ")}.\n` : ""}- Avoid overused textbook situations and phrases such as お腹が空きました, お弁当を食べました, 公園に行きました, 友達と遊びました, 天気がいいです, or ending with 楽しかったです. Find a fresher situation and vary how sentences begin.
+${avoid.length ? `- These sentences already appeared in the learner's recent texts: do not repeat them or close variants of them: ${avoid.join(" / ")}\n` : ""}- About 90% of the content words must be known words. Introduce at most ${fresh} new words (about 10%), useful ones at level ${level}.
 - Write with the kanji a normal text of this level would use. Words that Japanese normally writes in kana must stay in kana (ある, いる, する, できる, ください, たくさん, かわいい, おいしい): never use rare kanji spellings such as 有る, 居る, 為る, 出来る, 下さい or 沢山.
 
 OUTPUT
@@ -280,6 +296,11 @@ export function readParams(body: any) {
     assumedLevels: Array.isArray(body.assumedLevels) ? LEVELS.filter((l) => body.assumedLevels.includes(l)) : [],
     learning: words(body.learning, 60),
     prefer: words(body.prefer, 80),
+    // Las que le toca repasar (la IA las usa), los personajes (índices de CAST) y frases que no debe repetir
+    targets: words(body.targets, 12),
+    cast: Array.isArray(body.cast) ? [...new Set(body.cast.filter((i: unknown) => Number.isInteger(i) && (i as number) >= 0 && (i as number) < 8))].slice(0, 3) : [],
+    avoid: Array.isArray(body.avoid)
+      ? body.avoid.filter((s: unknown) => typeof s === "string" && SENTENCE.test(s)).slice(0, 10) : [],
     grammar: grammarPoints(body.grammar),
   };
 }
@@ -458,6 +479,7 @@ async function handler(req: Request) {
     params: {
       level: params.level, type: params.type, topic: params.topic, length: params.length, format: params.format,
       known: params.known.length, learning: params.learning.length, assumedLevels: params.assumedLevels,
+      targets: params.targets.length, cast: params.cast, avoid: params.avoid.length,
     },
     model, key_label: label, attempts: attempts.join(" ") || null,
     level: params.level, length: params.length, is_fix: attempt > 1,

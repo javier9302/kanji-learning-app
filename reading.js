@@ -226,12 +226,15 @@ async function finishPlacement() {
 const TEXT_TYPES = [
   ["short story", "Historia corta"], ["dialogue", "Diálogo"], ["diary entry", "Diario"],
   ["message or email", "Mensaje o correo"], ["description", "Descripción"],
-  ["simple news article", "Noticia sencilla"]
+  ["simple news article", "Noticia sencilla"], ["instructions", "Instrucciones"], ["opinion", "Opinión"]
 ];
 const TEXT_TOPICS = [
   ["daily life", "Vida diaria"], ["food", "Comida"], ["travel", "Viajes"], ["work", "Trabajo"],
-  ["school", "Escuela"], ["family", "Familia"], ["shopping", "Compras"], ["free time", "Tiempo libre"]
+  ["school", "Escuela"], ["family", "Familia"], ["shopping", "Compras"], ["free time", "Tiempo libre"],
+  ["health", "Salud"], ["news and society", "Actualidad"], ["Japanese culture", "Cultura japonesa"],
+  ["technology", "Tecnología"], ["nature and seasons", "Naturaleza y estaciones"]
 ];
+const CAST_SIZE = 8; // personajes de renderPromptSeg (CAST)
 const TEXT_LENGTHS = [[50, "Corto (unas 50 palabras)"], [100, "Medio (unas 100 palabras)"], [150, "Largo (unas 150 palabras)"]];
 const PROMPT_WORD_LIMIT = 1500;
 
@@ -262,18 +265,46 @@ async function skipText(text, clicks = new Map(), startedAt = Date.now()) {
 }
 
 /* Texto sin leer con suficientes palabras conocidas; primero el más fácil */
+/* El texto que se propone: de los que conoce al menos el 90 %, el que tiene más
+   palabras que le toca repasar (leerlo cuenta como repaso) y, a igualdad, el más fácil */
 function nextText() {
   const known = knownLemmas();
+  const due = dueWordIds();
+  const dueIn = (text) => Object.keys(text.lemmas).filter((key) => due.has(key)).length;
   return texts
     .filter((text) => !text.readAt && !text.discardedAt && !text.hiddenAt)
-    .map((text) => ({ text, coverage: textCoverage(text, known) }))
+    .map((text) => ({ text, coverage: textCoverage(text, known), due: dueIn(text) }))
     .filter((entry) => entry.coverage >= COVERAGE_TARGET)
-    .sort((a, b) => b.coverage - a.coverage || a.text.createdAt - b.text.createdAt)[0];
+    .sort((a, b) => b.due - a.due || b.coverage - a.coverage || a.text.createdAt - b.text.createdAt)[0];
+}
+
+/* Las palabras que le toca repasar hoy (estudiadas, con la fecha de hoy o atrasada) */
+const dueWordIds = (day = today()) => new Set([...userWords.values()]
+  .filter((rec) => rec.studied && rec.nextReview && rec.nextReview <= day).map((rec) => rec.id));
+
+/* Las que se le piden a la IA en el texto: las que tocan o tocarán pronto y, por
+   cada kanji que toca, una palabra que conoce con él (story-core.js) */
+function currentStoryTargets(label) {
+  const day = today();
+  const known = (rec) => rec.status === "mastered" || rec.studied && rec.canReadKanji;
+  const words = [...userWords.values()].map((rec) => ({ id: rec.id, label: label(rec.lemma, rec.reading), nextReview: rec.nextReview, studied: rec.studied }));
+  const kanjiDue = [...userKanji.values()].filter((rec) => rec.studied && rec.nextReview <= day).map((rec) => {
+    const word = [...userWords.values()].find((w) => known(w) && (w.lemma || "").includes(rec.id));
+    return { c: rec.id, nextReview: rec.nextReview, word: word && { id: word.id, label: label(word.lemma, word.reading) } };
+  });
+  return storyTargets(words, kanjiDue, day, STUDY_CONFIG.stories);
+}
+
+/* Lo que toca de tipo, tema y personajes, según los últimos textos que escribió la IA para él */
+function currentVariety() {
+  const history = texts.filter((text) => text.source === "api").sort((a, b) => b.createdAt - a.createdAt)
+    .slice(0, STUDY_CONFIG.stories.recentTexts).map((text) => ({ type: text.type, topic: text.topic, cast: text.cast || [] }));
+  return nextVariety(history, TEXT_TYPES.map(([value]) => value), TEXT_TOPICS.map(([value]) => value), CAST_SIZE);
 }
 
 /* Datos del usuario que necesita el prompt. Con niveles altos la lista entera
    no cabe: se manda el nivel dado por conocido y solo lo confirmado por el usuario. */
-function promptParams({ type, topic, length }) {
+function promptParams({ type, topic, length, cast, avoid = [] }) {
   // Cómo se le escribe cada palabra a la IA:
   // - si casi siempre va en kana, en kana (有る -> ある), para que no use su kanji;
   // - si la escritura tiene varias lecturas, con la que el estudiante conoce: 角(かど).
@@ -293,8 +324,12 @@ function promptParams({ type, topic, length }) {
     .sort((a, b) => a.seen - b.seen || a.index - b.index)
     .slice(0, STUDY_CONFIG.kanaWordsInPrompt).map((entry) => entry.kana);
 
+  const targets = currentStoryTargets(label);
   const params = {
     level: meta.reading.level, type, topic, length, prefer,
+    // Las que toca repasar: la IA las usa y luego se comprueba cuáles salieron (storyTargets)
+    targets: targets.map((target) => target.label), targetIds: targets.map((target) => target.id),
+    cast: cast ?? currentVariety().cast, avoid,
     known: all, assumedLevels: [],
     // Las que está aprendiendo; primero las que buscó en el diccionario, para que salgan en sus textos
     learning: promptLearning([...userWords.values()], 60).map((w) => label(w.lemma, w.reading)),
@@ -317,13 +352,25 @@ const PROMPT_VERSION = "2026-10-08.1";
    la función generate-text conserva su copia para versiones anteriores de la app. */
 
 /* Versión del prompt segmentado (formato nuevo): súbela al cambiar su texto. */
-const SEGMENTED_VERSION = "2026-10-22.1-seg";
+const SEGMENTED_VERSION = "2026-10-27.1-seg";
 
 /* Prompt del formato nuevo: la IA solo escribe el texto separado en unidades
    con "|" y la traducción de cada oración. Lemas, lecturas y significados los
    pone la app (kuromoji + diccionario). IMPORTANTE: la función generate-text
    lleva una copia de esta función; si cambias una, cambia la otra. */
-function renderPromptSeg({ level, type, topic, length, known, assumedLevels, learning, prefer = [], grammar = [] }) {
+function renderPromptSeg({ level, type, topic, length, known, assumedLevels, learning, prefer = [], targets = [], cast = [], avoid = [], grammar = [] }) {
+  // Personajes que se repiten de un texto a otro, cada uno con su carácter; la app elige dos (story-core.js, nextVariety)
+  const CAST = [
+    "ゆき (Yuki), a cheerful university student who always wants to try something new",
+    "たなかさん (Mr Tanaka), a calm office worker who notices small details nobody else sees",
+    "はると (Haruto), a curious ten-year-old boy who asks too many questions",
+    "さとうさん (Mrs Sato), a retired neighbour who loves her garden and local gossip",
+    "けん (Ken), a clumsy but very kind cook at a small restaurant",
+    "エマ (Emma), an exchange student from abroad, often surprised by Japanese customs",
+    "もりせんせい (Dr Mori), a busy doctor with a dry sense of humour",
+    "あおい (Aoi), an ambitious high-school student in the music club"
+  ];
+  const characters = cast.map((i) => CAST[i]).filter(Boolean);
   const fresh = Math.round(length * 0.1);
   const minUnits = Math.round(length * 0.9), maxUnits = Math.round(length * 1.25);
   const minSentences = Math.ceil(length / 9), maxSentences = Math.ceil(length / 6.5);
@@ -339,14 +386,15 @@ function renderPromptSeg({ level, type, topic, length, known, assumedLevels, lea
 LEARNER
 - Target level: JLPT ${level}.
 - ${knownLine}
-${learning.length ? `- Words the learner is still learning (reuse a few of them): ${learning.join("、")}\n` : ""}${prefer.length ? `- Common words written in kana, most frequent first. Prefer them when they fit naturally; they do not count as new words: ${prefer.join("、")}\n` : ""}${grammar.length ? `- Grammar the learner is practising: use each of these at least once, naturally: ${grammar.map((point) => `${point.ja} (${point.en})`).join("; ")}\n` : ""}- A word written with its reading in brackets, like 角(かど), has several readings: use it ONLY with that reading and its meaning (角(かど) is "corner", never つの "horn"). Never write the brackets in the text.
+${targets.length ? `- Words due for review: use EACH of these at least once, naturally and with this exact meaning: ${targets.join("、")}\n` : ""}${learning.length ? `- Words the learner is still learning (reuse a few of them): ${learning.join("、")}\n` : ""}${prefer.length ? `- Common words written in kana, most frequent first. Prefer them when they fit naturally; they do not count as new words: ${prefer.join("、")}\n` : ""}${grammar.length ? `- Grammar the learner is practising: use each of these at least once, naturally: ${grammar.map((point) => `${point.ja} (${point.en})`).join("; ")}\n` : ""}- A word written with its reading in brackets, like 角(かど), has several readings: use it ONLY with that reading and its meaning (角(かど) is "corner", never つの "horn"). Never write the brackets in the text.
 
 TEXT
 - Type: ${type}. Topic: ${topic}.
 - LENGTH (strict): the text must contain between ${minUnits} and ${maxUnits} units that are not punctuation, in about ${minSentences}-${maxSentences} sentences. Count them before answering: a text with fewer than ${minUnits} is rejected. If you are short, continue the story with more sentences.
 - Natural Japanese with grammar no harder than JLPT ${level}.
 - Make it enjoyable to read: one concrete situation with a small story arc, a surprise or a touch of humour. Sentences must connect with each other; never a list of unrelated textbook sentences.
-- About 90% of the content words must be known words. Introduce at most ${fresh} new words (about 10%), useful ones at level ${level}.
+${characters.length ? `- Characters (write their names exactly as given, in kana, and keep their personalities): ${characters.join("; ")}.\n` : ""}- Avoid overused textbook situations and phrases such as お腹が空きました, お弁当を食べました, 公園に行きました, 友達と遊びました, 天気がいいです, or ending with 楽しかったです. Find a fresher situation and vary how sentences begin.
+${avoid.length ? `- These sentences already appeared in the learner's recent texts: do not repeat them or close variants of them: ${avoid.join(" / ")}\n` : ""}- About 90% of the content words must be known words. Introduce at most ${fresh} new words (about 10%), useful ones at level ${level}.
 - Write with the kanji a normal text of this level would use. Words that Japanese normally writes in kana must stay in kana (ある, いる, する, できる, ください, たくさん, かわいい, おいしい): never use rare kanji spellings such as 有る, 居る, 為る, 出来る, 下さい or 沢山.
 
 OUTPUT
@@ -488,6 +536,10 @@ async function renderReadHome() {
   }
 
   $("promptLength").value = meta.reading.level === "N5" ? "50" : "100";
+  // De entrada, el tipo y el tema que hace más que no salen (story-core.js, nextVariety)
+  const variety = currentVariety();
+  $("promptType").value = variety.type;
+  $("promptTopic").value = variety.topic;
   $("promptTopic").onchange = () =>
     $("promptCustomField").classList.toggle("hidden", $("promptTopic").value !== "");
 
@@ -603,22 +655,39 @@ async function generateAndOpen(options) {
   say(t("La IA está escribiendo tu texto… puede tardar un minuto."));
 
   try {
-    const params = { ...promptParams(options), requestId: newId(), format: 2 };
-    let answer = null;
-    while (!answer) {
-      try {
-        answer = await requestText(params);
-      } catch (error) {
-        if (!error.canRetry) throw error;
-        say(t("El primer intento no salió bien. Probando de nuevo…"));
+    let params = { ...promptParams(options), requestId: newId(), format: 2 };
+    const ask = async () => {
+      while (true) {
+        try {
+          return await requestText(params);
+        } catch (error) {
+          if (!error.canRetry) throw error;
+          say(t("El primer intento no salió bien. Probando de nuevo…"));
+        }
       }
-    }
+    };
+    let answer = await ask();
     rememberAiQuota(answer);
+    // Si repite frases de los últimos textos se pide otro (una sola vez), diciéndole cuáles no repetir
+    const similar = textSimilarity(answerSentences(answer.text), recentSentences(), STUDY_CONFIG.stories.similarity);
+    if (similar.tooSimilar && answer.remaining !== 0) {
+      say(t("El texto se parecía demasiado a los últimos que has leído. Pidiendo otro…"));
+      params = { ...params, requestId: newId(), avoid: similar.repeated.slice(0, 10).map((sentence) => sentence.replace(/\|/g, "")) };
+      answer = await ask();
+      rememberAiQuota(answer);
+    }
     say(t("Analizando el texto… la primera vez se descarga el analizador de japonés (18 MB)."));
-    openText((await addText(answer.text, "api", {
+    const record = await addText(answer.text, "api", {
       requestId: params.requestId, promptVersion: answer.promptVersion, model: answer.model,
       topic: params.topic, level: params.level
-    })).id);
+    });
+    // Qué se pidió: el tipo y los personajes (para variar el siguiente) y cuáles de las que tocan salieron
+    Object.assign(record, {
+      type: params.type, cast: params.cast,
+      targets: { asked: params.targetIds, found: targetsFound(params.targetIds.map((id) => ({ id })), record.lemmas) }
+    });
+    await putRecords("texts", [record]);
+    openText(record.id);
   } catch (error) {
     if (!message.isConnected) return;
     if (Array.isArray(error)) showTextErrors(error, message); // texto roto
@@ -630,6 +699,21 @@ async function generateAndOpen(options) {
     button.disabled = false;
   }
 }
+
+/* Las frases de una respuesta de la IA (formato segmentado), sin las barras */
+function answerSentences(raw) {
+  try {
+    const data = JSON.parse(raw.slice(raw.indexOf("{"), raw.lastIndexOf("}") + 1));
+    return (data.sentences || []).map((sentence) => String(sentence.ja || "").replace(/\|/g, ""));
+  } catch {
+    return []; // si no es JSON lo dirá la validación del texto
+  }
+}
+
+/* Las frases de los últimos textos (de la IA o leídos), para no repetirlas */
+const recentSentences = () => texts.filter((text) => text.source === "api" || text.readAt)
+  .sort((a, b) => (b.readAt || b.createdAt) - (a.readAt || a.createdAt)).slice(0, STUDY_CONFIG.stories.recentTexts)
+  .flatMap((text) => text.data.sentences.map((sentence) => sentence.jp || sentence.tokens.map((token) => token.surface).join("")));
 
 /* =========================================
    9. LECTOR
@@ -791,6 +875,8 @@ function renderReader() {
           <h3 lang="ja">${escapeHTML(text.title)}</h3>
           <p class="helper">${escapeHTML(lang === "es" ? text.titleEs : text.titleEn)} ·
             ${escapeHTML(text.level)} · ${escapeHTML(text.topic)} · ${plural(wordCount(text.data), "palabra", "palabras")}</p>
+          ${text.targets?.asked?.length ? `<p class="helper">${t("Salen {found} de las {asked} palabras que te tocaba repasar: si no las tocas, cuentan como repasadas.",
+            { found: text.targets.found.length, asked: text.targets.asked.length })}</p>` : ""}
         </div>
         <button id="readerCloseBtn" class="button button-quiet" type="button">${t("Salir")}</button>
       </div>

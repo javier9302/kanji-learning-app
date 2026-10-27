@@ -18,7 +18,7 @@ Scripts clásicos (no módulos) que comparten variables globales. El orden de ca
 `index.html` importa:
 
 `config.js` → `i18n.js` → `vendor/ts-fsrs` → `bank/*.js` → `study-config.js` → `learning-core.js`
-→ `ja-core.js` → `sentences-core.js` → `kanji-core.js` → `ranking-core.js` → `translate-core.js` → `texts.js` → `reading.js`
+→ `ja-core.js` → `sentences-core.js` → `kanji-core.js` → `ranking-core.js` → `story-core.js` → `translate-core.js` → `texts.js` → `reading.js`
 → `reading-stats.js` → `reading-sync.js` → `study.js` → `sentences.js` → `translate.js`
 → `progress.js` → `kanji-table.js` → `dictionary.js` → `app.js` (`progress-core.js` y `grammar-core.js` van justo
 después de `learning-core.js`)
@@ -59,9 +59,11 @@ después de `learning-core.js`)
   `topicProfile` del archivo, hoy `null`).
 - **Plan «Siguiente nivel»** (chat del 2026-10-27, el prompt con 8 etapas): etapa 1, aprender todo
   conectado. Hecho: 1.2, leer cuenta como repaso (`readingCredit` / `readingInterval` en
-  `learning-core.js`, `applyReadingReview` en `study.js`, `reviewByReading` en `reading.js`).
-  Quedan 1.1 (textos con las palabras que tocan, y más variados), 1.3 (Escribir solo con lo visto,
-  de simple a complejo), 1.4 (Traducir con las que tocan) y 1.5 (pantalla «Hoy», la de inicio).
+  `learning-core.js`, `applyReadingReview` en `study.js`, `reviewByReading` en `reading.js`), y
+  1.1 + 4.2, textos con las palabras que tocan y más variados (`story-core.js`: `storyTargets`,
+  `nextVariety`, `textSimilarity`; personajes en `CAST` dentro de `renderPromptSeg`). Quedan 1.3
+  (Escribir solo con lo visto, de simple a complejo), 1.4 (Traducir con las que tocan) y 1.5
+  (pantalla «Hoy», la de inicio).
   Orden acordado de las demás: 3 (añadir palabras desde la web), 2 (lo que falta de pegar textos),
   4.1, 5, 6, 7, 8.
 - **`grammar-core.js`**: catálogo de gramática (`GRAMMAR`, hoy solo N5), detector sobre las piezas

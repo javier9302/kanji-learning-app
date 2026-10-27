@@ -1077,6 +1077,39 @@ export default async function extra({ page, step, check }) {
     await page.evaluate(() => { prefs.furigana = "unknown"; });
   });
 
+  await step("textos: el prompt pide las que tocan, rota tipo, tema y personajes, y detecta un texto repetido", async () => {
+    const result = await page.evaluate(async () => {
+      // 学校 toca hoy: tiene que ir en el prompt como palabra que repasar
+      const rec = userWords.get("学校|がっこう") || blankUserWord("学校", "がっこう");
+      applyCard(rec, masteredCard(5, new Date(Date.now() - 6 * DAY_MS)));
+      await saveUserWord(rec);
+      const params = promptParams({ type: "dialogue", topic: "food", length: 50 });
+      const prompt = buildPrompt({ type: "dialogue", topic: "food", length: 50 });
+      // Una respuesta que copia las frases del último texto leído se detecta como repetida
+      const last = texts.find((text) => text.readAt) || texts[0];
+      const copy = JSON.stringify({ sentences: last.data.sentences.map((sentence) => ({ ja: sentence.tokens.map((token) => token.surface).join("|") })) });
+      const similar = textSimilarity(answerSentences(copy), recentSentences(), STUDY_CONFIG.stories.similarity);
+      const fresh = textSimilarity(["駅の近くで新しい傘を買いました。", "先生は図書館で静かに本を読んでいます。", "明日は早く起きて山へ行きます。"],
+        recentSentences(), STUDY_CONFIG.stories.similarity);
+      // El lector dice cuántas de las pedidas salen
+      const readAt = last.readAt;
+      last.targets = { asked: ["学校|がっこう", "名前|なまえ"], found: ["学校|がっこう"] };
+      last.readAt = null;
+      await openText(last.id);
+      const line = document.querySelector(".reader-head").textContent;
+      $("readerCloseBtn").click();
+      delete last.targets;
+      last.readAt = readAt;
+      return { targets: params.targets, ids: params.targetIds, cast: params.cast, inPrompt: prompt.includes("Words due for review") && prompt.includes("学校"),
+        characters: prompt.includes("Characters"), similar: similar.tooSimilar, fresh: fresh.tooSimilar, line,
+        variety: currentVariety(), types: TEXT_TYPES.length };
+    });
+    check(result.ids.includes("学校|がっこう") && result.inPrompt && result.characters && result.cast.length === 2, JSON.stringify(result));
+    check(result.similar && !result.fresh, `parecido: ${result.similar} / ${result.fresh}`);
+    check(/1/.test(result.line) && /2/.test(result.line), result.line);
+    check(result.types === 8 && result.variety.type && result.variety.topic, JSON.stringify(result.variety));
+  });
+
   await step("lectura: al recargar en mitad de un texto se vuelve a él, con lo consultado", async () => {
     const before = await page.evaluate(async () => {
       const text = texts.find((x) => !x.readAt && !x.hiddenAt && x.data.sentences.length) || texts[0];

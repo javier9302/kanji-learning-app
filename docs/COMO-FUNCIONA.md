@@ -195,11 +195,25 @@ palabras que ya conoce o está aprendiendo. En «Palabras y kanjis» se alternan
 
 ### 6. Textos para leer (`reading.js`)
 
-- Se propone un texto no leído solo si el usuario conoce al menos el **90 %** de sus palabras.
+- Se propone un texto no leído solo si el usuario conoce al menos el **90 %** de sus palabras; de
+  esos, primero el que tiene **más palabras que le toca repasar** y, a igualdad, el más fácil.
 - Al pedir uno nuevo, la IA (Gemini, función `generate-text`) recibe el nivel de lectura, las palabras
   conocidas, las que está aprendiendo (primero las buscadas en el diccionario) y 40 palabras en
   kana frecuentes que ha visto poco. Al alumno premium, además, las estructuras de gramática de su
   hoja de ruta, para que el texto las use al menos una vez.
+- **Palabras que tocan** (`story-core.js`, `storyTargets`; números en `STUDY_CONFIG.stories`): hasta
+  **8**, que la IA tiene que usar: primero las que toca repasar (la más atrasada antes), después las
+  que tocarán en 2 días y, si queda sitio, una palabra conocida por cada kanji cuya tarjeta toca.
+  Después se comprueba cuáles salen de verdad (`targetsFound`) y el lector lo dice («Salen 6 de las
+  8 palabras que te tocaba repasar»). Leer el texto las repasa (más abajo).
+- **Variedad**: 8 tipos de texto (historia, diálogo, diario, mensaje, descripción, noticia,
+  instrucciones, opinión) y 13 temas; el formulario propone el tipo y el tema que hace más que no
+  salen, y cada texto lleva 2 de los 8 personajes fijos del prompt (los menos usados últimamente;
+  `nextVariety`). El prompt pide evitar las situaciones y frases gastadas (お腹が空きました,
+  お弁当を食べました, 公園に行きました…).
+- **No repetir**: antes de guardarlo, cada frase del texto nuevo se compara con las de los 10 últimos
+  (trigramas de caracteres; se repite si coincide en un 70 %). Si repite 3 frases o una cuarta parte,
+  se pide otro **una vez**, diciéndole a la IA qué frases no repetir (cuenta como otro texto del día).
 - **Leer cuenta como repaso** (`learning-core.js`, `readingCredit`; números en
   `STUDY_CONFIG.readingReview`). Al terminar un texto, cada palabra suya que **tocaba repasar**
   (estudiada en Repasar y con la fecha de hoy o atrasada) cuenta como un repaso:

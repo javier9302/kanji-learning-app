@@ -6,6 +6,13 @@ Cómo funciona todo hoy: [docs/COMO-FUNCIONA.md](docs/COMO-FUNCIONA.md).
 
 ## 2026-10-27
 
+- **Textos con las palabras que te tocan, y más variados**: la IA usa hasta 8 de las palabras que
+  te toca repasar (o tocarán pronto), y el lector te dice cuántas salen; leer el texto las repasa.
+  El texto recomendado de la biblioteca es el que tiene más de ellas. Los textos rotan tipo (ahora
+  también instrucciones y opinión), tema y un grupo de personajes fijos, evitan las frases gastadas
+  («お腹が空きました», «公園に行きました»…) y, si uno repite frases de los últimos, se pide otro.
+- Arreglado un fallo que a veces rompía Repasar con palabras estudiadas sin fecha de repaso.
+
 - **Leer cuenta como repaso**: al terminar un texto, las palabras que te tocaba repasar cuentan como
   repasadas. Si no las tocaste, como acertadas (su próximo repaso se aleja un poco menos que en
   Repasar); si las tocaste, vuelven a repaso. Con furigana encima, o tras dos veces seguidas

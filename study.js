@@ -415,7 +415,8 @@ function studyCards() {
     }
   }
 
-  return { due, fresh, excluded, extra: extra.sort((a, b) => a.rec.nextReview.localeCompare(b.rec.nextReview)) };
+  // Un registro estudiado sin fecha (de una versión antigua o importado) va el primero, sin romper el orden
+  return { due, fresh, excluded, extra: extra.sort((a, b) => (a.rec.nextReview || "").localeCompare(b.rec.nextReview || "")) };
 }
 
 /* Todo el banco: una palabra de N3 hecha con kanjis de N5 también vale para quien está en N5 */

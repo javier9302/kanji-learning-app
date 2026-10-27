@@ -89,6 +89,14 @@ const STUDY_CONFIG = {
                          Con 2, 名 pide めい, な y みょう; con 3, solo めい y な. */
   kanji: { relevantMinWords: 2 },
 
+  /* Textos que practican lo que toca repasar (story-core.js).
+       max          palabras que se le piden a la IA como mucho (más hace el texto forzado)
+       soonDays     también las que tocarán en estos días
+       recentTexts  últimos textos que se miran para variar tipo, tema y personajes y para no repetir frases
+       similarity   una frase se repite si coincide en sentenceMatch (trigramas); el texto se pide
+                    otra vez si repite maxRepeated frases o una parte maxShare de ellas */
+  stories: { max: 8, soonDays: 2, recentTexts: 10, similarity: { sentenceMatch: 0.7, maxShare: 0.25, maxRepeated: 3 } },
+
   /* Leer cuenta como repaso (learning-core.js, sección 3): una palabra que toca
      repasar y sale en un texto terminado.
        rating          cómo cuenta si no se tocó (Difícil: reconocer es más fácil que recordar)
