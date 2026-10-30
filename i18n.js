@@ -1012,6 +1012,63 @@ const EN = {
   "Si hay una cuenta con ese correo, recibirás un enlace para cambiar la contraseña.":
     "If there is an account with that email, you will receive a link to change the password.",
   "Contraseña actualizada.": "Password updated.",
+  // Frases de Tatoeba y frases propias (sentences.js)
+  "(Apache 2.0) con el diccionario IPADIC. Muchas frases de ejemplo son de": "(Apache 2.0) with the IPADIC dictionary. Many example sentences are from",
+  "): cada una enlaza a su página y a su autor. Antes de publicarlas, una IA comprueba que sean correctas y adecuadas y revisa o escribe sus traducciones; el japonés no se cambia.":
+    "): each one links to its page and its author. Before they are published, an AI checks that they are correct and suitable and reviews or writes their translations; the Japanese is never changed.",
+  "traducción revisada por IA": "translation reviewed by AI",
+  "Frases propias": "Own sentences",
+  "Solo administradores. Escribe una frase con sus dos traducciones: se comprueba como todas y, al compartirla, sale antes que las demás en los repasos de sus palabras, para todos. Se borra en el panel de administración → Frases.":
+    "Admins only. Write a sentence with both translations: it is checked like all the others and, once shared, it comes first in the reviews of its words, for everyone. Delete it in the admin panel → Sentences.",
+  "Frase en japonés": "Sentence in Japanese",
+  "Traducción al español": "Spanish translation",
+  "Traducción al inglés": "English translation",
+  "Compartir con todos": "Share with everyone",
+  "Escribe una frase en japonés con alguna palabra en kanji.": "Write a Japanese sentence with at least one word in kanji.",
+  "Escribe las dos traducciones.": "Write both translations.",
+  "No se pudo analizar bien la frase.": "The sentence could not be analysed properly.",
+  "Tiene que tener entre {min} y {max} palabras.": "It must have between {min} and {max} words.",
+  "Sin letras latinas.": "No Latin letters.",
+  "Sin paréntesis ni comillas sin cerrar.": "No brackets or unclosed quotes.",
+  "No tiene ninguna palabra con kanji que se pueda preguntar.": "It has no kanji word that can be asked.",
+  "Palabras que no se reconocen: {words}.": "Words that are not recognised: {words}.",
+  "Sirve para preguntar": "Can be used to ask",
+  "Esa frase ya está compartida.": "That sentence is already shared.",
+  "La frase vale. Revísala y compártela.": "The sentence is valid. Check it and share it.",
+  "Compartida: ya sale en los repasos de {words}.": "Shared: it now appears in the reviews of {words}.",
+  "No se pudo compartir. Comprueba la conexión y que tu cuenta sea de administrador.": "It could not be shared. Check the connection and that your account is an admin account.",
+  // Palabras de la web (capture.js)
+  "DE LA WEB": "FROM THE WEB",
+  "Guardar la frase como ejemplo": "Save the sentence as an example",
+  "Descartar": "Discard",
+  "Añadir palabras desde la web": "Add words from the web",
+  "Selecciona una palabra en cualquier página y llévala a Agregar palabra con su frase, que será su ejemplo en Repasar. Nada se guarda hasta que lo confirmas.":
+    "Select a word on any page and bring it to Add a word with its sentence, which becomes its example in Review. Nothing is saved until you confirm.",
+  "Ordenador:": "Computer:",
+  "arrastra el botón «+ Kanji» a la barra de marcadores. En una página, selecciona la palabra y pulsa el marcador.":
+    "drag the “+ Kanji” button to the bookmarks bar. On a page, select the word and click the bookmark.",
+  "Android:": "Android:",
+  "con la app instalada, selecciona el texto, toca «Compartir» y elige Kanji. Si compartes una frase, tocas en ella la palabra.":
+    "with the app installed, select the text, tap “Share” and choose Kanji. If you share a sentence, you tap the word in it.",
+  "iPhone, o el móvil sin instalar la app:": "iPhone, or a phone without the app installed:",
+  "copia el código, guarda cualquier página como marcador, edítalo y pega el código como dirección (nómbralo «kanji»). En una página, selecciona la palabra, escribe «kanji» en la barra de direcciones y toca el marcador.":
+    "copy the code, bookmark any page, edit the bookmark and paste the code as its address (name it “kanji”). On a page, select the word, type “kanji” in the address bar and tap the bookmark.",
+  "Copiar el código": "Copy the code",
+  "Código del marcador": "Bookmark code",
+  "No se pudo analizar la frase. Puedes agregar la palabra igualmente.": "The sentence could not be analysed. You can still add the word.",
+  "De": "From",
+  "Analizando la frase…": "Analysing the sentence…",
+  "Toca la palabra que quieres agregar.": "Tap the word you want to add.",
+  "{word} ya está en tus palabras. Puedes guardar esta frase como otro ejemplo.": "{word} is already in your words. You can save this sentence as another example.",
+  "Comprueba la palabra y elige un botón. La frase será su ejemplo en Repasar.": "Check the word and choose a button. The sentence will be its example in Review.",
+  "La frase no se guardó: no se pudo enlazar con la palabra.": "The sentence was not saved: it could not be linked to the word.",
+  "Esa frase ya estaba guardada.": "That sentence was already saved.",
+  "La frase será su ejemplo en Repasar.": "The sentence will be its example in Review.",
+  "Selecciona primero la palabra (o la frase) que quieres agregar.": "First select the word (or sentence) you want to add.",
+  "Arrástralo a la barra de marcadores; no se pulsa aquí.": "Drag it to the bookmarks bar; it does nothing here.",
+  "Código copiado. Pégalo como dirección de un marcador nuevo.": "Code copied. Paste it as the address of a new bookmark.",
+  "Cópialo a mano desde el cuadro.": "Copy it by hand from the box.",
+  "Tu frase, de": "Your sentence, from",
   "No se pudo abrir el almacenamiento local": "Local storage could not be opened",
   "Abre la aplicación desde un navegador compatible con IndexedDB.":
     "Open the app in a browser that supports IndexedDB."

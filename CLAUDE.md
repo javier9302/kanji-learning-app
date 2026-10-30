@@ -18,9 +18,9 @@ Scripts clásicos (no módulos) que comparten variables globales. El orden de ca
 `index.html` importa:
 
 `config.js` → `i18n.js` → `vendor/ts-fsrs` → `bank/*.js` → `study-config.js` → `learning-core.js`
-→ `ja-core.js` → `sentences-core.js` → `kanji-core.js` → `ranking-core.js` → `story-core.js` → `translate-core.js` → `texts.js` → `reading.js`
+→ `ja-core.js` → `sentences-core.js` → `capture-core.js` → `kanji-core.js` → `ranking-core.js` → `story-core.js` → `translate-core.js` → `texts.js` → `reading.js`
 → `reading-stats.js` → `reading-sync.js` → `study.js` → `sentences.js` → `translate.js`
-→ `progress.js` → `kanji-table.js` → `proof.js` → `today.js` → `dictionary.js` → `notify.js` → `app.js` (`progress-core.js` y `grammar-core.js` van justo
+→ `progress.js` → `kanji-table.js` → `proof.js` → `today.js` → `dictionary.js` → `capture.js` → `notify.js` → `app.js` (`progress-core.js` y `grammar-core.js` van justo
 después de `learning-core.js`)
 
 - **`*-core.js`**: reglas puras, sin DOM ni datos del usuario. Las usan el navegador y Node
@@ -38,6 +38,10 @@ después de `learning-core.js`)
 - **`texts.js`, `reading*.js`**: textos (IA, comunidad o pegados), lector, nivel de lectura y su sincronización.
 - **`translate*.js`**: sección Traducir, corregida con IA (Edge Function `grade-translation`).
 - **`dictionary.js`**: búsqueda por escritura, kana, rōmaji o significado.
+- **`capture.js` / `capture-core.js`**: palabras desde la web (`?add=…`, marcador «+ Kanji»,
+  `share_target` de Android). Abre Agregar palabra relleno y guarda la frase como frase del usuario
+  (`source: "web"`), que manda en el repaso de su palabra (`chooseCapturedSentence`). Nunca se
+  comparte.
 - **`progress.js` / `progress-core.js`**: Mis palabras → Análisis (solo premium, `isPremium`): lo
   demostrado por nivel JLPT, nivel estimado y foto semanal (`meta.snapshots`, tabla
   `progress_snapshots`). Fases 1 a 3 hechas (la hoja de ruta, `buildRoadmap`, guarda `meta.roadmap`:
@@ -80,11 +84,12 @@ después de `learning-core.js`)
   `readings.js` (lectura de cada kanji por palabra, generado desde JmdictFurigana con
   `tools/build-readings.mjs`; no se edita a mano).
 - **`supabase/`**: `schema.sql` (tablas y Row Level Security) y Edge Functions
-  (`generate-text`, `generate-sentences`, `grade-translation`, `summarize-progress`, `notify-admin`, `notify-due`). No hay CLI de
+  (`generate-text`, `generate-sentences`, `grade-translation`, `summarize-progress`, `notify-admin`,
+  `review-sentences`, `notify-due`). No hay CLI de
   Supabase: el usuario ejecuta `schema.sql` y despliega las funciones desde el panel (pasos en
   `SETUP.md`). `admin.html` / `admin.js`: moderación.
-- **Prompts con copia en una función**: la fuente de los textos es `reading.js` y la de las frases,
-  `tools/lib/sentence-batches.js`. Tras cambiar uno, `node tools/sync-prompt.mjs` (una prueba falla
+- **Prompts con copia en una función**: la fuente de los textos es `reading.js`; la de las frases,
+  `tools/lib/sentence-batches.js`, y la de la revisión de Tatoeba, `tools/lib/tatoeba.js`. Tras cambiar uno, `node tools/sync-prompt.mjs` (una prueba falla
   si las copias no coinciden).
 - **`vendor/`**: kuromoji (análisis del japonés) y ts-fsrs, con versión fija.
 - **`sw.js`**: service worker; red primero para la app y caché permanente para `vendor/`.
@@ -129,6 +134,7 @@ cambiado. En el mismo commit de cada cambio:
   se generan por tandas con `tools/generate-sentences.mjs` (copiar el prompt en un chat y pegar la
   respuesta); las que faltan al repasar las pide la app a `generate-sentences` y se comparten al
   momento, con revisión posterior en admin.html.
-- `bank/sentences/<nivel>.json` se rehace con `node tools/generate-sentences.mjs ingest`; no se
-  edita a mano. Las tandas de prompts y respuestas viven en `tools/cache/`, que no se sube.
+- `bank/sentences/<nivel>.json` se rehace con `node tools/generate-sentences.mjs ingest` (las de IA)
+  y `node tools/import-tatoeba.mjs ingest` (las de Tatoeba, solo las que aprobó la IA con la función
+  `review-sentences` o a mano con `export` / `import`); cada una conserva las de la otra. No se edita a mano. Las tandas de prompts y respuestas viven en `tools/cache/`, que no se sube.
 - Rama de trabajo: `desarrollo`; `main` es la publicada. No hagas push sin que se pida.

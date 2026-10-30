@@ -14,7 +14,7 @@ mismo commit que cambie cualquiera de estas reglas. Los cambios, con fecha, est�
 | **Traducir** | El usuario traduce frases de sus textos y lo corrige la IA (o él mismo con la traducción de referencia). Mide si entiende el significado; no mueve el calendario de repaso. |
 | **Escribir** | Trazos de kanjis (KanjiVG) con repaso espaciado: primero los kanjis que ya has visto y los que toca repasar, y una prueba para saltarse un nivel. |
 | **Diccionario** | Búsqueda por kanji, kana, rōmaji o significado (español o inglés). |
-| **Mis palabras** | Agregar palabras a mano, progreso y estadísticas. **Análisis** (solo premium): lo demostrado por nivel JLPT, nivel estimado y evolución semanal. **Kanjis** (solo premium): tabla de kanjis dominados, parciales y sin conocer según las palabras que conoces. |
+| **Mis palabras** | Agregar palabras a mano o desde la web (marcador «+ Kanji», «Compartir» de Android o un enlace `?add=`), progreso y estadísticas. **Análisis** (solo premium): lo demostrado por nivel JLPT, nivel estimado y evolución semanal. **Kanjis** (solo premium): tabla de kanjis dominados, parciales y sin conocer según las palabras que conoces. |
 | **Cuenta** (opcional) | Sincronización con Supabase, plan gratuito (10 textos de IA al día) o premium (30). |
 | **admin.html** | Aprobar textos de la comunidad, revisar palabras, traducciones y frases compartidas, cambiar planes y ver el progreso de cada estudiante (pestaña Progreso). |
 
@@ -30,8 +30,8 @@ mismo commit que cambie cualquiera de estas reglas. Los cambios, con fecha, est�
 | `bank/kanji-info.js` | Por kanji: nivel JLPT, grado escolar, frecuencia en prensa, importancia y sus lecturas en las palabras del banco con cuántas palabras usa cada una (más los kanjis de uso común que no están en las listas JLPT). Por palabra: las lecturas de sus kanjis cuando `readings.js` las da mal (上手 → 上じょう, no しょう) | `tools/build-kanji.mjs` desde KANJIDIC2 y `bank/readings.js` | No |
 | `bank/AMBIGUAS.md` | Notas sobre las palabras con varias lecturas y significados | — | Sí |
 | `vendor/jmdict/common-<fecha>.json` | Diccionario general: palabras comunes que no están en el banco | `tools/build-dictionary.mjs` desde JMdict | No |
-| `bank/sentences/<nivel>.json` | Frases comunes de ejemplo, con traducción | IA por tandas: `tools/generate-sentences.mjs` | No |
-| Tabla `shared_sentences` (Supabase) | Frases compartidas por todos: las de historias que se usaron y las que escribió la IA para palabras sin frase | La app, al repasar «En una frase» | Se borran en admin.html → Frases |
+| `bank/sentences/<nivel>.json` | Frases comunes de ejemplo, con traducción: de Tatoeba (aprobadas por la IA, con su autor) y de IA | `tools/import-tatoeba.mjs` (Tatoeba, CC BY 2.0 FR) y `tools/generate-sentences.mjs` (IA por tandas) | No |
+| Tabla `shared_sentences` (Supabase) | Frases compartidas por todos: las propias de un administrador, las de historias que se usaron y las que escribió la IA para palabras sin frase | La app: Ajustes → Frases propias y al repasar «En una frase» | Se borran en admin.html → Frases |
 | `grammar-core.js` (`GRAMMAR`) | Catálogo de gramática: 56 estructuras de N5 (partículas, です/ます y sus formas, forma て, 〜たい, 〜から…), cada una con su regla de detección y un ejemplo | Escrito a mano sobre el análisis de kuromoji | Sí: cada estructura nueva lleva su ejemplo en `test/grammar.test.js` |
 | `kanji-data.js` | Modelo antiguo; ya no se carga, solo sirve para migrar datos viejos | — | No |
 
@@ -59,7 +59,8 @@ Se guardan en el dispositivo (IndexedDB) y, con cuenta, se sincronizan con Supab
   lecturas acertadas en frases; las de «Lecturas de kanji practicadas» de antes se copiaron aquí
   una vez por dispositivo).
 - `texts`, `words`, `sentences`, `translations`: textos, el diccionario propio, las frases
-  sacadas de los textos y las traducciones respondidas.
+  sacadas de los textos (y las guardadas de la web, con `source: "web"`, `word` y `url`) y las
+  traducciones respondidas.
 - `meta`: historial diario, perfil de lectura (`reading.level`, `reading.assumed`),
   «Lecturas de kanji practicadas» (`practice`, solo en el dispositivo) y niveles de Escribir aprobados.
 - Preferencias (localStorage, por dispositivo): modo, presentación, contenido y número de
@@ -176,7 +177,12 @@ palabras que ya conoce o está aprendiendo. En «Palabras y kanjis» se alternan
 ### 5. Frases de ejemplo (`sentences.js` + `sentences-core.js`)
 
 - **Orden de búsqueda** (`findSentence`, `sentences.js`):
-  1. **Comunes**: `bank/sentences/<nivel>.json` y las **compartidas** (tabla `shared_sentences`,
+  0. **La suya de la web**: si el usuario guardó una frase para esa palabra al agregarla desde la
+     web (apartado 14), sale esa (`chooseCapturedSentence`), aunque tenga varias palabras que no
+     conoce: llevan furigana salvo con «Furigana: siempre», que lo pone en todo. Con varias, la que
+     hace más que no sale. Debajo, un enlace a su página. Con «Palabra sola» o «Tarjetas» sale con
+     la respuesta.
+  1. **Comunes**: `bank/sentences/<nivel>.json` (de Tatoeba y de IA) y las **compartidas** (tabla `shared_sentences`,
      copia local en el almacén `sharedSentences`; se descarga al empezar una sesión con frases,
      como mucho cada 10 minutos, también sin sesión).
   2. **Historias**: las frases de los textos guardados por el usuario, propios o de la comunidad
@@ -194,7 +200,23 @@ palabras que ya conoce o está aprendiendo. En «Palabras y kanjis» se alternan
 - Una frase solo vale para una palabra si kuromoji la lee igual que el banco.
 - **Cuál se elige dentro de cada grupo** (`chooseSentence`): todo lo demás de la frase ya se conoce,
   o como mucho UNA palabra desconocida (sale con furigana y se puede tocar). Se evita repetir la
-  última frase enseñada para esa palabra, y van primero las de textos, luego Tatoeba y luego las de IA.
+  última frase enseñada para esa palabra, y van primero las revisadas, las **propias** de un
+  administrador y las de **Tatoeba** (`SOURCE_ORDER`), y luego las de IA y las de las historias
+  (también escritas por la IA). Una revisada que ya se vio unas 3 veces más que otra cede el sitio.
+  Vale cualquier frase en la que salga la palabra con su lectura, se escribiera para ella o no.
+- **Frases de Tatoeba** (`tools/import-tatoeba.mjs`, reglas en `tools/lib/tatoeba.js`): de las
+  japonesas con traducción al inglés y sin ninguna valoración negativa en Tatoeba, las de 5 a 12
+  unidades con todas sus palabras reconocidas. Para cada palabra (las más frecuentes primero) se
+  eligen hasta **3** de su mismo nivel; una frase cuenta para todas las palabras de su nivel que
+  lleva. Van primero las ya aprobadas y las bien valoradas en Tatoeba. Cada elegida la revisa la
+  IA (función `review-sentences`, o a mano con otra IA: `export` / `import`): si el japonés no es correcto y natural, o el contenido no es
+  adecuado, se rechaza y se elige otra; si vale, corrige su traducción al inglés y escribe o
+  corrige la española. El japonés no se cambia. Cada una enseña «Tatoeba #número · autor · CC BY
+  2.0 FR» con enlaces al repasar, en el diccionario y en Traducir.
+- **Frases propias** (Ajustes → Frases propias, solo administradores): la frase con sus dos
+  traducciones se analiza como las demás y se comprueba con `validateSentence` (de 3 a 25 unidades,
+  todas sus palabras reconocidas y alguna con kanji que preguntar). Al compartirla entra en
+  `shared_sentences` con el origen `curated`.
 - **Traducciones**: las escribe la misma IA que la frase (Gemini en los textos y en las frases que
   faltan; el chat que se use en las frases comunes). Nadie las comprueba. Los textos pegados no
   tienen traducción.
@@ -389,6 +411,34 @@ su casilla. Un nivel está **completo** cuando todos sus kanjis están demostrad
 Se abre desde Hoy (cuando hay al menos 5 por demostrar; `STUDY_CONFIG.today.proofMin`) y desde Mis
 palabras → Kanjis (por nivel JLPT, cada nivel dice cuántos lleva demostrados y el que toca tiene su
 botón).
+
+### 14. Palabras desde la web (`capture.js` + `capture-core.js`)
+
+Tres formas de llegar, que abren la app con la palabra en Agregar palabra:
+
+- **Enlace** `?add=<palabra>&sentence=<frase>&source=<página>`; es lo que construye el **marcador
+  «+ Kanji»** (Ajustes → Añadir palabras desde la web): la selección, la oración que la rodea
+  (`sentenceAround`: del fin de la anterior a su 。！？ o al salto de línea, 300 caracteres como
+  mucho) y la dirección de la página. En el móvil el marcador se guarda copiando su código.
+- **Compartir de Android** (`share_target` en `manifest.webmanifest`, solo con la app instalada):
+  llega `?share_text=…` (y a veces `share_url`). Si el texto lleva una dirección, se separa.
+- **Qué se acepta** (`readCapture`): texto sin caracteres de control; palabra de hasta 30
+  caracteres y frase de hasta 300, con japonés; la página solo si es `http(s)`. Lo seleccionado
+  que parece una frase (más de 15 caracteres, espacios o puntuación) pasa a ser la frase, y se
+  elige la palabra dentro. Una frase que no contiene la palabra se descarta.
+
+Después: la dirección se limpia (`history.replaceState`), la frase se analiza como un texto pegado
+(kuromoji, banco y diccionario) y la palabra pasa a su forma de diccionario con la lectura que
+tiene en esa frase (`findWordUnit`: la unidad que más se solapa con la selección). El formulario
+sale relleno y la frase con la palabra resaltada; tocar otra palabra de la frase la cambia.
+**Nada se guarda** hasta pulsar «Quiero aprenderla» o «Ya la domino»; si ya es de sus palabras,
+«Guardar la frase como ejemplo». La frase se guarda en `sentences` con `source: "web"`, `word`
+y `url` solo si la palabra está en ella y se lee igual. Se sincroniza con su cuenta (tabla
+`user_sentences`), **nunca se comparte** con otros usuarios y no sale en Traducir (no tiene
+traducción). Rehacer las frases de los textos no la borra. Lo recibido se escribe siempre como
+texto, nunca como HTML. El service worker guarda una sola copia de la página para todas estas
+direcciones, así que también se abre sin conexión (pero analizar la frase necesita el analizador
+ya descargado).
 
 ### 11. Hoy (`today.js` + `learning-core.js`, `planToday`)
 

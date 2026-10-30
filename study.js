@@ -569,8 +569,10 @@ function sentenceQuestionHTML(card, pick) {
   const { sentence, target, extra, char, sounds } = pick;
   const token = sentence.tokens[target];
   const translation = sentenceTranslation(sentence);
+  // La frase guardada de la web puede traer varias palabras que no conoce: esas, con furigana
+  const furigana = pick.captured && prefs.furigana !== "all" ? "unknown" : prefs.furigana;
   return `
-    <div class="card-sentence" lang="ja">${sentenceLineHTML(sentence, { target, extra, char, sounds })}${
+    <div class="card-sentence" lang="ja">${sentenceLineHTML(sentence, { target, extra, char, sounds, furigana })}${
       translation ? `<button class="sent-btn" type="button" data-sent-translate
         title="${t("Traducción de la frase")}" aria-label="${t("Traducción de la frase")}" lang="ja">訳</button>` : ""}</div>
     ${translation ? `<p id="sentTranslation" class="sent-translation hidden">${escapeHTML(translation)}</p>` : ""}
@@ -615,6 +617,8 @@ function answerHTML(card, pick = null) {
   const parts = entry.kanji.map((c) => BANK.kanji.get(c)).filter((k) => k && meaningOf(k).length);
   // En una frase, la lectura de la parte resaltada tal como está escrita (行きます いきます)
   const token = pick?.sentence.tokens[pick.target];
+  // Sin frase en la pregunta, la que guardó de la web para esta palabra (si hay) va con la respuesta
+  const own = pick ? null : capturedPick(card);
   return `
     <p class="reading" lang="ja">${token && token.surface !== entry.w
       ? `${escapeHTML(normalizeReading(token.reading))} <small>（${escapeHTML(entry.w)} ${escapeHTML(entry.r)}）</small>`
@@ -622,6 +626,8 @@ function answerHTML(card, pick = null) {
     <p class="meaning">${escapeHTML(gloss(entry))}</p>
     ${parts.length && !(parts.length === 1 && entry.w === parts[0].c) ? `<p class="kanji-note">${parts.map((k) =>
       `${escapeHTML(k.c)} ${escapeHTML(gloss(k, 2))}`).join(" · ")}</p>` : ""}
+    ${own ? `<div class="card-sentence answered" lang="ja">${sentenceLineHTML(own.sentence, { target: own.target, reveal: true })}</div>
+      ${sentenceCreditHTML(own.sentence)}` : ""}
     ${"speechSynthesis" in window
       ? `<button id="speakBtn" class="button button-quiet speak-btn" type="button">🔊 ${t("Escuchar")}</button>` : ""}`;
 }
@@ -1582,15 +1588,21 @@ async function addWord(mode) {
   }
 
   const rec = await markWord(id, found?.w || writing, found?.r || reading, mode, meaning && !found ? meaning : "");
+  // Llegó de la web con su frase: la frase va con la palabra (capture.js)
+  const sentenceNote = await finishCapture(rec.id).catch((error) => {
+    console.error("No se pudo guardar la frase:", error);
+    return "";
+  });
 
   $("addWordForm").reset();
   $("addWriting").focus();
   const kana = !hasKanjiChar(rec.lemma);
-  say(mode === "mastered"
+  say([mode === "mastered"
     ? t("{word} guardada como dominada.", { word: rec.lemma })
     : rec.studied ? t("{word} ya está en tus repasos.", { word: rec.lemma })
     : kana ? t("{word} guardada. Al ir solo en kana no se repasa, pero se usará en tus textos.", { word: rec.lemma })
-    : t("{word} agregada: será de las primeras palabras nuevas del repaso.", { word: rec.lemma }), "correct");
+    : t("{word} agregada: será de las primeras palabras nuevas del repaso.", { word: rec.lemma }), sentenceNote]
+    .filter(Boolean).join(" "), "correct");
   renderAddWord();
   updateCounts();
 }

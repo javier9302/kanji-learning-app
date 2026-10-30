@@ -2294,6 +2294,47 @@ div.hard-item {
   width: 100%;
 }
 
+/* Palabra recibida de la web (capture.js): su frase encima del formulario.
+   Las palabras que se pueden elegir van subrayadas, sin fondo (se imprime en blanco y negro). */
+.capture {
+  display: grid;
+  gap: 8px;
+  max-width: 520px;
+  margin-bottom: 12px;
+}
+
+.capture-sentence {
+  font-size: 1.1rem;
+  line-height: 2;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.capture-unit {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  border-bottom: 2px dotted var(--muted);
+  padding: 0 1px;
+  margin: 0 1px;
+  cursor: pointer;
+}
+
+.capture-unit:hover,
+.capture-unit:focus-visible {
+  color: var(--green);
+  border-bottom-color: currentColor;
+}
+
+.bookmarklet-code {
+  width: 100%;
+  margin-top: 8px;
+  font-family: ui-monospace, monospace;
+  font-size: 11px;
+  word-break: break-all;
+}
+
 .added-list {
   justify-content: flex-start;
   max-width: none;

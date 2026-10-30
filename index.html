@@ -27,6 +27,7 @@
   <script src="grammar-core.js" defer></script>
   <script src="ja-core.js" defer></script>
   <script src="sentences-core.js" defer></script>
+  <script src="capture-core.js" defer></script>
   <script src="kanji-core.js" defer></script>
   <script src="ranking-core.js" defer></script>
   <script src="story-core.js" defer></script>
@@ -43,6 +44,7 @@
   <script src="proof.js" defer></script>
   <script src="today.js" defer></script>
   <script src="dictionary.js" defer></script>
+  <script src="capture.js" defer></script>
   <script src="notify.js" defer></script>
   <script src="app.js" defer></script>
 </head>
@@ -507,6 +509,17 @@
         </div>
       </div>
 
+      <div id="capturePanel" class="panel capture hidden">
+        <p class="eyebrow">DE LA WEB</p>
+        <p id="captureSentence" class="capture-sentence" lang="ja"></p>
+        <p id="captureSource" class="helper"></p>
+        <p id="captureStatus" class="helper" role="status"></p>
+        <div class="inline-form">
+          <button id="captureSaveBtn" class="button button-primary hidden" type="button">Guardar la frase como ejemplo</button>
+          <button id="captureDropBtn" class="button button-outline" type="button">Descartar</button>
+        </div>
+      </div>
+
       <form id="addWordForm" class="panel add-word" autocomplete="off">
         <label class="field">
           <span>Escritura</span>
@@ -697,6 +710,48 @@
 
       <div class="panel import-panel">
         <div>
+          <h3>Añadir palabras desde la web</h3>
+          <p class="helper">Selecciona una palabra en cualquier página y llévala a Agregar palabra con su frase, que será su ejemplo en Repasar. Nada se guarda hasta que lo confirmas.</p>
+          <p class="helper"><strong>Ordenador:</strong> arrastra el botón «+ Kanji» a la barra de marcadores. En una página, selecciona la palabra y pulsa el marcador.</p>
+          <p class="helper"><strong>Android:</strong> con la app instalada, selecciona el texto, toca «Compartir» y elige Kanji. Si compartes una frase, tocas en ella la palabra.</p>
+          <p class="helper"><strong>iPhone, o el móvil sin instalar la app:</strong> copia el código, guarda cualquier página como marcador, edítalo y pega el código como dirección (nómbralo «kanji»). En una página, selecciona la palabra, escribe «kanji» en la barra de direcciones y toca el marcador.</p>
+          <p id="bookmarkletMessage" class="message" role="status"></p>
+          <textarea id="bookmarkletCode" class="search bookmarklet-code hidden" rows="3" readonly aria-label="Código del marcador"></textarea>
+        </div>
+        <div class="import-actions">
+          <a id="bookmarkletLink" class="button button-primary" href="#">+ Kanji</a>
+          <button id="bookmarkletCopyBtn" class="button button-outline" type="button">Copiar el código</button>
+        </div>
+      </div>
+
+      <div id="curatedPanel" class="panel hidden">
+        <h3>Frases propias</h3>
+        <p class="helper">Solo administradores. Escribe una frase con sus dos traducciones: se comprueba como todas y, al compartirla, sale antes que las demás en los repasos de sus palabras, para todos. Se borra en el panel de administración → Frases.</p>
+        <form id="curatedForm" class="add-word" autocomplete="off">
+          <label class="field">
+            <span>Frase en japonés</span>
+            <input id="curatedJa" class="search" type="text" lang="ja" maxlength="80" placeholder="毎朝、駅まで歩きます。"
+              autocapitalize="off" spellcheck="false" required>
+          </label>
+          <label class="field">
+            <span>Traducción al español</span>
+            <input id="curatedEs" class="search" type="text" maxlength="300">
+          </label>
+          <label class="field">
+            <span>Traducción al inglés</span>
+            <input id="curatedEn" class="search" type="text" maxlength="300">
+          </label>
+          <div class="inline-form">
+            <button class="button button-outline" type="submit">Comprobar</button>
+            <button id="curatedShareBtn" class="button button-primary hidden" type="button">Compartir con todos</button>
+          </div>
+          <div id="curatedPreview"></div>
+          <p id="curatedMessage" class="message" role="status"></p>
+        </form>
+      </div>
+
+      <div class="panel import-panel">
+        <div>
           <h3>Tus datos</h3>
           <p class="helper">Descarga todo tu progreso (palabras, kanjis, gramática, lecturas, traducciones e historial) en un archivo para analizarlo con una IA como Claude.</p>
           <p class="helper">También puedes importar una lista de palabras (por ejemplo, la que te proponga Claude con ese archivo): saldrán primero entre tus palabras nuevas.</p>
@@ -725,6 +780,10 @@
           El repaso espaciado usa <a href="https://github.com/open-spaced-repetition/ts-fsrs" target="_blank" rel="noopener">ts-fsrs</a> (MIT).
           El análisis del japonés lo hace <a href="https://github.com/takuyaa/kuromoji.js" target="_blank" rel="noopener">kuromoji.js</a>
           (Apache 2.0) con el diccionario IPADIC.
+          Muchas frases de ejemplo son de <a href="https://tatoeba.org/" target="_blank" rel="noopener">Tatoeba</a>
+          (<a href="https://creativecommons.org/licenses/by/2.0/fr/" target="_blank" rel="noopener">CC BY 2.0 FR</a>):
+          cada una enlaza a su página y a su autor. Antes de publicarlas, una IA comprueba que sean correctas y
+          adecuadas y revisa o escribe sus traducciones; el japonés no se cambia.
         </p>
       </div>
     </section>

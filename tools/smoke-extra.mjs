@@ -1346,4 +1346,112 @@ export default async function extra({ page, step, check }) {
     const sw = await page.evaluate(() => fetch("sw.js").then((response) => response.text()));
     check(sw.includes('addEventListener("push"') && sw.includes('"notify.js"'), "sw.js sin el aviso");
   });
+
+  await step("web: una palabra que llega por enlace se agrega con su frase, que manda en el repaso", async () => {
+    const home = page.url().split(/[?#]/)[0];
+    const open = async (params) => {
+      await page.goto(`${home}?${new URLSearchParams(params)}`, { waitUntil: "networkidle2" });
+      await page.waitForFunction(() => document.body.dataset.view === "add" && !!capture, { timeout: 30000 });
+    };
+    await open({ add: "食べました", sentence: "昨日、友達と寿司を食べました。", source: "https://example.com/news" });
+    await page.waitForFunction(() => capture.key, { timeout: 60000 });
+    await shot(page, "web-palabra");
+    const shown = await page.evaluate(() => ({
+      search: location.search, writing: $("addWriting").value, reading: $("addReading").value,
+      mark: document.querySelector("#captureSentence mark")?.textContent, host: document.querySelector("#captureSource a")?.textContent
+    }));
+    check(shown.search === "" && shown.writing === "食べる" && shown.reading === "たべる", JSON.stringify(shown));
+    check(shown.mark === "食べました" && shown.host === "example.com", JSON.stringify(shown));
+    // Nada se guarda hasta pulsar el botón
+    check(await page.evaluate(() => !userWords.get("食べる|たべる")?.status && ![...userSentences.values()].some((s) => s.source === "web")), "se guardó sin confirmar");
+    await page.evaluate(() => document.querySelector('#addWordForm [value="learn"]').click());
+    await page.waitForFunction(() => [...userSentences.values()].some((s) => s.source === "web"), { timeout: 10000 });
+    const saved = await page.evaluate(() => {
+      const sentence = [...userSentences.values()].find((s) => s.source === "web");
+      return { word: sentence.word, url: sentence.url, status: userWords.get("食べる|たべる")?.status, panel: $("capturePanel").classList.contains("hidden") };
+    });
+    check(saved.word === "食べる|たべる" && saved.url === "https://example.com/news" && saved.status === "learning" && saved.panel, JSON.stringify(saved));
+
+    // Ya es suya: se ofrece guardar otra frase como ejemplo
+    await open({ add: "食べる", sentence: "毎朝パンを食べる。" });
+    await page.waitForFunction(() => capture.key && !$("captureSaveBtn").classList.contains("hidden"), { timeout: 30000 });
+    await page.click("#captureSaveBtn");
+    await page.waitForFunction(() => [...userSentences.values()].filter((s) => s.source === "web").length === 2, { timeout: 10000 });
+
+    // Compartido desde Android: llega la frase y se toca la palabra
+    await open({ share_text: "今日は雨が降っています。 https://example.com/tiempo" });
+    await page.waitForSelector("[data-capture-unit]", { timeout: 30000 });
+    await page.evaluate(() => [...document.querySelectorAll("[data-capture-unit]")].find((b) => b.textContent === "雨").click());
+    const shared = await page.evaluate(() => ({ writing: $("addWriting").value, key: capture.key, source: capture.source }));
+    check(shared.writing === "雨" && shared.key === "雨|あめ" && shared.source === "https://example.com/tiempo", JSON.stringify(shared));
+
+    // Lo de fuera nunca se ejecuta como HTML
+    await open({ add: "<img/src=x/onerror=window.xss=1>猫です。" });
+    await page.waitForFunction(() => capture.tokens || $("captureStatus").textContent, { timeout: 30000 });
+    check(await page.evaluate(() => !window.xss && !document.querySelector("#capturePanel img")), "se insertó HTML recibido");
+
+    // Al rehacer las frases de los textos, las de la web siguen; y mandan en el repaso de su palabra
+    await page.goto(home, { waitUntil: "networkidle2" });
+    await page.evaluate(() => { prefs.sentenceIndex = 0; return rebuildSentencesIfNeeded(); });
+    const review = await page.evaluate(() => {
+      const pick = findSentence({ kind: "word", id: "食べる|たべる" }).pick;
+      return { web: [...userSentences.values()].filter((s) => s.source === "web").length, captured: !!pick?.captured,
+        credit: sentenceCreditHTML([...userSentences.values()].find((s) => s.url)), bookmarklet: $("bookmarkletLink").href.startsWith("javascript:") };
+    });
+    check(review.web === 2 && review.captured && review.credit.includes("example.com") && review.bookmarklet, JSON.stringify(review));
+    await page.evaluate(() => switchView("data"));
+    await shot(page, "web-ajustes");
+  });
+
+  await step("frases propias: un administrador comprueba y comparte una frase; Tatoeba lleva su crédito", async () => {
+    if (!await page.evaluate(() => !!sb)) return; // sin config.js no hay cuentas
+    await page.evaluate(() => {
+      window.realFrom = sb.from;
+      window.upserted = [];
+      // Supabase de mentira: acepta la frase compartida; el diccionario común no añade nada
+      sb.from = () => ({
+        upsert: async (rows) => { window.upserted.push(...rows); return { error: null }; },
+        select: () => ({ in: async () => ({ data: [], error: null }) })
+      });
+      sync.user = { id: "u", email: "admin@ejemplo.com" };
+      sync.isAdmin = true;
+      switchView("data");
+      renderDataView();
+    });
+    try {
+      check(await page.evaluate(() => !$("curatedPanel").classList.contains("hidden")), "no se ve el panel");
+      await page.evaluate(() => {
+        $("curatedJa").value = "毎朝、駅まで歩きます。";
+        $("curatedEs").value = "Cada mañana camino hasta la estación.";
+        $("curatedEn").value = "Every morning I walk to the station.";
+        $("curatedForm").requestSubmit();
+      });
+      await page.waitForFunction(() => !$("curatedShareBtn").classList.contains("hidden") || /incorrect/.test($("curatedMessage").className), { timeout: 60000 });
+      const checked = await page.evaluate(() => ({ message: $("curatedMessage").textContent, preview: $("curatedPreview").textContent }));
+      check(checked.preview.includes("駅") && /駅/.test(checked.preview.split(/:/).pop() || ""), JSON.stringify(checked));
+      await shot(page, "frases-propias");
+      await page.click("#curatedShareBtn");
+      await page.waitForFunction(() => window.upserted.length === 1, { timeout: 10000 });
+      const shared = await page.evaluate(() => {
+        const row = window.upserted[0];
+        return { source: row.source, targets: row.words, local: sharedSentences.get(row.id)?.source, order: SOURCE_ORDER.curated < SOURCE_ORDER.ai };
+      });
+      check(shared.source === "curated" && shared.local === "curated" && shared.targets.includes("駅|えき") && shared.order, JSON.stringify(shared));
+      // Una frase sin traducciones o sin kanji no se comparte
+      await page.evaluate(() => { $("curatedJa").value = "これはペンです。"; $("curatedForm").requestSubmit(); });
+      await page.waitForFunction(() => /incorrect/.test($("curatedMessage").className), { timeout: 10000 });
+      check(await page.evaluate(() => $("curatedShareBtn").classList.contains("hidden")), "se podía compartir una frase que no vale");
+      // Tatoeba: enlace a la frase y a la licencia
+      const credit = await page.evaluate(() => sentenceCreditHTML({ source: "tatoeba", attribution: "Tatoeba #4703 · Swift · CC BY 2.0 FR" }));
+      check(credit.includes("tatoeba.org/sentences/show/4703") && credit.includes("creativecommons.org/licenses/by/2.0/fr") && credit.includes("Swift"), credit);
+    } finally {
+      await page.evaluate(() => {
+        sb.from = window.realFrom;
+        sync.user = null;
+        sync.isAdmin = false;
+        sharedSentences.forEach((sentence, id) => { if (sentence.source === "curated") sharedSentences.delete(id); });
+        renderDataView();
+      });
+    }
+  });
 }

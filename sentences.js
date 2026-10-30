@@ -9,7 +9,8 @@
    Almacenes de IndexedDB:
      sentences        frases del usuario, con la forma de sentences-core.js más
                       { updatedAt, local }. local: su texto no se sube (texto
-                      pegado), así que la frase tampoco.
+                      pegado), así que la frase tampoco. Las guardadas de la web
+                      (capture.js) llevan source "web", word (su palabra) y url.
      sentenceStats    { id, shown, lastShown, updatedAt }: veces que se ha enseñado
                       cada frase, sea del usuario o común.
      sharedSentences  copia de las frases compartidas (sección 6).
@@ -73,14 +74,7 @@ function sentencesOfText(text, source = text.source === "paste" ? "article" : "t
   for (const sentence of text.data.sentences) Object.assign(dictionary, sentence.dictionary);
   const list = [];
   text.data.sentences.forEach((sentence, index) => {
-    const tokens = sentence.tokens.map((token) => {
-      if (UNCOUNTED_POS.has(token.pos)) return { ...token, key: "" };
-      // La palabra que anotó el texto; si la escritura tiene varias lecturas, la que suena en la frase
-      // La palabra que anotó el texto: la de la unidad (textos nuevos) o la del diccionario por lema
-      const entry = dictionary[token.lemma];
-      const noted = token.key || (entry && isKana(entry.reading || "") ? wordKey(token.lemma, entry.reading) : "");
-      return { ...token, key: resolveKey(token, (form) => BANK.sensesOf(form), noted) };
-    });
+    const tokens = textSentenceTokens(sentence, dictionary);
     const built = buildSentence({
       id: `${text.id}:${sentence.id ?? index + 1}`, tokens, en: sentence.en || "", es: sentence.es || "",
       source, sourceId: text.id, attribution: "",
@@ -90,6 +84,31 @@ function sentencesOfText(text, source = text.source === "paste" ? "article" : "t
     if (validateSentence(built, { minUnits, maxUnits, wordOf: sentenceWordOf }).ok) list.push(built);
   });
   return list;
+}
+
+/* Las unidades de una oración de un texto, cada una con la clave de su palabra:
+   la que anotó el texto (la de la unidad en los textos nuevos, o la del
+   diccionario por lema) o, si la escritura tiene varias lecturas, la que suena en la frase */
+function textSentenceTokens(sentence, dictionary) {
+  return sentence.tokens.map((token) => {
+    if (UNCOUNTED_POS.has(token.pos)) return { ...token, key: "" };
+    const entry = dictionary[token.lemma];
+    const noted = token.key || (entry && isKana(entry.reading || "") ? wordKey(token.lemma, entry.reading) : "");
+    return { ...token, key: resolveKey(token, (form) => BANK.sensesOf(form), noted) };
+  });
+}
+
+/* Una oración suelta, sin segmentar, analizada como un texto pegado (kuromoji,
+   banco y diccionario): sus unidades con la clave de cada palabra. La usan las
+   frases de la web (capture.js) y las propias (sección 7). */
+async function analyseSentenceText(sentence) {
+  const tokenizer = await loadTokenizer();
+  const raw = JSON.stringify({ title: "frase", sentences: [{ ja: segmentSentence(tokenizer, sentence), en: "", es: "" }] });
+  const { errors, text } = await validateText(raw);
+  if (errors.length) throw new Error(errors[0]);
+  await ensureSentenceData();
+  const analysed = text.sentences[0];
+  return textSentenceTokens(analysed, analysed.dictionary);
 }
 
 /* Hace falta el banco entero (para el nivel de cada palabra) y sus lecturas de kanji */
@@ -141,9 +160,9 @@ async function rebuildSentencesIfNeeded() {
   const visible = texts.filter((text) => !text.hiddenAt);
   if (visible.length) {
     await indexTexts(visible);
-    // Frases de textos que ya no están
+    // Frases de textos que ya no están (las guardadas de la web no son de ningún texto)
     const alive = new Set(visible.map((text) => text.id));
-    for (const id of new Set([...userSentences.values()].map((sentence) => sentence.sourceId))) {
+    for (const id of new Set([...userSentences.values()].filter((sentence) => sentence.source !== "web").map((sentence) => sentence.sourceId))) {
       if (!alive.has(id)) await dropTextSentences(id);
     }
   }
@@ -248,10 +267,21 @@ const kanjiSentencesFor = (c) => {
   return [...common, ...stories];
 };
 
+/* Las frases que el usuario guardó de la web para una palabra */
+const capturedSentencesOf = (wordId) =>
+  [...userSentences.values()].filter((sentence) => sentence.source === "web" && sentence.word === wordId);
+
+/* La frase guardada de la web para una palabra (chooseCapturedSentence), o null */
+const capturedPick = (card) => card.kind === "kanji" ? null
+  : chooseCapturedSentence({ id: card.id }, { candidates: capturedSentencesOf(card.id), statsOf: (id) => sentenceStats.get(id) });
+
 /* La frase para una tarjeta (palabra o kanji) según lo que el usuario conoce:
-   primero entre las comunes y, si ninguna vale, entre las de sus historias.
+   la que guardó de la web para esa palabra, si hay; si no, primero entre las
+   comunes y, si ninguna vale, entre las de sus historias.
    Devuelve { pick, story } (story: salió de una historia); pick es null si no hay. */
 function findSentence(card) {
+  const captured = capturedPick(card);
+  if (captured) return { pick: captured, story: false };
   const groups = card.kind === "kanji" ? kanjiSentenceGroupsFor(card.id) : sentenceGroupsFor(card.id);
   if (!groups.common.length && !groups.stories.length) return { pick: null, story: false };
   const known = knownLemmas();
@@ -349,8 +379,21 @@ function renderKanjiReadings() {
     : `<li><span>${t("Aquí verás las lecturas de kanji que aciertes al repasar «En una frase».")}</span></li>`;
 }
 
-/* De dónde es la frase: las de Tatoeba llevan su autor y su licencia */
+/* De dónde es la frase: las de Tatoeba llevan su autor y su licencia; las
+   guardadas de la web, un enlace a su página */
 function sentenceCreditHTML(sentence) {
+  const url = sentence.source === "web" ? safeSourceUrl(sentence.url) : "";
+  if (url) {
+    return `<p class="helper sent-credit">${t("Tu frase, de")} <a href="${escapeHTML(url)}" target="_blank"
+      rel="noopener noreferrer">${escapeHTML(new URL(url).hostname)}</a></p>`;
+  }
+  // Tatoeba: la frase enlaza a su página y la licencia a la suya (CC BY pide las dos cosas)
+  const number = sentence.source === "tatoeba" && /^Tatoeba #(\d+)/.exec(sentence.attribution || "")?.[1];
+  if (number) {
+    const rest = escapeHTML(sentence.attribution.replace(/^Tatoeba #\d+/, "").replace(/ · CC BY 2\.0 FR$/, ""));
+    return `<p class="helper sent-credit"><a href="https://tatoeba.org/sentences/show/${number}" target="_blank" rel="noopener">Tatoeba #${number}</a>${rest} ·
+      <a href="https://creativecommons.org/licenses/by/2.0/fr/" target="_blank" rel="noopener">CC BY 2.0 FR</a> · ${t("traducción revisada por IA")}</p>`;
+  }
   return sentence.attribution ? `<p class="helper sent-credit">${escapeHTML(sentence.attribution)}</p>` : "";
 }
 
@@ -634,4 +677,91 @@ async function sentencesFromAI(raw, ids, level) {
     if (sentence && sentence.targets.some((id) => ids.includes(id))) fresh.set(sentence.id, sentence);
   }
   return [...fresh.values()];
+}
+
+/* =========================================
+   7. FRASES PROPIAS (solo administradores)
+   -----------------------------------------
+   Un administrador escribe una frase con sus traducciones (Ajustes → Frases
+   propias). Se analiza como todas y se comprueba con validateSentence; si vale,
+   se comparte al momento con source "curated", que sale antes que las demás al
+   repasar. La base de datos solo admite ese origen a un administrador, y se
+   borran como las demás compartidas (admin.html → Frases).
+   ========================================= */
+
+let curatedDraft = null; // la frase comprobada, a la espera de compartirse
+
+const CURATED_UNITS = [3, 25];
+const CURATED_PROBLEMS = () => ({
+  units_mismatch: t("No se pudo analizar bien la frase."),
+  length: t("Tiene que tener entre {min} y {max} palabras.", { min: CURATED_UNITS[0], max: CURATED_UNITS[1] }),
+  latin: t("Sin letras latinas."),
+  brackets: t("Sin paréntesis ni comillas sin cerrar."),
+  no_target: t("No tiene ninguna palabra con kanji que se pueda preguntar."),
+  tokenize: t("No se pudo analizar bien la frase.")
+});
+
+/* Comprueba la frase del formulario y enseña cómo queda o qué falla */
+async function checkCurated() {
+  const say = (text, cls = "") => { $("curatedMessage").textContent = text; $("curatedMessage").className = `message ${cls}`; };
+  curatedDraft = null;
+  $("curatedShareBtn").classList.add("hidden");
+  $("curatedPreview").innerHTML = "";
+  const ja = $("curatedJa").value.normalize("NFC").replace(/\s+/g, "").trim();
+  const es = $("curatedEs").value.trim(), en = $("curatedEn").value.trim();
+  if (!/\p{Script=Han}/u.test(ja)) return say(t("Escribe una frase en japonés con alguna palabra en kanji."), "incorrect");
+  if (!es || !en) return say(t("Escribe las dos traducciones."), "incorrect");
+  say(t("Analizando la frase…"));
+  let tokens;
+  try {
+    tokens = await analyseSentenceText(ja);
+  } catch (error) {
+    return say(error.message, "incorrect");
+  }
+  const sentence = buildSentence({
+    id: `curated:${textHash(ja)}`, tokens, en, es, source: "curated", sourceId: "", attribution: "",
+    wordOf: sentenceWordOf, tagsOf: sentenceTagsOf, fallbackLevel: "N5"
+  });
+  const check = validateSentence(sentence, { text: ja, minUnits: CURATED_UNITS[0], maxUnits: CURATED_UNITS[1], wordOf: sentenceWordOf });
+  const unknown = sentence.tokens.filter((token) => !token.key && !UNCOUNTED_POS.has(token.pos)).map((token) => token.surface);
+  const problems = check.reasons.map((reason) => reason === "unresolved"
+    ? t("Palabras que no se reconocen: {words}.", { words: unknown.join("、") }) : CURATED_PROBLEMS()[reason] || reason);
+  $("curatedPreview").innerHTML = `<p class="card-sentence answered" lang="ja">${sentenceLineHTML(sentence, { reveal: true })}</p>
+    ${sentence.targets.length ? `<p class="helper">${t("Sirve para preguntar")}: <span lang="ja">${
+      escapeHTML(sentence.targets.map((id) => id.split("|")[0]).join("、"))}</span> · ${escapeHTML(sentence.level)}</p>` : ""}`;
+  if (problems.length) return say(problems.join(" "), "incorrect");
+  if (sharedSentences.has(sentence.id)) return say(t("Esa frase ya está compartida."), "incorrect");
+  curatedDraft = sentence;
+  $("curatedShareBtn").classList.remove("hidden");
+  say(t("La frase vale. Revísala y compártela."), "correct");
+}
+
+async function shareCurated() {
+  if (!curatedDraft) return;
+  const sentence = curatedDraft;
+  $("curatedShareBtn").disabled = true;
+  const ok = await uploadShared([sentence]);
+  $("curatedShareBtn").disabled = false;
+  $("curatedMessage").className = `message ${ok ? "correct" : "incorrect"}`;
+  $("curatedMessage").textContent = ok
+    ? t("Compartida: ya sale en los repasos de {words}.", { words: sentence.targets.map((id) => id.split("|")[0]).join("、") })
+    : t("No se pudo compartir. Comprueba la conexión y que tu cuenta sea de administrador.");
+  if (!ok) return;
+  curatedDraft = null;
+  $("curatedForm").reset();
+  $("curatedPreview").innerHTML = "";
+  $("curatedShareBtn").classList.add("hidden");
+}
+
+function bindCurated() {
+  $("curatedForm").addEventListener("submit", (event) => {
+    event.preventDefault();
+    checkCurated();
+  });
+  // Al cambiar algo hay que volver a comprobarla
+  $("curatedForm").addEventListener("input", () => {
+    curatedDraft = null;
+    $("curatedShareBtn").classList.add("hidden");
+  });
+  $("curatedShareBtn").onclick = shareCurated;
 }

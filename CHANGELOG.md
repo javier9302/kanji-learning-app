@@ -22,6 +22,41 @@ Cómo funciona todo hoy: [docs/COMO-FUNCIONA.md](docs/COMO-FUNCIONA.md).
 
 ## 2026-10-27
 
+- **Más frases de N4**: 434 frases de Tatoeba revisadas; 256 de sus 516 palabras tienen ejemplo,
+  141 con tres (`694fb7d`).
+- **Más frases de Tatoeba, y las primeras de N4**: N5 pasa a 786 frases revisadas (465 de sus
+  520 palabras tienen ejemplo, 398 con tres) y N4 estrena 366 (231 palabras con ejemplo) (`b901553`). Las
+  demás de N4 y los otros niveles irán llegando.
+- **Las primeras frases de Tatoeba, en N5**: 567 frases revisadas por la IA, que dan ejemplo a
+  395 de las 520 palabras de N5. Los demás niveles irán llegando según se revisen (la cuota
+  gratuita de la IA da para unas 600 frases al día) (`c621cae`).
+- Interno: la revisión de Tatoeba se puede hacer también con otra IA, sin la función ni su cuota
+  (`import-tatoeba.mjs export` / `import`: prompts en archivos y respuestas pegadas a mano).
+- Interno: la revisión de Tatoeba va de 10 en 10 y deja de esperar a la IA si se cuelga; el prompt
+  ya no rechaza frases por llevar nombres como Tom o Mary.
+
+- **Frases de Tatoeba, revisadas por la IA**: las frases de ejemplo podrán venir de Tatoeba,
+  frases escritas por personas. Como Tatoeba tiene errores, ninguna se publica sin que la IA
+  compruebe que el japonés es correcto, natural y adecuado; además revisa la traducción inglesa y
+  escribe la española. Cada una enseña su número, su autor y su licencia (CC BY 2.0 FR), y salen
+  antes que las escritas por la IA. Aparecerán al terminar la revisión.
+- **Frases propias** (solo administradores, Ajustes → Frases propias): escribe una frase con sus
+  traducciones, la app la comprueba y, al compartirla, sale antes que las demás para todos. En
+  admin.html → Frases se pueden filtrar por origen (`2bef442`).
+- Las frases de las historias ya no van antes que las de IA al elegir la frase de un repaso.
+- Interno: `tools/import-tatoeba.mjs` y la función `review-sentences`, con sus pruebas.
+
+- **Agregar palabras desde la web**: selecciona una palabra en cualquier página y llévala a
+  Agregar palabra con su frase. En el ordenador, con el marcador «+ Kanji»; en Android, con
+  «Compartir» (con la app instalada); en el iPhone, con el mismo marcador copiado (Ajustes →
+  Añadir palabras desde la web). La palabra llega en su forma de diccionario (食べました → 食べる)
+  y con la lectura que tiene en esa frase. Si compartes una frase entera, tocas la palabra. Nada
+  se guarda sin pulsar «Quiero aprenderla» o «Ya la domino»; si ya la tienes, puedes guardar la
+  frase como otro ejemplo. Esa frase pasa a ser su ejemplo en Repasar, con un enlace a la página,
+  y se sincroniza con tu cuenta, pero nunca se comparte con otros usuarios (`e916aef`).
+- Interno: `capture-core.js` y `capture.js`, con sus pruebas; el service worker guarda una sola
+  copia de la app para los enlaces con `?…`.
+
 - **Hoy, la nueva pantalla de inicio**: la sesión del día en una lista. Un texto con las palabras
   que te toca repasar, Repasar, 4 kanjis que escribir y 3 frases que traducir, con el siguiente
   paso resaltado y cada uno marcado al hacerlo. Al terminar un repaso o un texto, «Volver a Hoy»

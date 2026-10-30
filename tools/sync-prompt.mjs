@@ -4,6 +4,8 @@
    - Textos: reading.js (renderPromptSeg y SEGMENTED_VERSION) -> generate-text
    - Frases: tools/lib/sentence-batches.js (renderSentencePrompt y
      SENTENCE_PROMPT_VERSION) -> generate-sentences
+   - Revisión de Tatoeba: tools/lib/tatoeba.js (renderReviewPrompt y
+     REVIEW_PROMPT_VERSION) -> review-sentences
    Después hay que volver a desplegar la función que haya cambiado. La prueba
    test/prompt.test.mjs falla si alguna copia no coincide. */
 import fs from "node:fs";
@@ -24,6 +26,11 @@ export const PROMPTS = {
     source: "tools/lib/sentence-batches.js", target: "supabase/functions/generate-sentences/index.ts",
     fn: "renderSentencePrompt", version: "SENTENCE_PROMPT_VERSION",
     untyped: "units = [5, 12] })", typed: "units = [5, 12] }: any)"
+  },
+  review: {
+    source: "tools/lib/tatoeba.js", target: "supabase/functions/review-sentences/index.ts",
+    fn: "renderReviewPrompt", version: "REVIEW_PROMPT_VERSION",
+    untyped: "{ batch, items })", typed: "{ batch, items }: any)"
   }
 };
 

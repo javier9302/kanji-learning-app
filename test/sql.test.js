@@ -198,6 +198,34 @@ test("frases compartidas: tamaño máximo, filas nuevas al día y registro de la
   await db.exec(SCHEMA);
 });
 
+test("frases propias: solo un administrador comparte una frase con origen curated", async () => {
+  const db = await database();
+  const USER = "00000000-0000-0000-0000-00000000000c", ADMIN = "00000000-0000-0000-0000-00000000000d";
+  await db.exec(`insert into auth.users (id) values ('${USER}'), ('${ADMIN}') on conflict do nothing;
+    insert into public.admins (user_id) values ('${ADMIN}') on conflict do nothing;`);
+  const as = (id) => db.exec(`
+    create or replace function auth.uid() returns uuid language sql stable as $$ select '${id}'::uuid $$;
+    create or replace function auth.jwt() returns jsonb language sql stable as $$ select '{"role":"authenticated"}'::jsonb $$;`);
+  // Con el rol de la app, para que se apliquen las políticas (Row Level Security)
+  const share = (id, source) => db.exec(`set role authenticated;
+    insert into public.shared_sentences (id, source, words, data) values ('${id}', '${source}', '{水|みず}', '{}'::jsonb);
+    reset role;`);
+  try {
+    await as(USER);
+    await assert.rejects(share("curated:alumno", "curated"), /row-level security/);
+    await db.exec("reset role");
+    await share("ai:alumno", "ai");
+    await as(ADMIN);
+    await share("curated:admin", "curated");
+    const { rows } = await db.query("select id from public.shared_sentences where id in ('curated:alumno', 'curated:admin')");
+    assert.deepEqual(rows.map((row) => row.id), ["curated:admin"]);
+  } finally {
+    await db.exec(`reset role;
+      create or replace function auth.uid() returns uuid language sql stable as $$ select null::uuid $$;
+      create or replace function auth.jwt() returns jsonb language sql stable as $$ select '{}'::jsonb $$;`);
+  }
+});
+
 test("análisis: una foto por usuario y semana, con formato de semana y tamaño máximo", async () => {
   const db = await database();
   const USER = "00000000-0000-0000-0000-000000000001";

@@ -7,6 +7,11 @@
   "scope": ".",
   "display": "standalone",
   "categories": ["education"],
+  "share_target": {
+    "action": "./",
+    "method": "GET",
+    "params": { "title": "share_title", "text": "share_text", "url": "share_url" }
+  },
   "background_color": "#f7f9f6",
   "theme_color": "#173f35",
   "icons": [

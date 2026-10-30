@@ -202,7 +202,7 @@ function kanjiSounds(surface, reading, tags, kanjiInfo) {
                     reading: lectura de la unidad tal como está escrita
                     key: id de la palabra ("escritura|lectura"), "" si no se resolvió
      source         "text" (textos del usuario) | "article" (texto pegado) |
-                    "tatoeba" | "ai"
+                    "tatoeba" | "ai" | "curated" | "web"
      level          el nivel más alto de sus palabras
      targets        ids de las palabras que la frase sirve para preguntar. Es una
                     lista: hoy se pregunta una por tarjeta, pero una misma frase
@@ -357,7 +357,10 @@ function validateSentence(sentence, options = {}) {
    enseña con furigana y se puede tocar); con dos o más la frase se descarta.
    ========================================= */
 
-const SOURCE_ORDER = { text: 0, article: 0, tatoeba: 1, ai: 2 };
+/* Primero las revisadas: las propias del administrador ("curated") y las de
+   Tatoeba, que solo se publican si la IA las aprobó. Después las de IA y las de
+   las historias (también escritas por la IA). */
+const SOURCE_ORDER = { curated: 0, tatoeba: 0, ai: 1, text: 1, article: 1 };
 
 /* card       { id: "escritura|lectura" }
    state      { candidates  frases posibles (cualquiera; aquí se filtran)
@@ -410,6 +413,23 @@ function scUsable(candidate, skip, state) {
     shown: stats.shown || 0, lastShown: stats.lastShown || 0 };
 }
 
+/* Una frase que el usuario guardó de la web para esta palabra (source "web",
+   word = la palabra). Manda sobre las demás y no sigue la regla i+1: la eligió
+   él y recordar dónde la encontró ayuda a recordar la palabra. Solo hace falta
+   que la palabra esté y se lea como la tarjeta. Entre varias, la que hace más
+   que no sale. Devuelve { sentence, target, extra: -1, captured: true } o null. */
+function chooseCapturedSentence(card, state) {
+  const [lemma, reading] = scKeyParts(card.id);
+  const usable = [];
+  for (const sentence of state.candidates || []) {
+    if (sentence.source !== "web" || sentence.word !== card.id) continue;
+    const target = sentence.tokens.findIndex((token) => token.key === card.id && readingMatches(token, lemma, reading));
+    if (target >= 0) usable.push({ sentence, target, lastShown: state.statsOf?.(sentence.id)?.lastShown || 0 });
+  }
+  usable.sort((a, b) => a.lastShown - b.lastShown || (a.sentence.id < b.sentence.id ? -1 : 1));
+  return usable.length ? { sentence: usable[0].sentence, target: usable[0].target, extra: -1, captured: true } : null;
+}
+
 /* La mejor de las frases que sirven, o null */
 function scBest(usable) {
   if (!usable.length) return null;
@@ -419,7 +439,7 @@ function scBest(usable) {
   const score = (item) =>
     (item.extra >= 0 ? 1000 : 0) +
     (others && latest > 0 && item.lastShown === latest ? 500 : 0) +
-    (SOURCE_ORDER[item.sentence.source] ?? 3) * 20 +   // primero las de sus textos, luego Tatoeba, luego IA
+    (SOURCE_ORDER[item.sentence.source] ?? 2) * 20 +   // primero las revisadas (propias y Tatoeba), luego las de IA
     Math.min(item.shown, 20) * 8;                      // …salvo que ya la haya visto muchas veces
   return [...usable].sort((a, b) => score(a) - score(b) || a.lastShown - b.lastShown ||
     (a.sentence.id < b.sentence.id ? -1 : a.sentence.id > b.sentence.id ? 1 : 0))[0];
@@ -429,6 +449,7 @@ function scBest(usable) {
 if (typeof module !== "undefined") {
   module.exports = {
     kanjiVariants, canonicalReading, alignReading, tagsFromFurigana, packTags, unpackTags, kanjiSounds,
-    readingMatches, resolveKey, buildSentence, validateSentence, sentenceFingerprint, chooseSentence, chooseKanjiSentence
+    readingMatches, resolveKey, buildSentence, validateSentence, sentenceFingerprint, chooseSentence, chooseKanjiSentence,
+    chooseCapturedSentence
   };
 }

@@ -297,6 +297,7 @@ function renderTranslateSelf() {
         <dt>${t("Tu traducción")}</dt><dd>${escapeHTML(answer)}</dd>
         <dt>${t("Traducción de referencia")}</dt><dd>${escapeHTML(referenceOf(sentence))}</dd>
       </dl>
+      ${sentenceCreditHTML(sentence)}
       <p class="helper">${t("Compara las dos y dinos cómo te fue. Lo que importa es el significado, no las palabras exactas.")}</p>
       <div class="card-actions">
         <button class="button button-wrong" type="button" data-tr-self="incorrect">✗ ${t("No la entendí")}</button>
@@ -368,6 +369,7 @@ function renderTranslateResult() {
           ${result.better ? `<dt>${t("Una traducción natural")}</dt><dd>${escapeHTML(result.better)}</dd>` : ""}
           ${result.grammar_note ? `<dt>${t("Gramática")}</dt><dd>${escapeHTML(result.grammar_note)}</dd>` : ""}
         </dl>
+        ${sentenceCreditHTML(sentence)}
         <p class="tr-compare-label">${t("Palabra por palabra")}</p>
         <div class="tr-chips">${wordChipsHTML(result, translating.lookups)}</div>
         <p id="trChipNote" class="helper sent-gloss">${t("Toca una palabra para ver su nota.")}</p>
