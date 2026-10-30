@@ -6,6 +6,11 @@ Cómo funciona todo hoy: [docs/COMO-FUNCIONA.md](docs/COMO-FUNCIONA.md).
 
 ## 2026-10-30
 
+- **Avisos de repaso en el móvil o el ordenador**: en Ajustes → Avisos de repaso, con cuenta, puedes
+  activarlos para recibir un aviso cuando se te junten 5, 10 o 20 palabras que repasar, aunque la
+  app esté cerrada. Solo entre las 9:00 y las 21:00 de tu hora y uno por grupo; al tocarlo se abre
+  la app. Hay un botón para enviar uno de prueba. En iPhone, con la app en la pantalla de inicio (`592f660`).
+
 - **Demuestra tus kanjis, nivel a nivel desde N5**: una prueba de los kanjis que ya has visto en tus
   palabras: su significado (entre 4) y cómo suenan en una palabra que conoces. Los que aciertas
   quedan demostrados y, cuando lo están todos, el nivel queda completo. Sale en Hoy y en Mis

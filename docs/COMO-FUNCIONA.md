@@ -408,6 +408,23 @@ Repasar y alguna respuesta hoy; kanjis escritos hoy; traducciones de hoy). Un pa
 hacer (sin texto posible, sin kanjis o sin frases) no sale. Sin la evaluación inicial, solo sale
 ella. Encima, cuántas respuestas lleva de su meta diaria.
 
+### 13. Avisos de repaso (`notify.js` + `sw.js` + Edge Function `notify-due`)
+
+En Ajustes → Avisos de repaso, con cuenta, cada dispositivo se puede suscribir (Web Push). Se
+guarda en `push_subscriptions` su dirección, su zona horaria, su idioma y cada cuántas palabras
+avisar (5, 10 o 20; por defecto 10, `prefs.notifyMin`). Cada hora (minuto 5) una tarea de la base
+de datos llama a `notify-due`, que cuenta con lo último sincronizado las palabras que tocan (como
+Repasar: un paso corto a su minuto, las demás el día de su repaso) y avisa si:
+
+- tocan al menos esas palabras;
+- son entre las 9:00 y las 21:00 de su hora (`HOURS` en la función);
+- es el primer aviso del día o, desde el último, se ha juntado otro grupo igual (con 10: a las 10,
+  luego a las 20…). Así no se repite el aviso por las mismas palabras.
+
+El aviso sustituye al anterior sin apilarse y al tocarlo se abre la app. Lo que se repasa en otro
+dispositivo sin sincronizar todavía no se descuenta. En iPhone y iPad solo funciona con la app en la
+pantalla de inicio. Cerrar sesión quita la suscripción del dispositivo.
+
 ## Dónde cambiar cada número
 
 Casi todo lo ajustable está en `study-config.js`: palabras nuevas por sesión, pesos del orden,

@@ -20,7 +20,7 @@ Scripts clásicos (no módulos) que comparten variables globales. El orden de ca
 `config.js` → `i18n.js` → `vendor/ts-fsrs` → `bank/*.js` → `study-config.js` → `learning-core.js`
 → `ja-core.js` → `sentences-core.js` → `kanji-core.js` → `ranking-core.js` → `story-core.js` → `translate-core.js` → `texts.js` → `reading.js`
 → `reading-stats.js` → `reading-sync.js` → `study.js` → `sentences.js` → `translate.js`
-→ `progress.js` → `kanji-table.js` → `proof.js` → `today.js` → `dictionary.js` → `app.js` (`progress-core.js` y `grammar-core.js` van justo
+→ `progress.js` → `kanji-table.js` → `proof.js` → `today.js` → `dictionary.js` → `notify.js` → `app.js` (`progress-core.js` y `grammar-core.js` van justo
 después de `learning-core.js`)
 
 - **`*-core.js`**: reglas puras, sin DOM ni datos del usuario. Las usan el navegador y Node
@@ -67,7 +67,9 @@ después de `learning-core.js`)
   `translate.choose`), y 1.5, la pantalla «Hoy» (`today.js`, `planToday`), que es la de inicio.
   Etapa 1 terminada. Después (chat del 2026-10-30): los pasos cortos esperan su hora en la sesión
   (`nextReadyCard`, `recordDue`), demostrar los kanjis de un nivel (`proof.js`, sección 5 de
-  `kanji-core.js`, `userKanji[c].proofAt`) y avisos de repasos pendientes.
+  `kanji-core.js`, `userKanji[c].proofAt`) y avisos de repaso (`notify.js`, Web Push: tabla
+  `push_subscriptions`, función `notify-due` llamada cada hora por pg_cron; sección 13 de
+  `docs/COMO-FUNCIONA.md`).
   Orden acordado de las demás: 3 (añadir palabras desde la web), 2 (lo que falta de pegar textos),
   4.1, 5, 6, 7, 8.
 - **`grammar-core.js`**: catálogo de gramática (`GRAMMAR`, hoy solo N5), detector sobre las piezas
@@ -78,7 +80,7 @@ después de `learning-core.js`)
   `readings.js` (lectura de cada kanji por palabra, generado desde JmdictFurigana con
   `tools/build-readings.mjs`; no se edita a mano).
 - **`supabase/`**: `schema.sql` (tablas y Row Level Security) y Edge Functions
-  (`generate-text`, `generate-sentences`, `grade-translation`, `summarize-progress`, `notify-admin`). No hay CLI de
+  (`generate-text`, `generate-sentences`, `grade-translation`, `summarize-progress`, `notify-admin`, `notify-due`). No hay CLI de
   Supabase: el usuario ejecuta `schema.sql` y despliega las funciones desde el panel (pasos en
   `SETUP.md`). `admin.html` / `admin.js`: moderación.
 - **Prompts con copia en una función**: la fuente de los textos es `reading.js` y la de las frases,

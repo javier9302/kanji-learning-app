@@ -2,7 +2,7 @@
 // KANJI LEARNING APP - Edge Function "notify-due"
 // Avisa en el móvil (Web Push) cuando se juntan palabras que repasar. La llama
 // cada hora una tarea programada de la base de datos (pg_cron + pg_net, ver
-// SETUP.md) con la cabecera x-cron-secret, cuyo valor está en Vault. También:
+// SETUP.md) con la cabecera x-cron-secret (el valor de push_config.cron_secret). También:
 //   GET               devuelve la clave pública (VAPID) con la que la app se suscribe
 //   POST {test:true}  con la sesión del usuario: un aviso de prueba a sus dispositivos
 // No necesita secretos: las claves VAPID se crean la primera vez y se guardan en
@@ -94,7 +94,7 @@ async function handler(req: Request) {
     return reply(200, { sent, devices: (subs || []).length });
   }
 
-  // La tarea programada: con el secreto de Vault
+  // La tarea programada: con el secreto de push_config
   const { data: valid } = await admin.rpc("check_cron_secret", { secret: req.headers.get("x-cron-secret") || "" });
   if (!valid) return reply(401, { error: "unauthorized" });
   const { data: rows, error } = await admin.rpc("push_due_counts");

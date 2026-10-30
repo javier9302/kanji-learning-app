@@ -9,7 +9,7 @@
      versión nueva de la app no lo borra.
    ========================================= */
 
-const CACHE = "kanji-learning-v25";
+const CACHE = "kanji-learning-v26";
 /* Súbelo SOLO si cambian los archivos de vendor/: obliga a descargarlos otra vez */
 const LASTING = "kanji-lasting-v1";
 const SHELL = [
@@ -45,6 +45,7 @@ const SHELL = [
   "proof.js",
   "today.js",
   "dictionary.js",
+  "notify.js",
   "app.js",
   "manifest.webmanifest",
   "icons/icon.svg",
@@ -125,4 +126,25 @@ self.addEventListener("fetch", (event) => {
       })
       .catch(() => caches.match(request, { ignoreSearch: request.mode === "navigate" }))
   );
+});
+
+/* Avisos de repaso (notify.js): los manda la Edge Function notify-due con
+   { title, body, url }. tag "due": uno nuevo sustituye al anterior, no se apilan. */
+self.addEventListener("push", (event) => {
+  let data = {};
+  try { data = event.data?.json() || {}; } catch { data = { title: event.data?.text() }; }
+  event.waitUntil(self.registration.showNotification(data.title || "Kanji", {
+    body: data.body || "", icon: "icons/icon-192.png", badge: "icons/icon-192.png",
+    tag: "due", renotify: true, data: { url: data.url || "./" }
+  }));
+});
+
+/* Al tocar el aviso: la app si ya está abierta, si no una ventana nueva */
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const url = new URL(event.notification.data?.url || "./", self.registration.scope).href;
+  event.waitUntil(self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((windows) => {
+    const open = windows.find((client) => client.url.startsWith(self.registration.scope));
+    return open ? open.focus() : self.clients.openWindow(url);
+  }));
 });

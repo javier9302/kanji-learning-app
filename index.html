@@ -43,6 +43,7 @@
   <script src="proof.js" defer></script>
   <script src="today.js" defer></script>
   <script src="dictionary.js" defer></script>
+  <script src="notify.js" defer></script>
   <script src="app.js" defer></script>
 </head>
 <body>
@@ -619,6 +620,24 @@
         </div>
         <div class="import-actions">
           <button id="installBtn" class="button button-primary hidden" type="button">Instalar app</button>
+        </div>
+      </div>
+
+      <div class="panel import-panel notify-panel">
+        <div>
+          <h3>Avisos de repaso</h3>
+          <p id="notifyHelp" class="helper"></p>
+          <p id="notifyMessage" class="message" role="status"></p>
+        </div>
+        <div class="import-actions">
+          <select id="notifyMinSelect" class="lang-select hidden" aria-label="Avisar cuando">
+            <option value="5">Avisar con 5 palabras</option>
+            <option value="10">Avisar con 10 palabras</option>
+            <option value="20">Avisar con 20 palabras</option>
+          </select>
+          <button id="notifyOnBtn" class="button button-primary hidden" type="button">Activar avisos</button>
+          <button id="notifyTestBtn" class="button button-outline hidden" type="button">Enviar uno de prueba</button>
+          <button id="notifyOffBtn" class="button button-outline hidden" type="button">Desactivar</button>
         </div>
       </div>
 

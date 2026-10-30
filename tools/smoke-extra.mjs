@@ -1332,4 +1332,18 @@ export default async function extra({ page, step, check }) {
     });
     check(today.includes("proof"), JSON.stringify(today));
   });
+
+  await step("Ajustes: el panel de avisos de repaso explica qué hace falta y el aviso lo enseña el service worker", async () => {
+    const panel = await page.evaluate(async () => {
+      switchView("data");
+      await renderNotify();
+      return { help: $("notifyHelp").textContent, on: !$("notifyOnBtn").classList.contains("hidden"),
+        vapid: [...vapidBytes("BAEC_-8")].join(",") };
+    });
+    // Sin cuenta no se puede activar: el servidor cuenta con lo sincronizado
+    check(panel.help.length > 10 && !panel.on, JSON.stringify(panel));
+    check(panel.vapid === "4,1,2,255,239", panel.vapid); // base64 de URL (- y _) a bytes
+    const sw = await page.evaluate(() => fetch("sw.js").then((response) => response.text()));
+    check(sw.includes('addEventListener("push"') && sw.includes('"notify.js"'), "sw.js sin el aviso");
+  });
 }

@@ -117,7 +117,8 @@ const prefs = loadLocal("kanji-prefs", {
   studyType: "word", studyMode: "type", studyCount: "10", goal: 20,
   furigana: "unknown", // furigana al leer: unknown | all | none
   kanjiGroup: "jlpt",  // Mis palabras → Kanjis: jlpt | grade | frequency
-  kanjiBoxes: true     // Repasar, «Palabra sola»: una casilla por kanji al escribir la lectura
+  kanjiBoxes: true,    // Repasar, «Palabra sola»: una casilla por kanji al escribir la lectura
+  notifyMin: 10        // Avisos de repaso: avisar cuando se junten tantas palabras (notify.js)
 });
 // Presentación al escribir la lectura: word (palabra sola) | sentence (en una frase).
 // Sustituye al antiguo ajuste "Repasar con frases": quien lo tenía activado empieza en "sentence".
@@ -742,6 +743,7 @@ function onAuthChange(event, authSession) {
 async function signOut() {
   $("signOutBtn").disabled = true;
   await Promise.race([syncNow(), sleep(4000)]);
+  await Promise.race([removeNotify().catch(() => {}), sleep(4000)]); // este dispositivo deja de recibir sus avisos
   const { error } = await sb.auth.signOut({ scope: "local" });
   if (error) console.error("Error al cerrar sesión:", error);
   $("signOutBtn").disabled = false;
@@ -922,7 +924,7 @@ function renderDataView() {
     : t("Las cuentas no están configuradas en esta instalación (falta rellenar config.js).");
   $("syncNowBtn").disabled = sync.running;
   renderQueueStatus();
-
+  renderNotify();
 }
 
 function bindSync() {
@@ -1086,6 +1088,7 @@ async function init() {
   bindKanjiTable();
   bindToday();
   bindProof();
+  bindNotify();
   bindLibrary();
   bindDictionary();
   bindTranslate();

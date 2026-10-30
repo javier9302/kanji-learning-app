@@ -3223,3 +3223,6 @@ body[data-view="dict"] .intro {
   border-color: var(--focus);
   box-shadow: 0 0 0 3px var(--mint);
 }
+
+/* Ajustes → Avisos de repaso */
+.notify-panel .message:empty { display: none; }

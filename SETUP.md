@@ -468,6 +468,33 @@ Para recibir un correo cada vez que alguien sube un texto que espera aprobación
 
 Aunque no configures el correo, en la app verás cuántos textos hay pendientes: el botón de tu perfil dice «Panel de administración (3 pendientes)».
 
+## Avisos de repaso en el móvil (Web Push)
+
+Avisan a quien los active en Ajustes cuando se le junta un grupo de palabras que repasar.
+
+1. Ejecuta `schema.sql` (crea `push_subscriptions`, `push_config` y `push_due_counts`).
+2. Despliega la función `notify-due` con el contenido de
+   [`supabase/functions/notify-due/index.ts`](supabase/functions/notify-due/index.ts) y **Verify JWT
+   desactivado** (la llama la base de datos, sin sesión; la prueba la comprueba la propia función).
+   No necesita secretos: la primera llamada crea las claves VAPID y las guarda en `push_config`,
+   que solo lee el servidor. Si cambias esas claves, los dispositivos tienen que volver a activarlos.
+3. En **Database → Extensions** activa `pg_cron` y `pg_net`, y en el **SQL Editor** programa la
+   llamada de cada hora (cambia `TU-PROYECTO` por el de tu dirección de Supabase):
+
+   ```sql
+   select cron.schedule('notify-due', '5 * * * *', $$
+     select net.http_post(
+       url := 'https://TU-PROYECTO.supabase.co/functions/v1/notify-due',
+       headers := jsonb_build_object('Content-Type', 'application/json',
+         'x-cron-secret', coalesce((select cron_secret from public.push_config where id = 1), '')),
+       body := '{"cron": true}'::jsonb,
+       timeout_milliseconds := 30000)
+   $$);
+   ```
+
+   Para comprobarlo: `select status_code, content from net._http_response order by id desc limit 3;`
+   debe dar 200 y `{"checked": …, "sent": …}`.
+
 ## 4. Rellenar `config.js`
 
 En Supabase abre **Project Settings → API** (o el botón **Connect**) y copia:
