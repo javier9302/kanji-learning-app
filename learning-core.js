@@ -8,6 +8,7 @@
    2. Escribir: writingLevel, nextWritingKanji, writingRating y writingTestResult.
    3. Leer cuenta como repaso: readingCredit y readingInterval.
    4. Hoy: planToday, la sesión del día.
+   5. La sesión de Repasar: nextReadyCard (lo que está en sus pasos cortos espera su hora).
    Los números (repaso cada cuántos kanjis, tamaño de la prueba…) vienen de
    STUDY_CONFIG.
    ========================================= */
@@ -236,10 +237,38 @@ function planToday(s, config) {
   return { steps, next: steps.find((step) => !step.done)?.kind || null };
 }
 
+/* =========================================
+   5. LA SESIÓN DE REPASAR
+   -----------------------------------------
+   Una palabra nueva o fallada pasa por pasos cortos (FSRS: 1 y 10 minutos) y
+   vuelve en la misma sesión, pero no antes de su hora: si sale enseguida se
+   recuerda sin esfuerzo y el repaso no vale. Mientras espera salen las demás;
+   si solo quedan las que esperan, la sesión lo dice y deja terminar.
+   ========================================= */
+
+/* La siguiente tarjeta de la cola: la primera cuya hora ya llegó.
+     queue  [{ waitUntil?: ms }] en el orden de la sesión;  now  ms
+   Devuelve { index, waitMs }: index -1 si todas esperan (waitMs, lo que falta
+   para la primera), o la cola vacía (index -1, waitMs 0). */
+function nextReadyCard(queue, now) {
+  const index = queue.findIndex((card) => !(card.waitUntil > now));
+  if (index >= 0 || !queue.length) return { index, waitMs: 0 };
+  return { index: -1, waitMs: Math.min(...queue.map((card) => card.waitUntil)) - now };
+}
+
+/* ¿Le toca ya? Las de días, desde el día que vencen; las que están en sus pasos
+   cortos (minutos), desde su hora: la que vuelve en 10 minutos no toca antes. */
+function recordDue(record, now, today) {
+  if (!record?.studied) return false;
+  const card = record.fsrs;
+  if (card?.due && card.scheduled_days === 0) return Date.parse(card.due) <= now;
+  return !!record.nextReview && record.nextReview <= today;
+}
+
 /* Para las pruebas (Node); en el navegador son globales */
 if (typeof module !== "undefined") {
   module.exports = {
     kanjiGate, writingLevel, nextWritingKanji, writingRating, writingTestResult, writingTestKanji,
-    readingCredit, readingInterval, planToday
+    readingCredit, readingInterval, planToday, nextReadyCard, recordDue
   };
 }

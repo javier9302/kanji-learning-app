@@ -1263,4 +1263,27 @@ export default async function extra({ page, step, check }) {
     await page.waitForFunction(() => document.body.dataset.view === "study" && (session || document.querySelector("#studyArea .empty-state")), { timeout: 15000 });
     await page.evaluate(() => { session = null; document.body.classList.remove("studying"); switchView("today"); });
   });
+
+  await step("Repasar: la última palabra con Difícil (vuelve en minutos) no sale enseguida; se puede terminar", async () => {
+    const result = await page.evaluate(async () => {
+      const entry = BANK.words.get("会社|かいしゃ");
+      const rec = userWords.get(entry.id);
+      if (rec) { userWords.delete(entry.id); await putRecords("userWords", [], [entry.id]); }
+      session = { queue: [{ kind: "word", id: entry.id, entry, rec: null, group: "new" }], total: 1, done: 0, firstTry: 0,
+        missed: new Map(), mode: "flash", sentences: false };
+      document.body.classList.add("studying");
+      switchView("study");
+      showCard();
+      $("revealBtn").click();
+      document.querySelector('[data-rate="hard"]').click();
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      const waiting = !!$("waitEndBtn") && !document.querySelector("[data-rate]");
+      const dueNow = isDue(userWords.get(entry.id));
+      $("waitEndBtn")?.click();
+      return { waiting, dueNow, ended: !session, text: $("studyArea").textContent };
+    });
+    await shot(page, "espera");
+    check(result.waiting && !result.dueNow && result.ended, JSON.stringify(result).slice(0, 300));
+    await page.evaluate(() => switchView("today"));
+  });
 }

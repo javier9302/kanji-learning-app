@@ -4,6 +4,12 @@ Lo que cambia para quien usa la app, el más reciente primero. Cada cambio añad
 el mismo commit. El detalle técnico está en el mensaje de cada commit (`git show <commit>`).
 Cómo funciona todo hoy: [docs/COMO-FUNCIONA.md](docs/COMO-FUNCIONA.md).
 
+## 2026-10-30
+
+- **Repasar: «Difícil» u «Otra vez» ya no hacen que la palabra vuelva enseguida.** Una palabra que
+  vuelve en 10 o 15 minutos espera su hora: mientras, salen las demás y, si era la última, la sesión
+  dice cuándo vuelve y te deja terminar (saldrá en Repasar a su hora).
+
 ## 2026-10-27
 
 - **Hoy, la nueva pantalla de inicio**: la sesión del día en una lista. Un texto con las palabras

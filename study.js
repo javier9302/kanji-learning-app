@@ -87,7 +87,7 @@ async function loadStudyData() {
   userKanji = new Map((await getAll("userKanji")).map((k) => [k.id, k]));
 }
 
-const isDue = (record) => record.studied && record.nextReview <= today();
+const isDue = (record) => recordDue(record, Date.now(), today());
 
 /* ---------- Repaso espaciado: FSRS (vendor/ts-fsrs) ----------
    Cada registro guarda su tarjeta en record.fsrs. Una palabra nueva pasa por
@@ -628,6 +628,7 @@ function answerHTML(card, pick = null) {
 
 function endSession() {
   const { total, firstTry, missed } = session;
+  const waiting = session.queue.length; // las que esperan su hora (pasos cortos): saldrán en Repasar
   session = null;
   document.body.classList.remove("studying");
 
@@ -644,6 +645,7 @@ function endSession() {
             n: plural(total, "elemento", "elementos"), percent: Math.round((firstTry / total) * 100) })
         : t("No quedaban tarjetas por repasar.")}</p>
       ${missedList ? `<ul class="missed-list">${missedList}</ul>` : ""}
+      ${waiting ? `<p class="helper">${t("{n} vuelven dentro de unos minutos: saldrán en Repasar a su hora.", { n: plural(waiting, "palabra", "palabras") })}</p>` : ""}
       <div class="row-actions">
         <button id="againBtn" class="button button-primary" type="button">${t("Otra sesión")}</button>
         <button class="button button-outline" data-go="today" type="button">${t("Volver a Hoy")}</button>
@@ -964,7 +966,38 @@ function advance(card) {
     session.done++;
     if (!card.failed) session.firstTry++;
   }
-  showCard();
+  showNextReady();
+}
+
+/* Pone delante la primera tarjeta cuya hora ya llegó y la enseña; si todas las
+   que quedan esperan (pasos cortos de 1 o 10 minutos), dice cuándo vuelven */
+let waitTimer = null;
+function showNextReady() {
+  clearTimeout(waitTimer);
+  const { index, waitMs } = nextReadyCard(session.queue, Date.now());
+  if (index > 0) session.queue.unshift(...session.queue.splice(index, 1));
+  if (index >= 0 || !session.queue.length) return showCard();
+  showWaiting(waitMs);
+}
+
+function showWaiting(waitMs) {
+  const minutes = Math.max(1, Math.ceil(waitMs / 60000));
+  $("studyArea").innerHTML = `
+    <div class="empty-state">
+      <div class="empty-icon">⏳</div>
+      <h3>${t("Vuelven dentro de {n} min", { n: minutes })}</h3>
+      <p>${t("{n} que acabas de aprender o fallar vuelven cuando pase ese tiempo, para que el repaso valga. Puedes esperar aquí o terminar: saldrán en Repasar a su hora.",
+        { n: plural(session.queue.length, "palabra", "palabras") })}</p>
+      <div class="row-actions">
+        <button id="waitEndBtn" class="button button-outline" type="button">${t("Terminar por ahora")}</button>
+      </div>
+    </div>`;
+  $("waitEndBtn").onclick = () => {
+    clearTimeout(waitTimer);
+    endSession();
+  };
+  // Cuando llega la hora, sale sola (si sigue en esta pantalla)
+  waitTimer = setTimeout(() => { if (session && $("waitEndBtn")) showNextReady(); }, Math.min(waitMs + 500, 60000));
 }
 
 /* Atajos: 1-4 eligen la valoración cuando la respuesta está a la vista */
@@ -1045,7 +1078,10 @@ async function gradeCard(card, rating) {
   } else {
     const next = extra?.next || nextCard(rec, rating);
     applyCard(rec, next);
-    if (staysInSession(next)) card.requeue = correct ? "later" : "soon";
+    if (staysInSession(next)) {
+      card.requeue = correct ? "later" : "soon";
+      card.waitUntil = new Date(next.due).getTime(); // no vuelve antes de su hora (nextReadyCard)
+    }
   }
 
   if (correct) {

@@ -130,6 +130,11 @@ aunque sea de un nivel supuesto, y una acertada cuenta aunque sea de un nivel su
   («lectura nueva めい de 名 · kanji nuevo 有 · frecuencia n.º 900»). Va con la respuesta porque
   cuenta la lectura.
 - Como mucho **5 nuevas por sesión** (se cambia en Ajustes). Los repasos pendientes salen antes y no cuentan.
+- **Pasos cortos**: una palabra nueva o fallada vuelve en la misma sesión a los 1 o 10 minutos
+  (FSRS), pero **no antes de su hora**: mientras espera salen las demás y, si solo quedan las que
+  esperan, la sesión dice cuándo vuelven («Vuelven dentro de 9 min») y deja terminar; sale sola al
+  llegar la hora. Fuera de la sesión, en Repasar, también toca a su hora y no antes (las de días,
+  desde el día que vencen). Reglas en `learning-core.js` (`nextReadyCard`, `recordDue`).
 - **Práctica extra**: si con los repasos pendientes y las nuevas no se llega al número de preguntas
   elegido, se completa con palabras ya estudiadas que aún no tocan, las que vuelven antes primero.
   Nunca las ya repasadas hoy, y las dominadas al final. Si la aciertas, FSRS la calcula como un

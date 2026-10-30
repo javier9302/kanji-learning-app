@@ -212,3 +212,26 @@ test("planToday: lo hecho se deduce de lo de hoy; lo que no hay no sale", () => 
   // Todo hecho
   assert.equal(planToday(day({ read: true, due: 0, answered: 3, writing: { available: false, done: 2 }, sentences: { available: true, done: 3 } }), TODAY).next, null);
 });
+
+const { nextReadyCard, recordDue } = require("../learning-core.js");
+
+test("nextReadyCard: la que está en sus pasos cortos espera su hora; mientras, salen las demás", () => {
+  const now = 1_000_000;
+  assert.deepEqual(nextReadyCard([{ waitUntil: now + 60000 }, {}, { waitUntil: now - 1 }], now), { index: 1, waitMs: 0 });
+  assert.deepEqual(nextReadyCard([{ waitUntil: now - 1 }], now), { index: 0, waitMs: 0 });
+  // Solo quedan las que esperan (pulsó Difícil en la última): no sale hasta su hora
+  assert.deepEqual(nextReadyCard([{ waitUntil: now + 900000 }, { waitUntil: now + 60000 }], now), { index: -1, waitMs: 60000 });
+  assert.deepEqual(nextReadyCard([], now), { index: -1, waitMs: 0 });
+});
+
+test("recordDue: las de días, desde su día; las de minutos, desde su hora", () => {
+  const now = Date.parse("2026-10-30T10:00:00Z");
+  const steps = (minutes) => ({ studied: true, nextReview: "2026-10-30", fsrs: { scheduled_days: 0, due: new Date(now + minutes * 60000).toISOString() } });
+  assert.equal(recordDue(steps(15), now, "2026-10-30"), false); // Difícil: vuelve en 15 min, aún no
+  assert.equal(recordDue(steps(-1), now, "2026-10-30"), true);
+  const days = { studied: true, nextReview: "2026-10-30", fsrs: { scheduled_days: 3, due: "2026-10-30T22:00:00Z" } };
+  assert.equal(recordDue(days, now, "2026-10-30"), true);       // de días: todo el día que vence
+  assert.equal(recordDue({ ...days, nextReview: "2026-10-31" }, now, "2026-10-30"), false);
+  assert.equal(recordDue({ studied: false, nextReview: "2026-10-01" }, now, "2026-10-30"), false);
+  assert.equal(recordDue({ studied: true, nextReview: "2026-10-29" }, now, "2026-10-30"), true); // sin tarjeta FSRS
+});
