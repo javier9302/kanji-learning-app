@@ -1192,3 +1192,94 @@ alter table public.reading_sessions add column if not exists reviews jsonb;
 -- Cuándo demostró el kanji en la prueba de su nivel (proof.js): significado y
 -- cómo suena en una palabra que conoce, las dos bien
 alter table public.user_kanji add column if not exists proof_at timestamptz;
+
+-- =========================================
+-- AVISOS DE REPASO (Web Push)
+-- =========================================
+
+-- Un dispositivo suscrito a los avisos (notify.js). La Edge Function notify-due,
+-- llamada cada hora por pg_cron (SETUP.md), cuenta las palabras que tocan con
+-- lo último sincronizado y avisa cuando se junta un grupo (min_due) de día en su
+-- zona horaria. last_sent_at / last_count: el último aviso, para no repetirlo.
+create table if not exists public.push_subscriptions (
+  endpoint text primary key check (char_length(endpoint) <= 1000),
+  user_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  p256dh text not null check (char_length(p256dh) <= 200),
+  auth text not null check (char_length(auth) <= 100),
+  tz text not null default 'UTC' check (char_length(tz) <= 64),
+  min_due integer not null default 10 check (min_due between 1 and 200),
+  lang text not null default 'es' check (lang in ('es', 'en')),
+  last_sent_at timestamptz,
+  last_count integer not null default 0,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists push_subscriptions_user_idx on public.push_subscriptions (user_id);
+
+-- Una zona horaria que Postgres no conoce rompería el recuento de todos: se cambia por UTC
+create or replace function public.push_subscription_check()
+returns trigger language plpgsql set search_path = '' as $$
+begin
+  if not exists (select 1 from pg_catalog.pg_timezone_names where name = new.tz) then new.tz := 'UTC'; end if;
+  new.updated_at := now();
+  return new;
+end $$;
+
+drop trigger if exists push_subscription_check on public.push_subscriptions;
+create trigger push_subscription_check before insert or update on public.push_subscriptions
+  for each row execute function public.push_subscription_check();
+
+alter table public.push_subscriptions enable row level security;
+revoke all on public.push_subscriptions from anon;
+grant select, insert, update, delete on public.push_subscriptions to authenticated;
+drop policy if exists "push_subscriptions_own" on public.push_subscriptions;
+create policy "push_subscriptions_own" on public.push_subscriptions
+  for all to authenticated using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
+
+-- Las claves VAPID y el secreto de la tarea programada: solo el servidor (sin políticas)
+create table if not exists public.push_config (
+  id integer primary key check (id = 1),
+  vapid_public text not null,
+  vapid_private text not null,
+  cron_secret text not null default replace(gen_random_uuid()::text || gen_random_uuid()::text, '-', '')
+);
+alter table public.push_config enable row level security;
+revoke all on public.push_config from anon, authenticated;
+
+create or replace function public.check_cron_secret(secret text)
+returns boolean language sql stable security definer set search_path = '' as $$
+  select exists (select 1 from public.push_config where id = 1 and cron_secret = secret and secret <> '')
+$$;
+revoke execute on function public.check_cron_secret(text) from public, anon, authenticated;
+
+-- Cuántas palabras tocan a cada dispositivo, con su hora y su día. Igual que
+-- recordDue (learning-core.js): un paso corto (scheduled_days 0) toca a su hora
+-- exacta; las demás, el día de next_review en su zona horaria.
+create or replace function public.push_due_counts()
+returns table (endpoint text, p256dh text, auth text, lang text, min_due integer, due integer,
+               local_hour integer, local_day text, last_sent_at timestamptz, last_day text, last_count integer)
+language sql stable security definer set search_path = '' as $$
+  select s.endpoint, s.p256dh, s.auth, s.lang, s.min_due,
+    (select count(*)::integer from public.user_words w
+      where w.user_id = s.user_id and w.studied and (
+        case when (w.fsrs ->> 'scheduled_days') = '0' and w.fsrs ? 'due'
+          then (w.fsrs ->> 'due')::timestamptz <= now()
+          else w.next_review <= (now() at time zone s.tz)::date end)),
+    extract(hour from now() at time zone s.tz)::integer,
+    to_char(now() at time zone s.tz, 'YYYY-MM-DD'),
+    s.last_sent_at,
+    to_char(s.last_sent_at at time zone s.tz, 'YYYY-MM-DD'),
+    s.last_count
+  from public.push_subscriptions s
+$$;
+revoke execute on function public.push_due_counts() from public, anon, authenticated;
+
+-- La Edge Function usa service_role (en Supabase existe; en las pruebas no)
+do $$ begin
+  if exists (select 1 from pg_roles where rolname = 'service_role') then
+    grant execute on function public.check_cron_secret(text) to service_role;
+    grant execute on function public.push_due_counts() to service_role;
+    grant all on public.push_config, public.push_subscriptions to service_role;
+  end if;
+end $$;

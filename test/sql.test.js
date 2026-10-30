@@ -256,3 +256,22 @@ test("leer cuenta como repaso: read_streak y last_read_review en user_words, rev
   const { rows: sessions } = await db.query("select reviews from public.reading_sessions");
   assert.deepEqual(sessions[0].reviews, { "名前|なまえ": "good" });
 });
+
+test("push_due_counts: los pasos cortos a su hora y las demás por el día de su zona horaria", async () => {
+  const db = await database();
+  const { rows: [{ id }] } = await db.query(`insert into auth.users (email) values ('push@example.com') returning id`);
+  await db.query(`insert into public.push_subscriptions (endpoint, user_id, p256dh, auth, tz, min_due) values
+    ('https://push.example/a', $1, 'k', 'a', 'Europe/Madrid', 5), ('https://push.example/b', $1, 'k', 'a', 'Marte/Olympus', 5)`, [id]);
+  const { rows: zones } = await db.query(`select endpoint, tz from public.push_subscriptions where user_id = $1 order by endpoint`, [id]);
+  assert.deepEqual(zones.map((row) => row.tz), ["Europe/Madrid", "UTC"]); // la que no existe pasa a UTC
+  await db.query(`insert into public.user_words (user_id, id, lemma, reading, studied, next_review, fsrs) values
+    ($1, '学校|がっこう', '学校', 'がっこう', true, current_date - 1, null),
+    ($1, '先生|せんせい', '先生', 'せんせい', true, current_date + 5, null),
+    ($1, '名前|なまえ', '名前', 'なまえ', true, current_date + 1, jsonb_build_object('scheduled_days', 0, 'due', now() - interval '1 minute')),
+    ($1, '山|やま', '山', 'やま', true, current_date, jsonb_build_object('scheduled_days', 0, 'due', now() + interval '10 minutes')),
+    ($1, '川|かわ', '川', 'かわ', false, current_date - 1, null)`, [id]);
+  const { rows } = await db.query(`select * from public.push_due_counts() where endpoint like 'https://push.example/%' order by endpoint`);
+  assert.deepEqual(rows.map((row) => row.due), [2, 2]); // 学校 y 名前; 山 espera sus 10 minutos
+  assert.match(rows[0].local_day, /^\d{4}-\d{2}-\d{2}$/);
+  assert.equal(rows[0].last_day, null);
+});
