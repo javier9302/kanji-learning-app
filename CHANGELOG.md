@@ -8,7 +8,7 @@ Cómo funciona todo hoy: [docs/COMO-FUNCIONA.md](docs/COMO-FUNCIONA.md).
 
 - **Repasar: «Difícil» u «Otra vez» ya no hacen que la palabra vuelva enseguida.** Una palabra que
   vuelve en 10 o 15 minutos espera su hora: mientras, salen las demás y, si era la última, la sesión
-  dice cuándo vuelve y te deja terminar (saldrá en Repasar a su hora).
+  dice cuándo vuelve y te deja terminar (saldrá en Repasar a su hora) (`1ee1542`).
 
 ## 2026-10-27
 
