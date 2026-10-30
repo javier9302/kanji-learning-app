@@ -9,7 +9,7 @@ Cómo funciona todo hoy: [docs/COMO-FUNCIONA.md](docs/COMO-FUNCIONA.md).
 - **Demuestra tus kanjis, nivel a nivel desde N5**: una prueba de los kanjis que ya has visto en tus
   palabras: su significado (entre 4) y cómo suenan en una palabra que conoces. Los que aciertas
   quedan demostrados y, cuando lo están todos, el nivel queda completo. Sale en Hoy y en Mis
-  palabras → Kanjis, que dice cuántos llevas de cada nivel.
+  palabras → Kanjis, que dice cuántos llevas de cada nivel (`a9f2e76`).
 
 - **Repasar: «Difícil» u «Otra vez» ya no hacen que la palabra vuelva enseguida.** Una palabra que
   vuelve en 10 o 15 minutos espera su hora: mientras, salen las demás y, si era la última, la sesión
