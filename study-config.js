@@ -92,7 +92,11 @@ const STUDY_CONFIG = {
 
   /* Hoy (la pantalla de inicio; learning-core.js, planToday): cuántos kanjis
      escribir y cuántas frases traducir cada día */
-  today: { writing: 4, sentences: 3 },
+  today: { writing: 4, sentences: 3, proofMin: 5 },
+
+  /* Demostrar los kanjis de un nivel (kanji-core.js, sección 5; proof.js): kanjis
+     por prueba como mucho. En Hoy sale cuando hay al menos today.proofMin por demostrar. */
+  kanjiProof: { size: 20 },
 
   /* Textos que practican lo que toca repasar (story-core.js).
        max          palabras que se le piden a la IA como mucho (más hace el texto forzado)

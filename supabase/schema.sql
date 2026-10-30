@@ -1184,3 +1184,11 @@ create policy "summary_generations_admin_select" on public.summary_generations
 alter table public.user_words add column if not exists read_streak integer not null default 0;
 alter table public.user_words add column if not exists last_read_review date;
 alter table public.reading_sessions add column if not exists reviews jsonb;
+
+-- =========================================
+-- DEMOSTRAR LOS KANJIS DE UN NIVEL
+-- =========================================
+
+-- Cuándo demostró el kanji en la prueba de su nivel (proof.js): significado y
+-- cómo suena en una palabra que conoce, las dos bien
+alter table public.user_kanji add column if not exists proof_at timestamptz;

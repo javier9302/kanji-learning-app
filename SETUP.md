@@ -193,6 +193,10 @@ rota tipo, tema y personajes y evita frases gastadas (versión `2026-10-27.1-seg
 a desplegar `generate-text`** con `supabase/functions/generate-text/index.ts` (ya está hecho en tu
 proyecto): acepta los tipos «instructions» y «opinion» y los campos `targets`, `cast` y `avoid`.
 
+**Demostrar los kanjis de un nivel**: lo demostrado se sincroniza en la columna `proof_at` de
+`user_kanji` (**vuelve a ejecutar `supabase/schema.sql`**; ya está hecho en tu proyecto). Sin la
+columna, se sincroniza el resto.
+
 **Leer cuenta como repaso**: al terminar un texto, las palabras que tocaba repasar cuentan como un
 repaso (reglas en `docs/COMO-FUNCIONA.md`, números en `STUDY_CONFIG.readingReview`). Para
 sincronizarlo, **vuelve a ejecutar `supabase/schema.sql`** (añade `read_streak` y `last_read_review`

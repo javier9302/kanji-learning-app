@@ -220,6 +220,7 @@ function readingInterval(previousDays, fsrsDays, config) {
      s.answered    respuestas de hoy en Repasar;  s.goal  la meta diaria
      s.writing     { available, done }: si hay kanji que escribir y cuántos ha escrito hoy
      s.sentences   { available, done }: si hay frases que traducir y cuántas ha traducido hoy
+     s.proof       { level, pending, doneToday }: kanjis vistos por demostrar del nivel que toca (o null)
      config        { writing, sentences }: cuántos kanjis y frases por día
    Devuelve { steps: [{ kind, count, done, progress }], next } (next: el primer paso sin hacer). */
 function planToday(s, config) {
@@ -233,6 +234,10 @@ function planToday(s, config) {
   }
   if (s.sentences.available || s.sentences.done) {
     steps.push({ kind: "sentences", count: config.sentences, done: s.sentences.done >= config.sentences || !s.sentences.available, progress: Math.min(s.sentences.done, config.sentences) });
+  }
+  // Demostrar los kanjis de un nivel: cuando hay bastantes vistos por demostrar, o si ya la hizo hoy
+  if (s.proof && (s.proof.pending >= (config.proofMin || 1) || s.proof.doneToday)) {
+    steps.push({ kind: "proof", count: s.proof.pending, done: !!s.proof.doneToday, progress: s.proof.doneToday ? 1 : 0, level: s.proof.level });
   }
   return { steps, next: steps.find((step) => !step.done)?.kind || null };
 }

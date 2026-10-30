@@ -370,6 +370,26 @@ guarda aparte, se calcula al abrir la tabla.
   la has acertado y fallado al escribirla), las palabras
   que conoces con él y, por cada lectura que falta, las 3 palabras más frecuentes que te la enseñan.
 
+### 12. Demostrar los kanjis de un nivel (`proof.js` + `kanji-core.js`, sección 5)
+
+Una prueba, nivel a nivel **desde N5**, de los kanjis que ya ha visto en sus palabras (los que no ha
+visto no entran: se aprenden por sus palabras). Toca el nivel más bajo con kanjis vistos sin
+demostrar (`nextProofLevel`). Cada prueba, hasta **20 kanjis** (`STUDY_CONFIG.kanjiProof.size`),
+primero los de las palabras que mejor conoce. De cada uno:
+
+1. **Su significado**, entre 4 (los otros, de kanjis del mismo nivel).
+2. **Cómo suena en una palabra que conoce** (se escribe; 名 en 有名 → めい). Mejor una palabra de
+   varios caracteres, y se marca el carácter preguntado (日曜日 lleva 日 dos veces).
+
+Con las dos bien queda **demostrado** (`userKanji[c].proofAt`) y su significado, sabido. Con el
+significado mal, deja de contar como sabido. La lectura se anota como en su casilla, bien o mal.
+También cuenta como demostrado un kanji cuyo significado ya sabía y del que acertó alguna lectura en
+su casilla. Un nivel está **completo** cuando todos sus kanjis están demostrados.
+
+Se abre desde Hoy (cuando hay al menos 5 por demostrar; `STUDY_CONFIG.today.proofMin`) y desde Mis
+palabras → Kanjis (por nivel JLPT, cada nivel dice cuántos lleva demostrados y el que toca tiene su
+botón).
+
 ### 11. Hoy (`today.js` + `learning-core.js`, `planToday`)
 
 La pantalla con la que se abre la app (si quedó un texto a medias al recargar, se vuelve a él).
@@ -381,6 +401,7 @@ Junta lo del día en este orden, y el siguiente paso sin hacer va resaltado:
    El botón empieza la sesión directamente.
 3. **Escribir 4 kanjis** (de los que ya ha visto, de simple a complejo).
 4. **Traducir 3 frases** (con las palabras que tocan).
+5. **Demostrar kanjis** del nivel que toca, si hay al menos 5 vistos por demostrar (sección 12).
 
 No guarda nada propio: lo hecho se deduce de lo de hoy (un texto terminado hoy; nada que toque en
 Repasar y alguna respuesta hoy; kanjis escritos hoy; traducciones de hoy). Un paso sin nada que

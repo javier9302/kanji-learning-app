@@ -118,6 +118,16 @@ async function renderKanjiTable() {
   const { states, list } = kanjiTable;
   const stateOf = (c) => states.get(c)?.state || "unknown";
   const groups = kanjiGroups(list, prefs.kanjiGroup, stateOf);
+  // Por nivel JLPT: cuántos ha demostrado de cada uno, y la prueba del que toca (desde N5)
+  const proofRows = prefs.kanjiGroup === "jlpt" ? proofStatus() : null;
+  const proofLine = (key) => {
+    const row = proofRows?.rows.find((item) => item.level === key);
+    if (!row) return "";
+    const next = proofRows.next?.level === key;
+    return `<p class="helper kanji-proof">${row.complete ? `★ ${escapeHTML(t("{level} completo: todos sus kanjis demostrados", { level: key }))}`
+      : escapeHTML(t("Demostrados: {proven} de {total}", row))}
+      ${next ? `<button class="link-btn" type="button" data-proof-level="${key}">${escapeHTML(t("Demostrar {n}", { n: plural(row.pending.length, "kanji visto", "kanjis vistos") }))}</button>` : ""}</p>`;
+  };
   const total = { mastered: 0, partial: 0, unknown: 0 };
   for (const group of groups) for (const state of KC_STATES) total[state] += group.counts[state];
 
@@ -128,6 +138,7 @@ async function renderKanjiTable() {
     ${groups.map((group) => `
       <section class="kanji-group">
         <h3>${escapeHTML(kanjiGroupName(group.key))} <span class="helper">${group.counts.total} · ${escapeHTML(kanjiCountsText(group.counts))}</span></h3>
+        ${proofLine(group.key)}
         <div class="kanji-grid" lang="ja">${group.kanji.map((c) => {
           const state = stateOf(c);
           return `<button class="kanji-cell kanji-${state}" type="button" data-kanji="${escapeHTML(c)}"
@@ -211,6 +222,8 @@ function bindKanjiTable() {
   $("kanjiArea").addEventListener("click", (event) => {
     const cell = event.target.closest("[data-kanji]");
     if (cell) openKanjiDetail(cell.dataset.kanji);
+    const proofButton = event.target.closest("[data-proof-level]");
+    if (proofButton) startProof(proofButton.dataset.proofLevel);
   });
   $("kanjiCloseBtn").addEventListener("click", () => $("kanjiDialog").close());
 }

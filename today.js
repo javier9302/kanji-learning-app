@@ -39,7 +39,11 @@ async function todayState() {
     sentences: {
       available: !!nextTranslationSentence(),
       done: translationLog.filter((entry) => entry.source !== "skip" && isToday(entry.at, day)).length
-    }
+    },
+    proof: (() => {
+      const next = proofStatus().next;
+      return next ? { level: next.level, pending: next.pending.length, doneToday: meta.kanjiProof?.lastDay === day } : null;
+    })()
   };
 }
 
@@ -62,6 +66,9 @@ function todayStepText(step, state) {
       t("Empezar")];
     case "writing": return [t("Escribe {n} kanjis", { n: step.count }),
       t("De los que ya has visto en tus palabras, de simple a complejo. Llevas {done}.", { done: step.progress }), t("Escribir")];
+    case "proof": return [step.done ? t("Kanjis demostrados hoy") : t("Demuestra tus kanjis de {level}", { level: step.level }),
+      t("{n} de {level} que ya has visto en tus palabras: su significado y cómo suenan en una palabra que conoces.", { n: plural(step.count, "kanji", "kanjis"), level: step.level }),
+      step.done ? t("Otra prueba") : t("Empezar")];
     case "sentences": return [t("Traduce {n} frases", { n: step.count }),
       t("Con las palabras que te toca repasar. Llevas {done}.", { done: step.progress }), t("Traducir")];
     default: return ["", "", ""];
@@ -106,6 +113,7 @@ function startTodayStep(kind) {
   }
   if (kind === "writing") return switchView("draw");
   if (kind === "sentences") return switchView("translate");
+  if (kind === "proof") return startProof();
 }
 
 function bindToday() {

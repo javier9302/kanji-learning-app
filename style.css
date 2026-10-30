@@ -3152,3 +3152,74 @@ body[data-view="dict"] .intro {
 .today-done {
   margin-top: 12px;
 }
+
+/* Demostrar los kanjis de un nivel */
+.proof-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.proof-word {
+  font: 500 34px 'Noto Sans JP', sans-serif;
+  text-align: center;
+  margin: 8px 0 14px;
+}
+
+/* El kanji preguntado: subrayado grueso, sin fondo (se imprime en blanco y negro) */
+.proof-target {
+  border-bottom: 3px solid var(--primary);
+  padding-bottom: 2px;
+}
+
+.proof-answers {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+  margin: 12px 0;
+}
+
+.proof-answers li {
+  padding-left: 10px;
+}
+
+.proof-answers .read-good {
+  border-left: 3px solid var(--ok);
+}
+
+.proof-answers .read-again {
+  border-left: 3px dashed var(--red);
+}
+
+.kanji-proof {
+  margin: -4px 0 10px;
+}
+
+#proofForm {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  max-width: 400px;
+  margin: 0 auto;
+}
+
+#proofInput {
+  width: 100%;
+  min-height: 48px;
+  padding: 12px 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: 9px;
+  background: var(--field);
+  color: var(--ink);
+  font: 16px 'DM Sans', 'Noto Sans JP', sans-serif;
+  text-align: center;
+  outline: none;
+}
+
+#proofInput:focus {
+  border-color: var(--focus);
+  box-shadow: 0 0 0 3px var(--mint);
+}

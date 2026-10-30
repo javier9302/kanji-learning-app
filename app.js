@@ -12,7 +12,8 @@ let db;
 // snapshots: { "2026-W43": foto } una foto del progreso por semana (progress.js)
 // roadmap: { level, words, grammar, updatedAt } la hoja de ruta de la semana (progress.js)
 // summary: { key: "2026-W43:es", text } el resumen de la semana escrito por la IA (progress.js)
-let meta = { days: {}, deleted: {}, reading: {}, practice: {}, writing: {}, snapshots: {}, roadmap: {}, summary: {}, queue: {} };
+// kanjiProof: { lastDay } el último día que hizo la prueba de kanjis de un nivel (proof.js)
+let meta = { days: {}, deleted: {}, reading: {}, practice: {}, writing: {}, snapshots: {}, roadmap: {}, summary: {}, queue: {}, kanjiProof: {} };
 let emptyStudyHTML = ""; // mensaje inicial de la pantalla de estudio
 
 const $ = (id) => document.getElementById(id);
@@ -163,7 +164,7 @@ function formatDate(iso) {
 
 /* Secciones principales y las vistas que agrupa cada una */
 const NAV = {
-  study: ["today", "read", "study", "translate", "draw"],
+  study: ["today", "read", "study", "translate", "draw", "proof"],
   library: ["library"],
   words: ["progress", "analysis", "kanji", "add"],
   settings: ["data"],
@@ -187,6 +188,7 @@ function switchView(name) {
     t.classList.toggle("active", t.dataset.view === name));
   document.body.dataset.view = name;
   if (name === "today") renderToday();
+  if (name === "proof") renderProof();
   if (name === "read") renderRead();
   if (name === "library") renderLibrary();
   if (name === "study") renderStudyHome();
@@ -685,6 +687,7 @@ async function clearLocalData() {
   meta.practice = {};
   delete meta.practiceMigrated;
   meta.queue = {};
+  meta.kanjiProof = {};
   meta.writing = {};
   meta.snapshots = {};
   meta.roadmap = {};
@@ -1082,6 +1085,7 @@ async function init() {
   bindSettings();
   bindKanjiTable();
   bindToday();
+  bindProof();
   bindLibrary();
   bindDictionary();
   bindTranslate();

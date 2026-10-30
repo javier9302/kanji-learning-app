@@ -1286,4 +1286,50 @@ export default async function extra({ page, step, check }) {
     check(result.waiting && !result.dueNow && result.ended, JSON.stringify(result).slice(0, 300));
     await page.evaluate(() => switchView("today"));
   });
+
+  await step("Demostrar kanjis: N5 primero, significado entre 4 y cómo suena; el acertado queda demostrado", async () => {
+    const setup = await page.evaluate(async () => {
+      await ensureStudyBank();
+      meta.reading = { ...meta.reading, assumed: "N5" }; // conoce el vocabulario de N5: ha visto sus kanjis
+      meta.kanjiProof = {};
+      await startProof("N5");
+      return { view: document.body.dataset.view, level: proof?.level, count: proof?.questions.length, first: proof?.questions[0] };
+    });
+    check(setup.view === "proof" && setup.level === "N5" && setup.count > 0, JSON.stringify(setup).slice(0, 300));
+    // Cada pregunta marca un solo carácter, el del kanji preguntado (日曜日 lleva 日 dos veces)
+    const marks = await page.evaluate(() => proof.questions.every((q) => [...q.word.w][q.word.at] === q.c));
+    check(marks, "una pregunta marca un carácter que no es su kanji");
+    // La primera, bien; la segunda, mal
+    await page.evaluate(() => {
+      const question = proof.questions[0];
+      document.querySelectorAll("[data-proof-choice]")[question.options.indexOf(question.meaning)].click();
+    });
+    await page.waitForSelector("#proofInput", { timeout: 5000 });
+    await shot(page, "demostrar");
+    await page.evaluate(() => { $("proofInput").value = proof.questions[0].word.sound; $("proofForm").requestSubmit(); });
+    await page.waitForSelector("#proofNextBtn", { timeout: 5000 });
+    const first = await page.evaluate(() => ({ c: proof.questions[0].c, proven: kanjiProven(proof.questions[0].c), at: !!userKanji.get(proof.questions[0].c)?.proofAt }));
+    check(first.proven && first.at, JSON.stringify(first));
+    const second = await page.evaluate(async () => {
+      $("proofNextBtn").click();
+      if (proof.questions.length < 2) return { skipped: true };
+      const question = proof.questions[1];
+      document.querySelectorAll("[data-proof-choice]")[question.options.findIndex((option) => option !== question.meaning)].click();
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      $("proofInput").value = "ぞぞぞ";
+      $("proofForm").requestSubmit();
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      return { c: question.c, proven: kanjiProven(question.c), text: $("proofArea").textContent };
+    });
+    check(second.skipped || !second.proven, JSON.stringify(second).slice(0, 200));
+    // Hoy la ofrece mientras queden por demostrar
+    const today = await page.evaluate(async () => {
+      proof.index = proof.questions.length;
+      await renderProofEnd();
+      switchView("today");
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      return [...document.querySelectorAll("[data-today]")].map((button) => button.dataset.today);
+    });
+    check(today.includes("proof"), JSON.stringify(today));
+  });
 }

@@ -69,7 +69,7 @@ const PHASE2_COLUMNS = ["fsrs", "origin", "meaning", "seen_at"];
    cada kanji y el repaso al leer. Si faltan solo se quitan estas: el resto del
    progreso, también el de la fase 2, se sigue subiendo. */
 const MEANING_COLUMNS = ["meaning_correct", "meaning_wrong", "last_meaning_at", "last_written_at", "write_fsrs", "kanji_readings",
-  "read_streak", "last_read_review"];
+  "read_streak", "last_read_review", "proof_at"];
 const NEWER_ORIGINS = ["diccionario", "traducir"]; // orígenes que una base de datos sin actualizar no admite
 const without = (rows, columns) => rows.map((row) => Object.fromEntries(Object.entries(row).filter(([key]) => !columns.includes(key))));
 
@@ -220,7 +220,8 @@ async function pullReading(userId) {
       updatedAt: stamp, ...(row.seen_at ? { seenAt: msOf(row.seen_at) } : {}),
       ...(row.last_written_at ? { lastWrittenAt: msOf(row.last_written_at) } : {}),
       ...(row.write_fsrs ? { writeFsrs: row.write_fsrs } : {}),
-      ...(row.kanji_readings ? { readings: row.kanji_readings } : {}), ...srsFromRow(row)
+      ...(row.kanji_readings ? { readings: row.kanji_readings } : {}), ...(row.proof_at ? { proofAt: msOf(row.proof_at) } : {}),
+      ...srsFromRow(row)
     };
     userKanji.set(record.id, record);
     newerKanji.push(record);
@@ -326,6 +327,7 @@ async function pushReading(userId) {
     knows_meaning: !!k.knowsMeaning, can_write: !!k.canWrite, writes: whole(k.writes),
     first_seen: isoOf(k.firstSeen), last_seen: isoOf(k.lastSeen), seen_at: isoOf(k.seenAt),
     last_written_at: isoOf(k.lastWrittenAt), write_fsrs: k.writeFsrs || null, kanji_readings: k.readings || null,
+    proof_at: isoOf(k.proofAt),
     client_updated_at: Math.round(k.updatedAt), ...srsToRow(k)
   })), kanjiChanged.map((k) => [k.id, String(k.updatedAt)]), pushed.kanji);
 

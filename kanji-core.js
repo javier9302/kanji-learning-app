@@ -273,10 +273,73 @@ function addReadingResult(readings, reading, correct, day) {
   return readings;
 }
 
+/* =========================================
+   5. DEMOSTRAR LOS KANJIS DE UN NIVEL
+   -----------------------------------------
+   Una prueba, nivel a nivel desde N5, de los kanjis que ya ha visto en sus
+   palabras: de cada uno, su significado (elegir entre 4) y cómo suena en una
+   palabra que conoce (escribirlo: 名 en 有名 -> めい). Un kanji queda
+   demostrado si acierta las dos; un nivel, completo cuando todos sus kanjis
+   lo están. Los que ya sabía (significado demostrado y alguna lectura
+   acertada en su casilla) cuentan como demostrados sin prueba.
+   Los números vienen de STUDY_CONFIG.kanjiProof.
+   ========================================= */
+
+/* Cómo va cada nivel.  kanjiOf(level) -> [c];  seen(c), proven(c) -> bool
+   Devuelve [{ level, total, seen, proven, pending: [vistos sin demostrar], complete }] */
+function proofLevels(kanjiOf, seen, proven) {
+  return KC_LEVELS.map((level) => {
+    const list = kanjiOf(level) || [];
+    const done = list.filter(proven);
+    return {
+      level, total: list.length, seen: list.filter((c) => seen(c) || proven(c)).length, proven: done.length,
+      pending: list.filter((c) => seen(c) && !proven(c)), complete: list.length > 0 && done.length === list.length
+    };
+  });
+}
+
+/* El nivel que toca demostrar: el más bajo con kanjis vistos sin demostrar (o null) */
+const nextProofLevel = (rows) => rows.find((row) => row.pending.length) || null;
+
+/* Las preguntas de una prueba.
+     pending  kanjis por demostrar, en el orden en que conviene (los de palabras que mejor conoce antes)
+     data     { meaning(c) -> texto, word(c) -> { id, w, r, sound } | null (una palabra que conoce con él
+              y cómo suena allí), others(c) -> [significados de otros kanjis del nivel] }
+     config   { size }
+   Solo entran los que tienen significado, palabra y al menos 3 significados de otros
+   para las opciones. Devuelve [{ c, meaning, options: [4], word }]. */
+function buildProof(pending, data, config, random = Math.random) {
+  const shuffle = (list) => {
+    const out = [...list];
+    for (let i = out.length - 1; i > 0; i--) {
+      const j = Math.floor(random() * (i + 1));
+      [out[i], out[j]] = [out[j], out[i]];
+    }
+    return out;
+  };
+  const questions = [];
+  for (const c of pending) {
+    if (questions.length >= config.size) break;
+    const meaning = data.meaning(c), word = data.word(c);
+    const others = [...new Set(data.others(c).filter((text) => text && text !== meaning))];
+    if (!meaning || !word || others.length < 3) continue;
+    questions.push({ c, meaning, options: shuffle([meaning, ...shuffle(others).slice(0, 3)]), word });
+  }
+  return questions;
+}
+
+/* Corrige una pregunta.  answer: { choice: el significado elegido, typed: lo escrito } */
+function gradeProof(question, answer, normalize = (text) => kcHiragana(String(text).trim())) {
+  const meaningOk = answer.choice === question.meaning;
+  const readingOk = !!answer.typed && normalize(answer.typed) === normalize(question.word.sound);
+  return { meaningOk, readingOk, ok: meaningOk && readingOk };
+}
+
 /* Para tools/ y las pruebas (Node); en el navegador son globales */
 if (typeof module !== "undefined") {
   module.exports = {
     KC_LEVELS, KC_STATES, KC_FREQUENCY_BANDS, normalizeKanjiReading, frequencyWeight, relevantReadings,
-    wordSounds, wordKanjiReadings, kanjiStates, kanjiGroup, kanjiGroups, readingBoxes, gradeBoxes, addReadingResult
+    wordSounds, wordKanjiReadings, kanjiStates, kanjiGroup, kanjiGroups, readingBoxes, gradeBoxes, addReadingResult,
+    proofLevels, nextProofLevel, buildProof, gradeProof
   };
 }

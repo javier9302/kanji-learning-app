@@ -131,3 +131,33 @@ test("addReadingResult: aciertos, fallos y el último día", () => {
   K.addReadingResult(readings, "な", true, "2026-10-26");
   assert.deepEqual(readings, { めい: { ok: 1, ko: 1, last: "2026-10-26" }, な: { ok: 1, ko: 0, last: "2026-10-26" } });
 });
+
+test("proofLevels y nextProofLevel: nivel a nivel desde N5, con lo visto sin demostrar", () => {
+  const byLevel = { N5: ["一", "二", "三"], N4: ["会", "同"], N3: [], N2: [], N1: [] };
+  const seen = new Set(["一", "二", "会"]), proven = new Set(["一"]);
+  const rows = K.proofLevels((level) => byLevel[level], (c) => seen.has(c), (c) => proven.has(c));
+  assert.deepEqual(rows[0], { level: "N5", total: 3, seen: 2, proven: 1, pending: ["二"], complete: false });
+  assert.deepEqual(K.nextProofLevel(rows).level, "N5");
+  // Con N5 sin nada pendiente (三 sin ver), toca N4
+  proven.add("二");
+  assert.equal(K.nextProofLevel(K.proofLevels((level) => byLevel[level], (c) => seen.has(c), (c) => proven.has(c))).level, "N4");
+  // Todo demostrado: N5 completo y nada que hacer
+  const all = K.proofLevels((level) => byLevel[level], () => true, () => true);
+  assert.equal(all[0].complete, true);
+  assert.equal(K.nextProofLevel(all), null);
+});
+
+test("buildProof y gradeProof: significado entre 4 y cómo suena en una palabra que conoce", () => {
+  const meanings = { 名: "nombre", 前: "delante", 有: "tener", 午: "mediodía", 山: "montaña" };
+  const words = { 名: { id: "有名|ゆうめい", w: "有名", r: "ゆうめい", sound: "めい" }, 前: { id: "前|まえ", w: "前", r: "まえ", sound: "まえ" } };
+  const data = { meaning: (c) => meanings[c], word: (c) => words[c] || null, others: (c) => Object.values(meanings).filter((m) => m !== meanings[c]) };
+  const questions = K.buildProof(["名", "有", "前"], data, { size: 20 }, () => 0.3);
+  assert.deepEqual(questions.map((q) => q.c), ["名", "前"]); // 有 no tiene palabra que conozca
+  assert.equal(questions[0].options.length, 4);
+  assert.ok(questions[0].options.includes("nombre") && new Set(questions[0].options).size === 4);
+  assert.equal(K.buildProof(["名", "前"], data, { size: 1 }).length, 1);
+  assert.deepEqual(K.gradeProof(questions[0], { choice: "nombre", typed: "メイ " }), { meaningOk: true, readingOk: true, ok: true });
+  assert.deepEqual(K.gradeProof(questions[0], { choice: "tener", typed: "めい" }), { meaningOk: false, readingOk: true, ok: false });
+  assert.equal(K.gradeProof(questions[0], { choice: "nombre", typed: "な" }).ok, false);
+  assert.equal(K.gradeProof(questions[0], { choice: "nombre", typed: "" }).readingOk, false);
+});

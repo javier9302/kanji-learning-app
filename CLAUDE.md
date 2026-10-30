@@ -20,7 +20,7 @@ Scripts clásicos (no módulos) que comparten variables globales. El orden de ca
 `config.js` → `i18n.js` → `vendor/ts-fsrs` → `bank/*.js` → `study-config.js` → `learning-core.js`
 → `ja-core.js` → `sentences-core.js` → `kanji-core.js` → `ranking-core.js` → `story-core.js` → `translate-core.js` → `texts.js` → `reading.js`
 → `reading-stats.js` → `reading-sync.js` → `study.js` → `sentences.js` → `translate.js`
-→ `progress.js` → `kanji-table.js` → `today.js` → `dictionary.js` → `app.js` (`progress-core.js` y `grammar-core.js` van justo
+→ `progress.js` → `kanji-table.js` → `proof.js` → `today.js` → `dictionary.js` → `app.js` (`progress-core.js` y `grammar-core.js` van justo
 después de `learning-core.js`)
 
 - **`*-core.js`**: reglas puras, sin DOM ni datos del usuario. Las usan el navegador y Node
@@ -65,7 +65,9 @@ después de `learning-core.js`)
   Escribir solo con lo visto y de simple a complejo (`nextWritingKanji`; trazos en
   `bank/kanji-info.js`), y 1.4, Traducir prefiere frases con las que tocan (peso `due` de
   `translate.choose`), y 1.5, la pantalla «Hoy» (`today.js`, `planToday`), que es la de inicio.
-  Etapa 1 terminada.
+  Etapa 1 terminada. Después (chat del 2026-10-30): los pasos cortos esperan su hora en la sesión
+  (`nextReadyCard`, `recordDue`), demostrar los kanjis de un nivel (`proof.js`, sección 5 de
+  `kanji-core.js`, `userKanji[c].proofAt`) y avisos de repasos pendientes.
   Orden acordado de las demás: 3 (añadir palabras desde la web), 2 (lo que falta de pegar textos),
   4.1, 5, 6, 7, 8.
 - **`grammar-core.js`**: catálogo de gramática (`GRAMMAR`, hoy solo N5), detector sobre las piezas
