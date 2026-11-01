@@ -11,7 +11,7 @@ Cómo funciona todo hoy: [docs/COMO-FUNCIONA.md](docs/COMO-FUNCIONA.md).
   insignias, esquinas redondeadas, botones que se hunden al pulsarlos y la letra M PLUS Rounded;
   el japonés de estudio, en Klee One, como escrito a mano. Darumi aparece en las pantallas vacías y
   celebra cuando terminas algo. El resaltado de las frases sigue imprimiéndose bien en blanco y
-  negro. Si tienes la app instalada, el icono nuevo puede tardar en cambiar (o reinstálala).
+  negro. Si tienes la app instalada, el icono nuevo puede tardar en cambiar (o reinstálala) (`9a568a6`).
 
 ## 2026-10-30
 
