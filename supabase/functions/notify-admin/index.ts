@@ -31,7 +31,7 @@ Deno.serve(async (req) => {
     method: "POST",
     headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
     body: JSON.stringify({
-      from: Deno.env.get("NOTIFY_FROM") || "Kanji Learning App <onboarding@resend.dev>",
+      from: Deno.env.get("NOTIFY_FROM") || "Yomipop <onboarding@resend.dev>",
       to: [to],
       subject: `Nuevo texto pendiente: ${String(text.title).slice(0, 80)}`,
       html: `<p>Hay un texto nuevo esperando aprobación.</p>

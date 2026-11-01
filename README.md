@@ -1,4 +1,4 @@
-# kanji-learning-app
+# Yomipop (kanji-learning-app)
 
 Web app para estudiar japonés: kanjis, vocabulario, lectura y traducción. Cómo funciona cada
 parte: [docs/COMO-FUNCIONA.md](docs/COMO-FUNCIONA.md). Configuración para el administrador:

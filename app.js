@@ -138,6 +138,30 @@ function escapeHTML(value) {
   })[c]);
 }
 
+/* Darumi (darumi.js) en un estado vacío o una celebración. Los estados que
+   se repiten para celebrar (celebrate) solo duran unos segundos y vuelven a
+   idle: lo hace el observador de abajo, para que quien lo pinta no tenga que
+   acordarse. Uno solo por pantalla, como pide Yomipop. */
+const DARUMI_CALM_MS = 2600;
+
+function darumiHTML(state = "idle", size = 160) {
+  return `<yomi-darumi class="empty-darumi" state="${escapeHTML(state)}" size="${Number(size) || 160}"
+    ${state === "celebrate" ? `data-calm="${DARUMI_CALM_MS}"` : ""} interactive aria-hidden="true"></yomi-darumi>`;
+}
+
+if (typeof MutationObserver !== "undefined") {
+  new MutationObserver((changes) => {
+    for (const change of changes) for (const node of change.addedNodes) {
+      if (!node.querySelectorAll) continue;
+      for (const darumi of [node, ...node.querySelectorAll("yomi-darumi[data-calm]")]) {
+        if (!darumi.matches?.("yomi-darumi[data-calm]")) continue;
+        setTimeout(() => darumi.setAttribute("state", "idle"), Number(darumi.dataset.calm));
+        delete darumi.dataset.calm;
+      }
+    }
+  }).observe(document.documentElement, { childList: true, subtree: true });
+}
+
 function shuffle(array) {
   const r = [...array];
   for (let i = r.length - 1; i > 0; i--) {

@@ -85,7 +85,7 @@ async function renderToday() {
   const finished = !plan.next;
   area.innerHTML = `
     <p class="helper">${escapeHTML(t("Hoy llevas {done} de {goal} respuestas en Repasar.", { done: state.answered, goal: state.goal }))}</p>
-    ${finished ? `<div class="panel today-done"><h3>${t("¡Has terminado lo de hoy!")}</h3>
+    ${finished ? `<div class="panel today-done">${darumiHTML("celebrate", 120)}<h3>${t("¡Has terminado lo de hoy!")}</h3>
       <p class="helper">${t("Puedes seguir con cualquier sección; mañana habrá un plan nuevo.")}</p></div>` : ""}
     <ol class="today-steps">${plan.steps.map((step) => {
       const [title, body, action] = todayStepText(step, state);

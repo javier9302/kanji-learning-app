@@ -553,6 +553,8 @@ const EN = {
   "Créditos": "Credits",
   "y": "and",
   "Esta app usa los diccionarios": "This app uses the",
+  "Las letras M PLUS Rounded 1c, Klee One y Noto Sans JP son de": "The M PLUS Rounded 1c, Klee One and Noto Sans JP typefaces are from",
+  "el logo de Yomipop dibuja sus letras a partir de Noto Sans CJK JP (también OFL).": "the Yomipop logo draws its letters from Noto Sans CJK JP (also OFL).",
   ", propiedad del": "dictionaries, property of the",
   ", bajo su": ", under its",
   "(CC BY-SA 4.0). Los trazos de los kanjis son de": "(CC BY-SA 4.0). Kanji strokes are from",

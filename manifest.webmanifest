@@ -1,7 +1,7 @@
 {
-  "name": "Kanji Learning App",
-  "short_name": "Kanji",
-  "description": "Repaso de kanjis y palabras japonesas con repetición espaciada.",
+  "name": "Yomipop",
+  "short_name": "Yomipop",
+  "description": "Aprende japonés leyendo: kanjis y palabras con repaso espaciado.",
   "lang": "es",
   "start_url": ".",
   "scope": ".",
@@ -12,8 +12,8 @@
     "method": "GET",
     "params": { "title": "share_title", "text": "share_text", "url": "share_url" }
   },
-  "background_color": "#f7f9f6",
-  "theme_color": "#173f35",
+  "background_color": "#FFF8EE",
+  "theme_color": "#FFF8EE",
   "icons": [
     { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
     { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },

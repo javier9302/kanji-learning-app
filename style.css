@@ -1,90 +1,123 @@
 
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@500;700;800&family=Klee+One:wght@600&family=Noto+Sans+JP:wght@400;700&display=swap');
 
+/* Colores y formas del sistema de diseño Yomipop (washi, sumi, beni, yuzu,
+   matcha). Primero sus tokens; debajo, los nombres que ya usaba la app
+   apuntan a ellos, así el resto del archivo no cambia de nombres. */
 :root {
-  --ink: #1e1f2e;
-  --muted: #6e6f80;
-  --label: #555668;
-  --green: #3b4a9c;        /* now indigo; consider renaming to --accent */
-  --green-dark: #2f3c82;
-  --primary: #3b4a9c;
-  --primary-hover: #2f3c82;
-  --mint: #eceefa;         /* soft indigo tint */
-  --line: #e6e4df;
-  --line-strong: #d3d0c8;
-  --paper: #faf8f4;
-  --white: #fff;
-  --field: #fdfcf9;
-  --focus: #8e98d6;
-  --gold: #c07a1e;
-  --red: #c0453a;
-  --ok: #2f7a55;
-  --wrong-bg: #fdeeec;
-  --hard-bg: #fdf3e0;
-  --hard-ink: #9a5d10;
-  --good-bg: #e9f4ee;
-  --shadow: 0 12px 32px rgba(30, 31, 46, .07);;
+  --surface-100: #FFF8EE;   /* washi: fondo de página */
+  --surface-200: #FFFFFF;   /* tarjetas y paneles */
+  --surface-300: #F5EBDD;   /* campos y chips en reposo */
+  --ink-yp: #221A26;        /* sumi */
+  --ink-muted: #6E6272;
+  --beni-500: #EE4B2B;      /* marca: logo e ilustración */
+  --beni-600: #C2341C;      /* botones, enlaces, activo */
+  --on-beni: #FFF8EE;
+  --yuzu-400: #FFC23D;      /* el «pop»: rachas, insignias; nunca texto */
+  --on-yuzu: #221A26;
+  --yuzu-100: #FFF0C7;
+  --matcha-600: #23805B;
+  --matcha-100: #DDF2E6;
+  --matcha-ink: #1B5E44;
+  --danger: #B3261E;
+  --focus-ring: #221A26;
+  --shadow-ink: rgba(34, 26, 38, .18);
+  --shadow-pop: 0 4px 0 var(--shadow-ink); /* sombra sólida de pegatina */
 
-  /* Gráficos: un solo tono, de claro a oscuro */
-  --heat-0: #ebeaf2;
-  --heat-1: #c9cdee;
-  --heat-2: #959ee0;
-  --heat-3: #5d6bc4;
-  --heat-4: #3b4a9c;
-  --state-new: #dcdbe3;
-  --state-learning: #7d8be6;
-  --state-mature: #3b4a9c;
-  --state-prek: #c07a1e;   /* por confirmar / dado por sabido */
+  --radius-sm: 8px;
+  --radius-md: 16px;
+  --radius-lg: 28px;
+  --radius-full: 999px;
+
+  --font-ui: "M PLUS Rounded 1c", "Hiragino Maru Gothic ProN", system-ui, sans-serif;
+  --font-study: "Klee One", "Noto Sans JP", "Hiragino Mincho ProN", serif;
+  --font-jp: "Noto Sans JP", "Hiragino Sans", system-ui, sans-serif;
+
+  --ink: var(--ink-yp);
+  --muted: var(--ink-muted);
+  --label: #5A4E5E;
+  --green: var(--beni-600);  /* el acento de la app (enlaces, activo) */
+  --green-dark: #9E2914;
+  --primary: var(--beni-600);
+  --primary-hover: #A82B15;
+  --mint: #FDE6DF;           /* tinte suave del acento */
+  --line: #E6D8C6;
+  --line-strong: #CDB9A2;
+  --paper: var(--surface-100);
+  --white: var(--surface-200);
+  --field: var(--surface-300);
+  --focus: var(--focus-ring);
+  --gold: #8F5C00;
+  --red: var(--danger);
+  --ok: var(--matcha-600);
+  --wrong-bg: #FCE3DF;
+  --hard-bg: var(--yuzu-100);
+  --hard-ink: #7A5200;
+  --good-bg: var(--matcha-100);
+  --shadow: 0 4px 0 rgba(34, 26, 38, .08);
+
+  /* Gráficos: un solo tono (beni), de claro a oscuro */
+  --heat-0: #F5EBDD;
+  --heat-1: #F9C2B3;
+  --heat-2: #F28A70;
+  --heat-3: #E0573A;
+  --heat-4: #C2341C;
+  --state-new: #E6D8C6;
+  --state-learning: #F28A70;
+  --state-mature: #C2341C;
+  --state-prek: #8F5C00;   /* por confirmar / dado por sabido */
 
   /* Tabla de kanjis: dominado, parcial y sin conocer. El borde (lleno,
      discontinuo, punteado) distingue el estado también en blanco y negro */
-  --kanji-mastered-bg: #3b4a9c;
-  --kanji-mastered-ink: #fff;
-  --kanji-partial-bg: #dfe3fa;
-  --kanji-partial-line: #5d6bc4;
-  --kanji-unknown-line: #c9c7d3;
+  --kanji-mastered-bg: var(--matcha-600);
+  --kanji-mastered-ink: #FFFFFF;
+  --kanji-partial-bg: var(--matcha-100);
+  --kanji-partial-line: var(--matcha-600);
+  --kanji-unknown-line: #CDB9A2;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --ink: #e7e7f0;
-    --muted: #9a9bad;
-    --label: #b1b2c3;
-    --green: #aab4f2;
-    --green-dark: #c8cff8;
-    --primary: #4c5bb8;
-    --primary-hover: #5a6ac9;
-    --mint: #23263a;
-    --line: #2c2d3b;
-    --line-strong: #3c3e50;
-    --paper: #13141c;
-    --white: #1b1c27;
-    --field: #20212e;
-    --focus: #7380d0;
-    --gold: #e0a24a;
-    --red: #ef8f84;
-    --ok: #8fd3ae;
-    --wrong-bg: #3b2422;
-    --hard-bg: #3a2f1c;
-    --hard-ink: #e8b765;
-    --good-bg: #1f3529;
-    --shadow: 0 12px 32px rgba(0, 0, 0, .3);
+    --surface-100: #17121A;
+    --surface-200: #221C26;
+    --surface-300: #2E2633;
+    --ink-yp: #F7EEE4;
+    --ink-muted: #B8ABB5;
+    --beni-500: #FF6A4C;
+    --beni-600: #FF7A5C;
+    --on-beni: #17121A;
+    --on-yuzu: #17121A;
+    --yuzu-100: #4A3A12;
+    --matcha-600: #5FD3A0;
+    --matcha-100: #173A2B;
+    --matcha-ink: #9BE8C4;
+    --danger: #FF8A80;
+    --focus-ring: #FFC23D;
+    --shadow-ink: rgba(0, 0, 0, .45);
 
-    --heat-0: #1f2030;
-    --heat-1: #2c3466;
-    --heat-2: #3f4c9c;
-    --heat-3: #6878d4;
-    --heat-4: #b3bcf5;
-    --state-new: #34364a;
-    --state-learning: #4a58c2;
-    --state-mature: #7d8ae2;
-    --state-prek: #bd842f;
+    --label: #CABDC6;
+    --green-dark: #FF9A80;
+    --primary-hover: #FF8F75;
+    --mint: #3A2226;
+    --line: #3F3545;
+    --line-strong: #56495C;
+    --gold: #FFC23D;
+    --wrong-bg: #3D2020;
+    --hard-ink: #FFD77A;
+    --shadow: 0 4px 0 rgba(0, 0, 0, .3);
 
-    --kanji-mastered-bg: #7d8ae2;
-    --kanji-mastered-ink: #13141c;
-    --kanji-partial-bg: #2c3466;
-    --kanji-partial-line: #8e98d6;
-    --kanji-unknown-line: #3c3e50;
+    --heat-0: #2E2633;
+    --heat-1: #5A2A22;
+    --heat-2: #94402D;
+    --heat-3: #D9603F;
+    --heat-4: #FF7A5C;
+    --state-new: #3F3545;
+    --state-learning: #D9603F;
+    --state-mature: #FF7A5C;
+    --state-prek: #FFC23D;
+
+    --kanji-mastered-ink: #17121A;
+    --kanji-unknown-line: #56495C;
   }
 }
 
@@ -96,7 +129,7 @@ body {
   margin: 0;
   background: var(--paper);
   color: var(--ink);
-  font-family: 'DM Sans', 'Noto Sans JP', sans-serif;
+  font-family: var(--font-ui);
   min-height: 100vh;
 }
 
@@ -132,9 +165,9 @@ a {
   width: 39px;
   height: 39px;
   background: var(--primary);
-  color: white;
-  border-radius: 12px;
-  font-family: 'Noto Sans JP';
+  color: var(--on-beni);
+  border-radius: var(--radius-md);
+  font-family: var(--font-study);
   font-size: 21px;
 }
 
@@ -158,10 +191,10 @@ a {
 .lang-select {
   border: 1px solid var(--line-strong);
   background: var(--field);
-  border-radius: 9px;
+  border-radius: var(--radius-sm);
   padding: 8px 10px;
   color: var(--ink);
-  font: 600 12px 'DM Sans', sans-serif;
+  font: 600 12px var(--font-ui);
   cursor: pointer;
 }
 
@@ -187,7 +220,7 @@ a {
 }
 
 .sync-btn[data-state="ok"] .sync-dot {
-  background: #3f9070;
+  background: var(--ok);
 }
 
 .sync-btn[data-state="syncing"] .sync-dot {
@@ -282,7 +315,7 @@ body.studying .intro {
 }
 
 .tab-icon {
-  font: 500 15px 'Noto Sans JP', sans-serif;
+  font: 500 15px var(--font-study);
   line-height: 1;
 }
 
@@ -297,10 +330,10 @@ body.studying .intro {
 .subtab {
   padding: 8px 15px;
   border: 1px solid var(--line-strong);
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   background: var(--white);
   color: var(--muted);
-  font: 600 12px 'DM Sans', sans-serif;
+  font: 600 12px var(--font-ui);
   cursor: pointer;
   transition: background .15s, color .15s, border-color .15s, transform .15s;
 }
@@ -362,7 +395,7 @@ body.studying .intro {
 .pill {
   display: inline-flex;
   align-items: center;
-  border-radius: 30px;
+  border-radius: var(--radius-full);
   padding: 7px 11px;
   background: var(--mint);
   color: var(--green);
@@ -373,7 +406,7 @@ body.studying .intro {
 .panel {
   background: var(--white);
   border: 1px solid var(--line);
-  border-radius: 16px;
+  border-radius: var(--radius-md);
   padding: 22px;
   box-shadow: var(--shadow);
 }
@@ -472,10 +505,10 @@ body.studying .intro {
   width: 100%;
   border: 1px solid var(--line-strong);
   background: var(--field);
-  border-radius: 9px;
+  border-radius: var(--radius-sm);
   padding: 11px 12px;
   color: var(--ink);
-  font: 13px 'DM Sans', 'Noto Sans JP', sans-serif;
+  font: 13px var(--font-ui);
   outline: none;
 }
 
@@ -494,9 +527,9 @@ body.studying .intro {
 
 .button {
   border: 0;
-  border-radius: 9px;
+  border-radius: var(--radius-md);
   padding: 11px 15px;
-  font: 600 12px 'DM Sans', sans-serif;
+  font: 600 12px var(--font-ui);
   cursor: pointer;
   transition: background .15s, transform .15s;
   white-space: nowrap;
@@ -521,7 +554,7 @@ body.studying .intro {
 
 .button-primary {
   background: var(--primary);
-  color: white;
+  color: var(--on-beni);
 }
 
 .button-primary:hover {
@@ -561,7 +594,7 @@ body.studying .intro {
 
 .empty-state {
   border: 1px dashed var(--line-strong);
-  border-radius: 16px;
+  border-radius: var(--radius-md);
   min-height: 280px;
   display: flex;
   align-items: center;
@@ -576,9 +609,9 @@ body.studying .intro {
   height: 50px;
   display: grid;
   place-items: center;
-  border-radius: 16px;
+  border-radius: var(--radius-md);
   background: var(--mint);
-  font: 26px 'Noto Sans JP';
+  font: 26px var(--font-study);
   color: var(--green);
   margin-bottom: 12px;
 }
@@ -618,19 +651,19 @@ body.studying .intro {
   gap: 8px;
   padding: 7px 11px;
   border: 1px solid var(--line);
-  border-radius: 9px;
+  border-radius: var(--radius-sm);
   background: var(--white);
   font-size: 12px;
   color: var(--muted);
 }
 
 .missed-list strong {
-  font: 600 16px 'Noto Sans JP', sans-serif;
+  font: 600 16px var(--font-study);
   color: var(--ink);
 }
 
 .reading {
-  font: 500 17px 'Noto Sans JP';
+  font: 500 17px var(--font-jp);
   color: var(--green);
   margin: 0 0 8px;
 }
@@ -647,13 +680,13 @@ body.studying .intro {
   justify-content: center;
   gap: 6px;
   margin: 10px 0 0;
-  font: 13px 'Noto Sans JP', sans-serif;
+  font: 13px var(--font-jp);
   color: var(--muted);
 }
 
 .related span {
   padding: 4px 9px;
-  border-radius: 20px;
+  border-radius: var(--radius-full);
   background: var(--mint);
 }
 
@@ -698,7 +731,7 @@ body.studying .intro {
 
 .button-easy {
   background: var(--primary);
-  color: #fff;
+  color: var(--on-beni);
 }
 
 .form-grid {
@@ -853,7 +886,7 @@ body.studying .intro {
   gap: 13px;
   background: var(--white);
   border: 1px solid var(--line);
-  border-radius: 11px;
+  border-radius: var(--radius-md);
   padding: 12px 14px;
 }
 
@@ -863,7 +896,7 @@ body.studying .intro {
   justify-content: flex-start;
   flex: 0 0 90px;
   min-width: 0;
-  font-family: "Noto Sans JP", sans-serif;
+  font-family: var(--font-study);
   font-size: clamp(1.4rem, 4vw, 2rem);
   font-weight: 500;
   line-height: 1.4;
@@ -876,7 +909,7 @@ body.studying .intro {
 }
 
 .item-title {
-  font: 600 14px 'Noto Sans JP', sans-serif;
+  font: 600 14px var(--font-jp);
 }
 
 .item-sub {
@@ -902,7 +935,7 @@ body.studying .intro {
   cursor: pointer;
   font-size: 17px;
   padding: 5px 7px;
-  border-radius: 7px;
+  border-radius: var(--radius-sm);
 }
 
 .icon-btn:hover {
@@ -926,7 +959,7 @@ body.studying .intro {
   font-size: 12px;
   background: var(--white);
   border: 1px dashed var(--line);
-  border-radius: 12px;
+  border-radius: var(--radius-md);
 }
 
 .stats-grid {
@@ -939,7 +972,7 @@ body.studying .intro {
 .stat-card {
   background: var(--white);
   border: 1px solid var(--line);
-  border-radius: 13px;
+  border-radius: var(--radius-md);
   padding: 18px;
   box-shadow: var(--shadow);
 }
@@ -982,7 +1015,7 @@ body.studying .intro {
   border-radius: 6px;
   background: var(--ink);
   color: var(--paper);
-  font: 500 11px 'DM Sans', sans-serif;
+  font: 500 11px var(--font-ui);
   white-space: nowrap;
   pointer-events: none;
 }
@@ -1140,7 +1173,7 @@ i[data-heat="4"] { background: var(--heat-4); }
   gap: 10px;
   padding: 9px 12px;
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   background: var(--field);
   color: var(--ink);
   font: inherit;
@@ -1153,13 +1186,13 @@ i[data-heat="4"] { background: var(--heat-4); }
 }
 
 .hard-symbol {
-  font: 500 20px 'Noto Sans JP', sans-serif;
+  font: 500 20px var(--font-study);
 }
 
 .hard-reading {
   flex: 1;
   min-width: 0;
-  font: 12px 'Noto Sans JP', sans-serif;
+  font: 12px var(--font-jp);
   color: var(--muted);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1179,7 +1212,7 @@ i[data-heat="4"] { background: var(--heat-4); }
 .dialog {
   width: min(440px, calc(100vw - 32px));
   border: 1px solid var(--line);
-  border-radius: 16px;
+  border-radius: var(--radius-lg);
   padding: 22px;
   background: var(--white);
   color: var(--ink);
@@ -1203,7 +1236,7 @@ i[data-heat="4"] { background: var(--heat-4); }
 }
 
 .dialog-symbol {
-  font: 500 34px 'Noto Sans JP', sans-serif;
+  font: 500 34px var(--font-study);
 }
 
 .dialog .search {
@@ -1247,7 +1280,7 @@ footer {
   text-align: center;
   background: var(--white);
   border: 1px solid var(--line);
-  border-radius: 18px;
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow);
 }
 
@@ -1267,7 +1300,7 @@ footer {
 .card-symbol {
   margin: 30px 0 25px;
   color: var(--ink);
-  font: 500 clamp(64px, 14vw, 100px) 'Noto Sans JP', sans-serif;
+  font: 500 clamp(64px, 14vw, 100px) var(--font-study);
   line-height: 1.35;
 }
 
@@ -1292,10 +1325,10 @@ footer {
   min-height: 48px;
   padding: 12px 14px;
   border: 1px solid var(--line-strong);
-  border-radius: 9px;
+  border-radius: var(--radius-sm);
   background: var(--field);
   color: var(--ink);
-  font: 16px 'DM Sans', 'Noto Sans JP', sans-serif;
+  font: 16px var(--font-ui);
   text-align: center;
   outline: none;
   transition: border-color .2s, box-shadow .2s;
@@ -1472,7 +1505,7 @@ footer {
   margin: 14px 0 4px;
   background: var(--field);
   border: 1px solid var(--line-strong);
-  border-radius: 14px;
+  border-radius: var(--radius-md);
   touch-action: none;
   user-select: none;
   -webkit-user-select: none;
@@ -1541,7 +1574,7 @@ footer {
   border: 0;
   background: none;
   color: var(--green);
-  font: 600 12px 'DM Sans', sans-serif;
+  font: 600 12px var(--font-ui);
   text-decoration: underline;
   cursor: pointer;
 }
@@ -1571,7 +1604,7 @@ footer {
     background: var(--white);
     border-top: 1px solid var(--line);
     border-bottom: 0;
-    box-shadow: 0 -6px 18px rgba(26, 58, 45, .05);
+    box-shadow: 0 -4px 0 var(--shadow-ink);
   }
 
   .tab {
@@ -1644,7 +1677,7 @@ footer {
 
 .read-next h3 {
   margin: 4px 0;
-  font: 500 20px 'Noto Sans JP', sans-serif;
+  font: 500 20px var(--font-study);
 }
 
 .prompt-grid {
@@ -1658,10 +1691,10 @@ footer {
 .placement-start select {
   border: 1px solid var(--line-strong);
   background: var(--field);
-  border-radius: 9px;
+  border-radius: var(--radius-sm);
   padding: 10px 12px;
   color: var(--ink);
-  font: 600 13px 'DM Sans', sans-serif;
+  font: 600 13px var(--font-ui);
 }
 
 .choices {
@@ -1695,7 +1728,7 @@ footer {
 .reader {
   background: var(--white);
   border: 1px solid var(--line);
-  border-radius: 18px;
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow);
   padding: 22px 24px 24px;
 }
@@ -1710,12 +1743,12 @@ footer {
 
 .reader-head h3 {
   margin: 0 0 4px;
-  font: 500 22px 'Noto Sans JP', sans-serif;
+  font: 500 22px var(--font-study);
 }
 
 .reading-text {
   margin: 18px 0 24px;
-  font: 400 22px 'Noto Sans JP', sans-serif;
+  font: 400 22px var(--font-study);
   line-height: 2.4;
 }
 
@@ -1726,7 +1759,7 @@ footer {
 /* La frase entera se resalta al pasar por ella (o al abrir una de sus palabras) */
 .sent {
   padding: 5px 0;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   transition: background .15s;
 }
 
@@ -1737,7 +1770,7 @@ footer {
 
 .tok {
   padding: 2px 1px;
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   transition: background .15s;
 }
@@ -1784,8 +1817,8 @@ footer {
   background: var(--white);
   color: var(--ink);
   border: 1px solid var(--line-strong);
-  border-radius: 14px;
-  box-shadow: 0 16px 40px rgba(20, 30, 60, .18);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-pop);
   animation: view-in .15s ease;
 }
 
@@ -1796,13 +1829,13 @@ footer {
 }
 
 .pop-word {
-  font: 500 26px 'Noto Sans JP', sans-serif;
+  font: 500 26px var(--font-study);
   padding-right: 34px;
 }
 
 .pop-reading {
   color: var(--green);
-  font: 500 15px 'Noto Sans JP', sans-serif;
+  font: 500 15px var(--font-jp);
   margin-top: 2px;
 }
 
@@ -1820,8 +1853,8 @@ footer {
   margin: 10px 0 0;
   padding: 8px 10px;
   background: var(--paper);
-  border-radius: 8px;
-  font: 400 13px 'Noto Sans JP', sans-serif;
+  border-radius: var(--radius-sm);
+  font: 400 13px var(--font-study);
   line-height: 1.7;
 }
 
@@ -1832,7 +1865,7 @@ footer {
 .pop-example .pop-translation {
   margin-top: 4px;
   color: var(--muted);
-  font: 12px 'DM Sans', sans-serif;
+  font: 12px var(--font-ui);
 }
 
 .pop-actions {
@@ -1931,7 +1964,7 @@ div.hard-item {
 
 .state-tag {
   padding: 2px 8px;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   font-size: 10px;
   font-weight: 600;
   background: var(--paper);
@@ -1943,7 +1976,7 @@ div.hard-item {
 .state-learning { background: var(--mint); color: var(--green); }
 
 .skills i {
-  font: 500 11px 'Noto Sans JP', sans-serif;
+  font: 500 11px var(--font-jp);
   font-style: normal;
   margin-left: 3px;
   padding: 1px 3px;
@@ -1982,12 +2015,12 @@ div.hard-item {
   padding: 14px 16px;
   background: var(--white);
   border: 1px solid var(--line);
-  border-radius: 11px;
+  border-radius: var(--radius-md);
 }
 
 .admin-body p {
   margin: 0 0 2px;
-  font: 400 16px 'Noto Sans JP', sans-serif;
+  font: 400 16px var(--font-study);
   line-height: 1.8;
 }
 
@@ -2012,8 +2045,8 @@ div.hard-item {
   display: grid;
   place-items: center;
   background: var(--primary);
-  color: #fff;
-  font: 600 22px 'DM Sans', sans-serif;
+  color: var(--on-beni);
+  font: 600 22px var(--font-ui);
 }
 
 .profile-email {
@@ -2053,7 +2086,7 @@ div.hard-item {
 
 .draw-context strong {
   color: var(--ink);
-  font: 500 20px 'Noto Sans JP', sans-serif;
+  font: 500 20px var(--font-study);
   letter-spacing: 2px;
 }
 
@@ -2069,7 +2102,7 @@ div.hard-item {
 .toggle-group {
   display: inline-flex;
   border: 1px solid var(--line-strong);
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   overflow: hidden;
 }
 
@@ -2078,7 +2111,7 @@ div.hard-item {
   border: 0;
   background: var(--white);
   color: var(--muted);
-  font: 600 11px 'DM Sans', sans-serif;
+  font: 600 11px var(--font-ui);
   cursor: pointer;
   transition: background .15s, color .15s;
 }
@@ -2107,10 +2140,10 @@ div.hard-item {
   padding: 1px 5px;
   vertical-align: middle;
   border: 1px solid var(--line-strong);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: var(--white);
   color: var(--muted);
-  font: 500 11px 'Noto Sans JP', sans-serif;
+  font: 500 11px var(--font-jp);
   line-height: 1.5;
   cursor: pointer;
   transition: background .15s, color .15s, border-color .15s;
@@ -2133,7 +2166,7 @@ div.hard-item {
   padding: 16px;
   background: var(--paper);
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: var(--radius-md);
 }
 
 .reader-panel .meaning {
@@ -2150,7 +2183,7 @@ div.hard-item {
 
 .panel-jp {
   margin: 0 0 8px;
-  font: 400 15px 'Noto Sans JP', sans-serif;
+  font: 400 15px var(--font-study);
   line-height: 1.8;
 }
 
@@ -2188,7 +2221,7 @@ div.hard-item {
     overflow-y: auto;
     background: var(--white);
     border-color: var(--line-strong);
-    box-shadow: 0 -8px 30px rgba(20, 30, 60, .16);
+    box-shadow: 0 -4px 0 var(--shadow-ink);
     animation: view-in .15s ease;
   }
 
@@ -2353,7 +2386,7 @@ div.hard-item {
   margin-top: 16px;
   padding: 14px 16px;
   border: 1px dashed var(--line);
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   background: var(--white);
   text-align: left;
 }
@@ -2384,7 +2417,7 @@ div.hard-item {
 }
 
 .debug-table td:first-child {
-  font: 600 15px 'Noto Sans JP', sans-serif;
+  font: 600 15px var(--font-jp);
   color: var(--ink);
   white-space: nowrap;
 }
@@ -2467,13 +2500,13 @@ body.studying .dict-form {
 }
 
 .dict-word {
-  font: 500 clamp(2rem, 8vw, 3rem) 'Noto Sans JP', sans-serif;
+  font: 500 clamp(2rem, 8vw, 3rem) var(--font-study);
   line-height: 1.2;
   overflow-wrap: anywhere;
 }
 
 .dict-reading {
-  font: 500 18px 'Noto Sans JP', sans-serif;
+  font: 500 18px var(--font-jp);
 }
 
 .dict-reading small {
@@ -2519,7 +2552,7 @@ body[data-view="dict"] .intro {
    ========================================= */
 
 .card-sentence {
-  font: 500 clamp(1.25rem, 4.6vw, 1.7rem) 'Noto Sans JP', sans-serif;
+  font: 500 clamp(1.25rem, 4.6vw, 1.7rem) var(--font-study);
   line-height: 2.3;
   text-align: center;
   margin: 18px 0 6px;
@@ -2712,16 +2745,16 @@ body[data-view="dict"] .intro {
   align-items: baseline;
   gap: 6px;
   padding: 6px 10px;
-  border-radius: 9px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--line-strong);
   background: var(--white);
   color: var(--ink);
-  font: 600 15px 'Noto Sans JP', 'DM Sans', sans-serif;
+  font: 600 15px var(--font-study), var(--font-ui);
   cursor: pointer;
 }
 
 .tr-chip small {
-  font: 500 10px 'DM Sans', sans-serif;
+  font: 500 10px var(--font-ui);
   color: var(--muted);
 }
 
@@ -2834,7 +2867,7 @@ body[data-view="dict"] .intro {
 }
 
 .grammar-list strong {
-  font-family: 'Noto Sans JP', sans-serif;
+  font-family: var(--font-jp);
 }
 
 .grammar-list span {
@@ -2933,8 +2966,8 @@ body[data-view="dict"] .intro {
 
 .kanji-cell {
   aspect-ratio: 1;
-  border-radius: 7px;
-  font: 500 19px 'Noto Sans JP', sans-serif;
+  border-radius: var(--radius-sm);
+  font: 500 19px var(--font-study);
   color: var(--ink);
   background: var(--white);
   cursor: pointer;
@@ -2983,7 +3016,7 @@ body[data-view="dict"] .intro {
 .kanji-big {
   min-width: 64px;
   height: 64px;
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   display: grid;
   place-items: center;
 }
@@ -3034,12 +3067,12 @@ body[data-view="dict"] .intro {
 }
 
 .box-kanji {
-  font: 500 22px 'Noto Sans JP', sans-serif;
+  font: 500 22px var(--font-study);
 }
 
 /* A la altura de las casillas: debajo de cada una va la línea de la respuesta (22px + 4px) */
 .box-kana {
-  font: 500 22px 'Noto Sans JP', sans-serif;
+  font: 500 22px var(--font-study);
   padding-bottom: 36px;
   color: var(--muted);
 }
@@ -3049,10 +3082,10 @@ body[data-view="dict"] .intro {
   min-height: 48px;
   padding: 10px 8px;
   border: 1px solid var(--line-strong);
-  border-radius: 9px;
+  border-radius: var(--radius-sm);
   background: var(--field);
   color: var(--ink);
-  font: 16px 'DM Sans', 'Noto Sans JP', sans-serif;
+  font: 16px var(--font-ui);
   text-align: center;
   outline: none;
 }
@@ -3145,7 +3178,7 @@ body[data-view="dict"] .intro {
   align-items: center;
   padding: 14px;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   background: var(--white);
 }
 
@@ -3203,7 +3236,7 @@ body[data-view="dict"] .intro {
 }
 
 .proof-word {
-  font: 500 34px 'Noto Sans JP', sans-serif;
+  font: 500 34px var(--font-study);
   text-align: center;
   margin: 8px 0 14px;
 }
@@ -3252,10 +3285,10 @@ body[data-view="dict"] .intro {
   min-height: 48px;
   padding: 12px 14px;
   border: 1px solid var(--line-strong);
-  border-radius: 9px;
+  border-radius: var(--radius-sm);
   background: var(--field);
   color: var(--ink);
-  font: 16px 'DM Sans', 'Noto Sans JP', sans-serif;
+  font: 16px var(--font-ui);
   text-align: center;
   outline: none;
 }
@@ -3267,3 +3300,112 @@ body[data-view="dict"] .intro {
 
 /* Ajustes → Avisos de repaso */
 .notify-panel .message:empty { display: none; }
+
+/* =========================================
+   YOMIPOP: FORMA, MARCA Y MOVIMIENTO
+   Lo que el sistema de diseño añade encima de los colores: botones de
+   pegatina (sombra sólida que baja al pulsar), activo en beni, insignias
+   en yuzu y el «pop» del panel de una palabra. Va al final para mandar
+   sobre las reglas de arriba sin tocarlas una a una.
+   ========================================= */
+
+.topbar {
+  background: var(--surface-100);
+}
+
+.brand {
+  gap: 10px;
+}
+
+.brand-logo {
+  display: block;
+  height: 45px;   /* el lockup, 143px de ancho: su mínimo es 140 */
+  width: auto;
+}
+
+@media (max-width: 600px) {
+  .brand-logo { height: 40px; } /* solo Darumi */
+}
+
+.intro h1,
+.section-heading h2 {
+  font-weight: 800;
+  letter-spacing: -.5px;
+}
+
+.tab {
+  font-weight: 700;
+  border-bottom-width: 3px;
+}
+
+.subtab {
+  font-weight: 700;
+}
+
+.subtab.active {
+  background: var(--beni-600);
+  border-color: var(--beni-600);
+  color: var(--on-beni);
+}
+
+.pill {
+  background: var(--yuzu-400);
+  color: var(--on-yuzu);
+}
+
+.button {
+  font-weight: 700;
+  font-size: 13px;
+  box-shadow: 0 4px 0 var(--shadow-ink);
+  transition: background .15s, transform .08s ease-out, box-shadow .08s ease-out;
+}
+
+.button:active:not(:disabled) {
+  transform: translateY(4px);
+  box-shadow: 0 0 0 transparent;
+}
+
+.button-quiet,
+.button-quiet:active:not(:disabled) {
+  box-shadow: none;
+}
+
+.card,
+.word-pop {
+  box-shadow: var(--shadow-pop);
+}
+
+/* Al tocar una palabra, el panel aparece con un pequeño rebote */
+.word-pop {
+  animation: yp-pop .22s ease-out;
+  transform-origin: top center;
+}
+
+@keyframes yp-pop {
+  0% { opacity: 0; transform: scale(.92); }
+  60% { opacity: 1; transform: scale(1.04); }
+  100% { transform: scale(1); }
+}
+
+/* Darumi en los estados vacíos y las celebraciones (darumi.js) */
+.empty-darumi {
+  display: block;
+  margin: 0 auto 10px;
+  --darumi-ring: var(--surface-100);
+}
+
+.panel .empty-darumi,
+.card .empty-darumi {
+  --darumi-ring: var(--surface-200);
+}
+
+.footer-logo {
+  height: 22px;
+  width: auto;
+  vertical-align: middle;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .word-pop { animation: view-in .15s ease; }
+  .button:active:not(:disabled) { transform: none; }
+}

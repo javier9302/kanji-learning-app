@@ -4,6 +4,15 @@ Lo que cambia para quien usa la app, el más reciente primero. Cada cambio añad
 el mismo commit. El detalle técnico está en el mensaje de cada commit (`git show <commit>`).
 Cómo funciona todo hoy: [docs/COMO-FUNCIONA.md](docs/COMO-FUNCIONA.md).
 
+## 2026-11-01
+
+- **La app ahora es Yomipop**: nuevo nombre, logo e icono (Darumi, el daruma con 読), y el diseño
+  de Yomipop en claro y oscuro: fondo washi, bermellón para lo activo, amarillo yuzu para las
+  insignias, esquinas redondeadas, botones que se hunden al pulsarlos y la letra M PLUS Rounded;
+  el japonés de estudio, en Klee One, como escrito a mano. Darumi aparece en las pantallas vacías y
+  celebra cuando terminas algo. El resaltado de las frases sigue imprimiéndose bien en blanco y
+  negro. Si tienes la app instalada, el icono nuevo puede tardar en cambiar (o reinstálala).
+
 ## 2026-10-30
 
 - **Avisos de repaso en el móvil o el ordenador**: en Ajustes → Avisos de repaso, con cuenta, puedes

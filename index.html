@@ -3,18 +3,19 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#173f35" media="(prefers-color-scheme: light)">
-  <meta name="theme-color" content="#101815" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#FFF8EE" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#17121A" media="(prefers-color-scheme: dark)">
   <meta name="color-scheme" content="light dark">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-title" content="Kanji">
-  <title>Kanji Learning App</title>
+  <meta name="apple-mobile-web-app-title" content="Yomipop">
+  <title>Yomipop</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icons/icon-180.png">
   <link rel="stylesheet" href="style.css">
   <script src="https://unpkg.com/wanakana@5.3.1/wanakana.min.js" defer></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js" defer></script>
+  <script src="darumi.js" defer></script>
   <script src="config.js" defer></script>
   <script src="i18n.js" defer></script>
   <script src="vendor/ts-fsrs/index.umd.js" defer></script>
@@ -50,12 +51,14 @@
 </head>
 <body>
   <header class="topbar">
-    <a class="brand" href="#">
-      <span class="brand-mark">漢</span>
-      <span>
-        Kanji Learning
-        <span class="brand-sub">Tu espacio de estudio japonés</span>
-      </span>
+    <a class="brand" href="#" aria-label="Yomipop">
+      <!-- En el móvil, solo Darumi (el lockup necesita 140px); cada uno con su versión oscura -->
+      <picture>
+        <source media="(max-width: 600px) and (prefers-color-scheme: dark)" srcset="icons/brand/yomipop-mark-dark.svg">
+        <source media="(max-width: 600px)" srcset="icons/brand/yomipop-mark.svg">
+        <source media="(prefers-color-scheme: dark)" srcset="icons/brand/yomipop-lockup-dark.svg">
+        <img class="brand-logo" src="icons/brand/yomipop-lockup.svg" alt="Yomipop">
+      </picture>
     </a>
     <form id="dictForm" class="dict-form" role="search" autocomplete="off">
       <input id="dictInput" class="search dict-input" type="search" lang="ja"
@@ -785,6 +788,12 @@
           cada una enlaza a su página y a su autor. Antes de publicarlas, una IA comprueba que sean correctas y
           adecuadas y revisa o escribe sus traducciones; el japonés no se cambia.
         </p>
+        <p class="helper">
+          Las letras M PLUS Rounded 1c, Klee One y Noto Sans JP son de
+          <a href="https://fonts.google.com/" target="_blank" rel="noopener">Google Fonts</a>
+          (<a href="https://openfontlicense.org/" target="_blank" rel="noopener">SIL Open Font License</a>);
+          el logo de Yomipop dibuja sus letras a partir de Noto Sans CJK JP (también OFL).
+        </p>
       </div>
     </section>
   </main>
@@ -900,7 +909,7 @@
   </dialog>
 
   <footer>
-    <span>Kanji Learning App</span>
+    <span>Yomipop</span>
     <span id="footerNote">Datos guardados localmente en este navegador</span>
   </footer>
 </body>

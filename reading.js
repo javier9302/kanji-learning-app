@@ -83,7 +83,7 @@ let placement = null;
 function renderOnboarding() {
   $("readArea").innerHTML = `
     <div class="empty-state">
-      <div class="empty-icon" lang="ja">読</div>
+      ${darumiHTML("appear")}
       <h3>${t("Antes de leer, veamos tu nivel")}</h3>
       <p>${t("Elige el nivel que crees tener y responde {n} preguntas rápidas. Con eso sabremos qué palabras dar por conocidas y qué textos proponerte.", { n: PLACEMENT_SIZE })}</p>
       <div class="inline-form placement-start">
@@ -207,7 +207,7 @@ async function finishPlacement() {
   placement = null;
   $("readArea").innerHTML = `
     <div class="empty-state">
-      <div class="empty-icon">✓</div>
+      ${darumiHTML("celebrate")}
       <h3>${t("Tu nivel de lectura: {level}", { level: readLevel })}</h3>
       <p>${t("Acertaste {right} de {total}.", { right, total: results.length })} ${
         assumed
@@ -474,7 +474,7 @@ async function renderReadHome() {
       ? t("Termina este texto para crear otro. Si es demasiado difícil puedes saltarlo (te quedan {n}).", { n: plural(MAX_SKIPS - skips, "salto", "saltos") })
       : t("Ya saltaste {n} textos seguidos: termina este para poder crear otro.", { n: MAX_SKIPS })}</p>` : `
     <div class="empty-state">
-      <div class="empty-icon" lang="ja">読</div>
+      ${darumiHTML("curious")}
       <h3>${t("No hay textos sin leer a tu nivel")}</h3>
       <p>${t("Crea uno nuevo aquí abajo: elige tipo, tema y longitud, y la IA lo escribe para ti.")}</p>
     </div>`}
@@ -1114,7 +1114,7 @@ function renderReadSummary(summary) {
   const { discarded, looked, hard, easier, mastered, learning } = summary;
   $("readArea").innerHTML = `
     <div class="empty-state">
-      <div class="empty-icon">${discarded ? "…" : "✓"}</div>
+      ${darumiHTML(discarded ? "idle" : "celebrate")}
       <h3>${discarded ? t("Texto saltado") : t("Lectura terminada")}</h3>
       <p>${t("Consultaste {n} de este texto.", { n: plural(looked, "palabra", "palabras") })}
         ${mastered === undefined ? "" : t("En la evaluación: {mastered} y {learning}.", {
@@ -1169,7 +1169,7 @@ function startEvaluation(candidates, summary) {
 function renderEvaluationIntro() {
   $("readArea").innerHTML = `
     <div class="empty-state">
-      <div class="empty-icon" lang="ja">試</div>
+      ${darumiHTML("curious")}
       <h3>${t("Lectura terminada. ¿Las conocías de verdad?")}</h3>
       <p>${t("Hay {n} sin confirmar. Una evaluación rápida comprueba cuáles dominas ya.", {
         n: plural(evaluation.queue.length, "palabra", "palabras") })}</p>

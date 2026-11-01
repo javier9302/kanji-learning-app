@@ -18,6 +18,28 @@ mismo commit que cambie cualquiera de estas reglas. Los cambios, con fecha, est�
 | **Cuenta** (opcional) | Sincronización con Supabase, plan gratuito (10 textos de IA al día) o premium (30). |
 | **admin.html** | Aprobar textos de la comunidad, revisar palabras, traducciones y frases compartidas, cambiar planes y ver el progreso de cada estudiante (pestaña Progreso). |
 
+## Aspecto: el sistema de diseño Yomipop
+
+La app se llama **Yomipop** y sigue su sistema de diseño (artefacto «Yomipop» de Claude). Colores,
+radios y sombra son variables de `:root` en `style.css` con los nombres de sus tokens
+(`--surface-100`, `--beni-600`, `--yuzu-400`, `--matcha-600`…, con su versión oscura); los nombres
+antiguos de la app (`--primary`, `--green`, `--paper`…) apuntan a ellos. Letra de interfaz M PLUS
+Rounded 1c; japonés de estudio (kanji de las tarjetas, el lector, la palabra de una ficha) Klee One,
+y Noto Sans JP para el japonés pequeño de la interfaz. Botones con sombra sólida que baja al
+pulsarlos, activo en beni, insignias en yuzu, el panel de una palabra aparece con un rebote.
+Logos y Darumi en `icons/brand/` (copiados del sistema; no se editan) y los iconos de la app,
+generados desde `yomipop-app-icon.svg`.
+
+**Darumi** (`darumi.js`, el componente `<yomi-darumi>` del sistema, con `darumiHTML` en `app.js`)
+ocupa el sitio del icono en los estados vacíos y al terminar: `curious` cuando no hay nada que
+hacer (sin textos, sin frases, sin kanjis), `celebrate` unos segundos al terminar una sesión, un
+texto, una prueba o lo de Hoy, `goal-done` al completar un nivel en Demostrar, `oops` si no se
+supera la prueba de Escribir, `sleep` mientras se espera un paso corto y `idle` en el resto.
+Tocarlo hace `pop`.
+
+El resaltado de las frases sigue sin fondos rellenos (subrayados y bordes), porque se imprime en
+blanco y negro, aunque Yomipop marque con fondo yuzu las palabras guardadas.
+
 ## Listas y archivos de datos
 
 | Archivo | Contenido | Origen | ¿Se edita a mano? |

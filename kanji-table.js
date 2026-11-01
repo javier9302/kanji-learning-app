@@ -99,7 +99,7 @@ async function renderKanjiTable() {
   if (!isPremium()) {
     area.innerHTML = `
       <div class="empty-state">
-        <div class="empty-icon" lang="ja">漢</div>
+        ${darumiHTML("idle")}
         <h3>${t("La tabla de kanjis es parte del plan premium")}</h3>
         <p>${t("Verás todos los kanjis por nivel, cuáles dominas por las palabras que conoces, qué lecturas te faltan y qué palabras te las enseñan.")}</p>
         <p class="helper">${sync.user ? t("Para activarlo, pide el plan premium al administrador.") : t("Inicia sesión con una cuenta premium para verlo.")}</p>

@@ -94,7 +94,7 @@ async function renderTranslate() {
     if (!sentence) {
       area.innerHTML = `
         <div class="empty-state">
-          <div class="empty-icon" lang="ja">訳</div>
+          ${darumiHTML("curious")}
           <h3>${t("Todavía no hay frases para traducir")}</h3>
           <p>${t("Las frases salen de los textos que has leído o guardado (los que tienen traducción). Lee un texto y vuelve.")}</p>
           <button class="button button-primary" type="button" data-go="read">${t("Ir a Leer")}</button>
@@ -449,7 +449,7 @@ function endTranslateSession() {
   translateTally = null;
   $("translateArea").innerHTML = `
     <div class="empty-state">
-      <div class="empty-icon">✓</div>
+      ${darumiHTML("celebrate")}
       <h3>${t("Tanda terminada")}</h3>
       <p>${session.done
         ? t("Has traducido {n} · nota media {average} de 100.", { n: plural(session.done, "frase", "frases"), average })

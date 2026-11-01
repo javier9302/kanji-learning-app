@@ -478,7 +478,7 @@ async function renderStudyHome() {
   const news = Math.min(fresh.length, maxNewCards());
   area.innerHTML = `
     <div class="empty-state">
-      <div class="empty-icon" lang="ja">学</div>
+      ${darumiHTML("idle")}
       <h3>${plural(due.length, "repaso pendiente", "repasos pendientes")} · ${plural(news, "nuevo", "nuevos")}</h3>
       <p>${due.length || news
         ? t("Pulsa “Iniciar repaso” para empezar. Primero salen los repasos pendientes y después, como mucho, {n} de tu nivel ({level}).", {
@@ -644,7 +644,7 @@ function endSession() {
 
   $("studyArea").innerHTML = `
     <div class="empty-state">
-      <div class="empty-icon">✓</div>
+      ${darumiHTML("celebrate")}
       <h3>${t("Sesión terminada")}</h3>
       <p>${total
         ? t("Has repasado {n} · {percent} % a la primera.", {
@@ -990,7 +990,7 @@ function showWaiting(waitMs) {
   const minutes = Math.max(1, Math.ceil(waitMs / 60000));
   $("studyArea").innerHTML = `
     <div class="empty-state">
-      <div class="empty-icon">⏳</div>
+      ${darumiHTML("sleep")}
       <h3>${t("Vuelven dentro de {n} min", { n: minutes })}</h3>
       <p>${t("{n} que acabas de aprender o fallar vuelven cuando pase ese tiempo, para que el repaso valga. Puedes esperar aquí o terminar: saldrán en Repasar a su hora.",
         { n: plural(session.queue.length, "palabra", "palabras") })}</p>
@@ -1312,7 +1312,7 @@ async function finishWritingTest(test) {
   draw = null;
   $("drawArea").innerHTML = `
     <div class="empty-state">
-      <div class="empty-icon">${result.passed ? "✓" : "…"}</div>
+      ${darumiHTML(result.passed ? "celebrate" : "oops")}
       <h3>${result.passed ? t("Prueba de {level} aprobada", { level: test.level }) : t("Prueba de {level} no superada", { level: test.level })}</h3>
       <p>${t("Escribiste bien {good} de {total} (hacían falta {pass}).", { good: result.good.length, total: result.total, pass: config.pass })}
         ${result.passed ? t("Ya no te saldrán kanjis nuevos de {level}; solo alguno, de vez en cuando, para repasar.", { level: test.level })
@@ -1339,7 +1339,7 @@ async function nextDraw() {
     draw = null;
     $("drawArea").innerHTML = `
       <div class="empty-state">
-        <div class="empty-icon" lang="ja">書</div>
+        ${darumiHTML("curious")}
         <h3>${t("No hay kanjis para escribir")}</h3>
         <p>${t("Prueba otro nivel o el modo automático.")}</p>
       </div>`;

@@ -288,7 +288,7 @@ function renderDictionary() {
   if (!text) {
     $("dictResults").innerHTML = `
       <div class="empty-state">
-        <div class="empty-icon" lang="ja">辞</div>
+        ${darumiHTML("idle")}
         <h3>${t("Busca una palabra")}</h3>
         <p>${t("Escribe en japonés (漢字, かな), en romaji (kado) o su significado en español o inglés.")}</p>
       </div>`;

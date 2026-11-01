@@ -9,7 +9,7 @@
      versión nueva de la app no lo borra.
    ========================================= */
 
-const CACHE = "kanji-learning-v26";
+const CACHE = "kanji-learning-v27";
 /* Súbelo SOLO si cambian los archivos de vendor/: obliga a descargarlos otra vez */
 const LASTING = "kanji-lasting-v1";
 const SHELL = [
@@ -49,6 +49,11 @@ const SHELL = [
   "capture.js",
   "notify.js",
   "app.js",
+  "darumi.js",
+  "icons/brand/yomipop-lockup.svg",
+  "icons/brand/yomipop-lockup-dark.svg",
+  "icons/brand/yomipop-mark.svg",
+  "icons/brand/yomipop-mark-dark.svg",
   "manifest.webmanifest",
   "icons/icon.svg",
   "icons/icon-192.png",
@@ -138,7 +143,7 @@ self.addEventListener("fetch", (event) => {
 self.addEventListener("push", (event) => {
   let data = {};
   try { data = event.data?.json() || {}; } catch { data = { title: event.data?.text() }; }
-  event.waitUntil(self.registration.showNotification(data.title || "Kanji", {
+  event.waitUntil(self.registration.showNotification(data.title || "Yomipop", {
     body: data.body || "", icon: "icons/icon-192.png", badge: "icons/icon-192.png",
     tag: "due", renotify: true, data: { url: data.url || "./" }
   }));

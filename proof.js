@@ -118,7 +118,7 @@ function renderProof() {
 function renderProofNothing() {
   $("proofArea").innerHTML = `
     <div class="empty-state">
-      <div class="empty-icon" lang="ja">証</div>
+      ${darumiHTML("curious")}
       <h3>${t("No hay kanjis que demostrar ahora")}</h3>
       <p>${t("Se demuestran los kanjis que ya has visto en tus palabras. Lee textos y repasa palabras, y los nuevos saldrán aquí.")}</p>
       <button class="button button-primary" type="button" data-go="today">${t("Volver a Hoy")}</button>
@@ -144,7 +144,7 @@ async function renderProofEnd() {
   const failed = proof.questions.filter((question, i) => !proof.results[i]?.ok);
   $("proofArea").innerHTML = `
     <div class="empty-state">
-      <div class="empty-icon">${row?.complete ? "★" : "✓"}</div>
+      ${darumiHTML(row?.complete ? "goal-done" : "celebrate")}
       <h3>${row?.complete ? t("¡{level} completo!", { level: proof.level }) : t("Prueba terminada")}</h3>
       <p>${t("Has demostrado {good} de {total}.", { good, total: proof.questions.length })}
         ${row ? t("En {level} llevas {proven} de {all} kanjis demostrados.", { level: proof.level, proven: row.proven, all: row.total }) : ""}</p>

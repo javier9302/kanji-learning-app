@@ -1,4 +1,4 @@
-# Kanji Learning App
+# Kanji Learning App (Yomipop)
 
 Web app para estudiar japonés (kanjis, vocabulario, lectura y traducción). HTML/CSS/JS sin
 framework ni compilación: se publica tal cual en GitHub Pages. Interfaz en español e inglés.
@@ -17,7 +17,7 @@ Funciona sin cuenta (todo en IndexedDB); con cuenta sincroniza con Supabase.
 Scripts clásicos (no módulos) que comparten variables globales. El orden de carga de
 `index.html` importa:
 
-`config.js` → `i18n.js` → `vendor/ts-fsrs` → `bank/*.js` → `study-config.js` → `learning-core.js`
+`darumi.js` → `config.js` → `i18n.js` → `vendor/ts-fsrs` → `bank/*.js` → `study-config.js` → `learning-core.js`
 → `ja-core.js` → `sentences-core.js` → `capture-core.js` → `kanji-core.js` → `ranking-core.js` → `story-core.js` → `translate-core.js` → `texts.js` → `reading.js`
 → `reading-stats.js` → `reading-sync.js` → `study.js` → `sentences.js` → `translate.js`
 → `progress.js` → `kanji-table.js` → `proof.js` → `today.js` → `dictionary.js` → `capture.js` → `notify.js` → `app.js` (`progress-core.js` y `grammar-core.js` van justo
@@ -106,8 +106,10 @@ con la tarjeta FSRS en `record.fsrs` (y, en los kanjis, lo acertado de cada lect
 - Textos de la interfaz: se escriben en español y se traducen con `t("…")`. La clave es el texto
   en español y la traducción inglesa se añade a `EN` en `i18n.js`. El HTML fijo se traduce solo si
   su texto está en `EN`.
-- Los colores se definen como variables en `:root` de `style.css`, con su versión para modo
-  oscuro. Nada de fondos rellenos en el resaltado de frases: el usuario imprime en blanco y negro.
+- Diseño: sistema **Yomipop** (artefacto de Claude; nombre de la app, logos y Darumi en
+  `icons/brand/`, `<yomi-darumi>` en `darumi.js`, copia de su `bundle.js`; estados vacíos con
+  `darumiHTML`). Los colores se definen como variables en `:root` de `style.css` con los nombres
+  de sus tokens, con su versión para modo oscuro. Nada de fondos rellenos en el resaltado de frases: el usuario imprime en blanco y negro.
 - Escapa siempre con `escapeHTML` lo que se inserte en HTML.
 - Preferencias nuevas: valor por defecto en `prefs` (`app.js`). Si sustituyen a otra, migra la
   antigua al cargar.

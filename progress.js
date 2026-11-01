@@ -405,7 +405,7 @@ function historyHTML() {
 function lockedHTML() {
   return `
     <div class="empty-state">
-      <div class="empty-icon" lang="ja">析</div>
+      ${darumiHTML("idle")}
       <h3>${t("El análisis de tu progreso es parte del plan premium")}</h3>
       <p>${t("Verás cuántas palabras y kanjis de cada nivel JLPT has demostrado, tu nivel estimado en vocabulario, kanjis y lectura, y cómo avanzas semana a semana.")}</p>
       <p class="helper">${sync.user
