@@ -341,7 +341,7 @@ function showWordChip(index) {
 
 function renderTranslateResult() {
   const { sentence, answer, result } = translating;
-  const [icon, label, cls] = VERDICTS()[result.verdict];
+  const [, label, cls] = VERDICTS()[result.verdict];
   const origin = {
     unknown: t("No la sabías: esta es la traducción."),
     self: t("Corregida por ti."),
@@ -359,8 +359,8 @@ function renderTranslateResult() {
       <div class="card-sentence answered" lang="ja">${translateLineHTML(sentence, { reveal: true })}</div>
       <p id="trGloss" class="helper sent-gloss" aria-live="polite"></p>
       <div id="trResult" aria-live="polite">
-        <p class="tr-verdict tr-${cls}"><span aria-hidden="true">${icon}</span> ${label}${
-          result.source === "ai" ? ` · <span class="tr-score">${t("{score} de 100", { score: result.score })}</span>` : ""}</p>
+        <p class="verdict verdict-${cls}">${verdictInnerHTML(cls, `${escapeHTML(label)}${
+          result.source === "ai" ? ` · <span class="tr-score">${t("{score} de 100", { score: result.score })}</span>` : ""}`)}</p>
         ${origin ? `<p class="helper tr-origin">${origin}</p>` : ""}
         ${result.feedback ? `<p class="tr-feedback">${escapeHTML(result.feedback)}</p>` : ""}
         <dl class="tr-compare">

@@ -628,8 +628,25 @@ function answerHTML(card, pick = null) {
       `${escapeHTML(k.c)} ${escapeHTML(gloss(k, 2))}`).join(" · ")}</p>` : ""}
     ${own ? `<div class="card-sentence answered" lang="ja">${sentenceLineHTML(own.sentence, { target: own.target, reveal: true })}</div>
       ${sentenceCreditHTML(own.sentence)}` : ""}
+    ${alsoInHTML(entry)}
     ${"speechSynthesis" in window
       ? `<button id="speakBtn" class="button button-quiet speak-btn" type="button">🔊 ${t("Escuchar")}</button>` : ""}`;
+}
+
+/* Dónde más sale cada kanji de la palabra (kanji-core.js, sección 6), con su
+   lectura encima: 来年 -> 来 › 来る 来週 未来 · 年 › 年 今年 */
+function alsoInHTML(entry) {
+  const rows = [...new Set(entry.kanji)].map((c) => [c, kanjiAlsoIn(c, BANK.kanji.get(c)?.words || [], entry, {
+    known: (id) => userWords.has(id), rank: (id) => BANK.frequency[id]
+  })]).filter(([, words]) => words.length);
+  if (!rows.length) return "";
+  return `<div class="also-in">
+    <p class="also-title">${t("También sale en")}</p>
+    <ul>${rows.map(([c, words]) => `<li>
+      <span class="also-kanji" lang="ja">${escapeHTML(c)}</span><span class="also-arrow" aria-hidden="true">›</span>
+      ${words.map((word) => `<ruby class="also-word" lang="ja">${escapeHTML(word.w)}<rt>${escapeHTML(word.r)}</rt></ruby>`).join("")}
+    </li>`).join("")}</ul>
+  </div>`;
 }
 
 function endSession() {
@@ -755,8 +772,7 @@ function showCard() {
 
   /* Tras responder: acertada -> valorar; fallada -> se registra ya y solo queda seguir */
   async function finish(correct, message) {
-    feedback.textContent = message;
-    feedback.className = `message ${correct ? "correct" : "incorrect"}`;
+    showVerdict(feedback, correct ? "correct" : "incorrect", message);
     if (pick) sentencePracticed(pick, card, correct);
     if (correct) return reveal(PASSED, "good");
     await gradeCard(card, "again");
@@ -1029,7 +1045,9 @@ function bindShortcuts() {
 function extraOutcome(card, rating, now = new Date()) {
   if (card.group !== "extra" || rating === "again" || card.failed || !card.rec) return null;
   const next = nextCard(card.rec, rating, now);
-  return new Date(next.due) > new Date(fsrsCard(card.rec, now).due) ? { next } : { keep: true };
+  // Por días, como se repasa: comparar milisegundos haría que la misma respuesta
+  // «alejara» la palabra o no según el instante exacto en que se pulsa
+  return isoDate(new Date(next.due)) > isoDate(new Date(fsrsCard(card.rec, now).due)) ? { next } : { keep: true };
 }
 
 /* Leer cuenta como repaso (reglas en learning-core.js, sección 3). Aplica a una

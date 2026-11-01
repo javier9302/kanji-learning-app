@@ -149,6 +149,26 @@ function darumiHTML(state = "idle", size = 160) {
     ${state === "celebrate" ? `data-calm="${DARUMI_CALM_MS}"` : ""} interactive aria-hidden="true"></yomi-darumi>`;
 }
 
+/* Correcto o no, que se note: Darumi (celebra o se cae y se levanta), un icono
+   y el texto grande, en verde matcha o en rojo, nunca solo por el color.
+   kind: correct | partial | incorrect. Sustituye el contenido y la clase de `el`. */
+const VERDICT_LOOK = {
+  correct: ["celebrate", "✓"],
+  partial: ["curious", "≈"],
+  incorrect: ["oops", "✗"]
+};
+
+function verdictInnerHTML(kind, text) {
+  const [state, icon] = VERDICT_LOOK[kind] || VERDICT_LOOK.incorrect;
+  return `${darumiHTML(state, 64)}<span class="verdict-icon" aria-hidden="true">${icon}</span>
+    <span class="verdict-text">${text}</span>`;
+}
+
+function showVerdict(el, kind, message) {
+  el.className = `verdict verdict-${kind} ${kind}`; // «correct» suelto: lo miran las pruebas de humo
+  el.innerHTML = verdictInnerHTML(kind, escapeHTML(message));
+}
+
 if (typeof MutationObserver !== "undefined") {
   new MutationObserver((changes) => {
     for (const change of changes) for (const node of change.addedNodes) {

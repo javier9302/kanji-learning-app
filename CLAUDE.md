@@ -31,7 +31,9 @@ después de `learning-core.js`)
 - **`study.js`**: Repasar (repaso espaciado con FSRS, modos «Escribir la lectura» / «Tarjetas»,
   presentación «Palabra sola» / «En una frase»), Escribir kanjis (también con FSRS: tarjeta propia
   `writeFsrs` por kanji; qué sale y cómo se valora en `learning-core.js`) y Agregar palabra.
-  Los números ajustables están en `study-config.js`.
+  Los números ajustables están en `study-config.js`. Al responder: veredicto con Darumi
+  (`showVerdict` en `app.js`) y «También sale en», otras palabras de cada kanji (`kanjiAlsoIn`,
+  sección 6 de `kanji-core.js`).
 - **`sentences.js` / `sentences-core.js`**: frases de ejemplo (de los textos del usuario y de
   `bank/sentences/<nivel>.json`). La única regla de validez es `validateSentence`; la elección
   de frase, `chooseSentence` / `chooseKanjiSentence`.

@@ -6,6 +6,14 @@ Cómo funciona todo hoy: [docs/COMO-FUNCIONA.md](docs/COMO-FUNCIONA.md).
 
 ## 2026-11-01
 
+- **Se nota si has acertado**: al responder en Repasar, Demostrar y Traducir, el resultado sale en
+  grande, con ✓ en verde y Darumi celebrando o con ✗ en rojo y Darumi cayéndose y levantándose.
+- **«También sale en»**: al responder una palabra, bien o mal, cada uno de sus kanjis enseña otras
+  palabras que lo llevan, con su lectura (来年 → 来: 来る, 来月, 来週 · 年: 年, 今年, 去年); primero
+  las que ya estudias.
+- Arreglado: en la práctica extra, «Difícil» a veces decía que alejaba la palabra cuando no
+  cambiaba nada (dependía del milisegundo en que se pulsaba).
+
 - **La app ahora es Yomipop**: nuevo nombre, logo e icono (Darumi, el daruma con 読), y el diseño
   de Yomipop en claro y oscuro: fondo washi, bermellón para lo activo, amarillo yuzu para las
   insignias, esquinas redondeadas, botones que se hunden al pulsarlos y la letra M PLUS Rounded;

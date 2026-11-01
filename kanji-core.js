@@ -4,7 +4,8 @@
    estudiante: un kanji se aprende en contexto, no suelto. Sin navegador ni
    datos del usuario alrededor, para poder probarlo con Node. Se carga después
    de sentences-core.js; lo usan kanji-table.js, study.js (una casilla por
-   kanji al escribir la lectura) y tools/build-kanji.mjs.
+   kanji al escribir la lectura, y dónde más sale cada kanji al responder) y
+   tools/build-kanji.mjs.
 
    Cada kanji tiene sus lecturas RELEVANTES: las que aparecen en palabras del
    banco (bank/kanji-info.js, con cuántas palabras usa cada una). Las raras
@@ -335,11 +336,44 @@ function gradeProof(question, answer, normalize = (text) => kcHiragana(String(te
   return { meaningOk, readingOk, ok: meaningOk && readingOk };
 }
 
+/* =========================================
+   6. DÓNDE MÁS SALE UN KANJI
+   -----------------------------------------
+   Al responder una palabra en Repasar, bien o mal, cada kanji enseña otras
+   palabras que lo llevan: 来年 -> 来 en 来る, 来週, 未来; 年 en 年, 今年.
+   Así el kanji se ve en contexto y no solo dentro de la palabra preguntada.
+   ========================================= */
+
+/* Otras palabras con el kanji c.
+     words   [{ id, w, r }]: las palabras del banco que lo llevan
+     exclude la palabra preguntada (por id y por escritura: 日本 en sus dos lecturas no cuenta)
+     known(id)  si es de sus palabras: van primero, porque ya las reconoce
+     rank(id)   puesto en la lista de frecuencia (sin puesto, al final)
+   Primero las suyas, luego las más frecuentes y, a igualdad, las más cortas.
+   Sin repetir escritura. Devuelve hasta `limit` palabras. */
+function kanjiAlsoIn(c, words, exclude, { known = () => false, rank = () => Infinity, limit = 3 } = {}) {
+  const seen = new Set([exclude.w]);
+  const score = (word) => [known(word.id) ? 0 : 1, rank(word.id) ?? Infinity, [...word.w].length];
+  const before = (a, b) => {
+    const [x, y] = [score(a), score(b)];
+    for (let i = 0; i < x.length; i++) if (x[i] !== y[i]) return x[i] - y[i];
+    return a.w.localeCompare(b.w);
+  };
+  const out = [];
+  for (const word of words.filter((item) => item.id !== exclude.id && item.w.includes(c)).sort(before)) {
+    if (seen.has(word.w)) continue;
+    seen.add(word.w);
+    out.push(word);
+    if (out.length >= limit) break;
+  }
+  return out;
+}
+
 /* Para tools/ y las pruebas (Node); en el navegador son globales */
 if (typeof module !== "undefined") {
   module.exports = {
     KC_LEVELS, KC_STATES, KC_FREQUENCY_BANDS, normalizeKanjiReading, frequencyWeight, relevantReadings,
     wordSounds, wordKanjiReadings, kanjiStates, kanjiGroup, kanjiGroups, readingBoxes, gradeBoxes, addReadingResult,
-    proofLevels, nextProofLevel, buildProof, gradeProof
+    proofLevels, nextProofLevel, buildProof, gradeProof, kanjiAlsoIn
   };
 }

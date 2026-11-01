@@ -161,3 +161,21 @@ test("buildProof y gradeProof: significado entre 4 y cómo suena en una palabra 
   assert.equal(K.gradeProof(questions[0], { choice: "nombre", typed: "な" }).ok, false);
   assert.equal(K.gradeProof(questions[0], { choice: "nombre", typed: "" }).readingOk, false);
 });
+
+test("kanjiAlsoIn: 来年 enseña 来 en otras palabras; primero las suyas, luego las frecuentes", () => {
+  const W = (w, r) => ({ id: `${w}|${r}`, w, r });
+  const words = [W("来年", "らいねん"), W("未来", "みらい"), W("来る", "くる"), W("来週", "らいしゅう"),
+    W("来日", "らいにち"), W("来月", "らいげつ")];
+  const rank = { "来る|くる": 50, "来週|らいしゅう": 900, "未来|みらい": 1200, "来月|らいげつ": 1500 };
+  const known = new Set(["未来|みらい"]);
+  const out = K.kanjiAlsoIn("来", words, words[0], { known: (id) => known.has(id), rank: (id) => rank[id] });
+  // 未来 primero (la conoce), luego por frecuencia; 来日 (sin puesto) no cabe; nunca la propia 来年
+  assert.deepEqual(out.map((word) => word.w), ["未来", "来る", "来週"]);
+});
+
+test("kanjiAlsoIn: sin repetir escritura ni la de la palabra preguntada; el kanji solo también vale", () => {
+  const W = (w, r) => ({ id: `${w}|${r}`, w, r });
+  const words = [W("日本", "にほん"), W("日本", "にっぽん"), W("日", "ひ"), W("毎日", "まいにち"), W("毎日", "まいび")];
+  const out = K.kanjiAlsoIn("日", words, words[0], { limit: 5 });
+  assert.deepEqual(out.map((word) => word.w), ["日", "毎日"]); // 日本 (otra lectura) no; 毎日 una vez
+});

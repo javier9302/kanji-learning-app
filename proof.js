@@ -104,7 +104,8 @@ function renderProof() {
   }
   const result = proof.results[proof.results.length - 1];
   area.innerHTML = `<div class="card proof-card">${head}
-    <p class="message ${result.ok ? "correct" : "incorrect"}">${result.ok ? t("¡Demostrado!") : t("Este todavía no.")}</p>
+    <p class="verdict verdict-${result.ok ? "correct" : "incorrect"}">${verdictInnerHTML(result.ok ? "correct" : "incorrect",
+      escapeHTML(result.ok ? t("¡Demostrado!") : t("Este todavía no.")))}</p>
     <ul class="proof-answers">
       <li class="${result.meaningOk ? "read-good" : "read-again"}">${t("Significado")}: <strong>${escapeHTML(question.meaning)}</strong></li>
       <li class="${result.readingOk ? "read-good" : "read-again"}">${t("En {word} ({reading}) suena", { word: question.word.w, reading: question.word.r })}

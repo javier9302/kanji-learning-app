@@ -246,6 +246,14 @@ export default async function extra({ page, step, check }) {
     }));
     check(after.ok && after.ruby === "がっこう" && after.stats.join() === "1", JSON.stringify(after));
     await shot(page, "frase-respuesta");
+    // Que se note: Darumi celebra en el veredicto, y cada kanji enseña otras palabras con él
+    const look = await page.evaluate(() => ({
+      darumi: $("feedback").querySelector("yomi-darumi")?.getAttribute("state"),
+      also: [...document.querySelectorAll(".also-in li")].map((li) => li.querySelector(".also-kanji").textContent +
+        [...li.querySelectorAll(".also-word")].map((word) => word.firstChild.textContent).join(","))
+    }));
+    check(look.darumi === "celebrate" && look.also.some((row) => row.startsWith("学") && row.length > 1) &&
+      !look.also.some((row) => row.slice(1).split(",").includes("学校")), JSON.stringify(look)); // nunca la propia palabra
     await page.evaluate(() => document.querySelector('[data-rate="good"]').click());
     await page.waitForFunction(() => userWords.get("学校|がっこう")?.studied, { timeout: 5000 });
   });
@@ -266,6 +274,10 @@ export default async function extra({ page, step, check }) {
     check(await page.evaluate(() => document.querySelector(".sent-target")?.textContent === "友達"), "no salió 友達 en una frase");
     await answer("ともたち");
     check(await page.evaluate(() => $("feedback").classList.contains("incorrect") && userWords.get("友達|ともだち").incorrectCount === 1), "el fallo no se registró");
+    // Al fallar también: Darumi se cae y se levanta, y salen las otras palabras de sus kanjis
+    const miss = await page.evaluate(() => ({ darumi: $("feedback").querySelector("yomi-darumi")?.getAttribute("state"),
+      text: $("feedback").textContent.trim(), also: document.querySelectorAll(".also-in li").length }));
+    check(miss.darumi === "oops" && miss.text.includes("✗") && miss.also > 0, JSON.stringify(miss));
   });
 
   await step("en una frase: respuesta en katakana y con espacios", async () => {
@@ -1276,7 +1288,8 @@ export default async function extra({ page, step, check }) {
       showCard();
       $("revealBtn").click();
       document.querySelector('[data-rate="hard"]').click();
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      // Guardar la valoración es asíncrono: se espera a la pantalla de espera (hasta 5 s), no un tiempo fijo
+      for (let i = 0; i < 50 && !$("waitEndBtn"); i++) await new Promise((resolve) => setTimeout(resolve, 100));
       const waiting = !!$("waitEndBtn") && !document.querySelector("[data-rate]");
       const dueNow = isDue(userWords.get(entry.id));
       $("waitEndBtn")?.click();

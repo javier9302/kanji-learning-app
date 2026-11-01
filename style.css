@@ -3409,3 +3409,115 @@ body[data-view="dict"] .intro {
   .word-pop { animation: view-in .15s ease; }
   .button:active:not(:disabled) { transform: none; }
 }
+
+/* Veredicto de una respuesta (Repasar, Demostrar, Traducir): Darumi, icono y
+   texto grande. Verde matcha si está bien, rojo si no y yuzu si es «en parte»;
+   el icono y la palabra lo dicen también sin color. */
+.verdict {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  width: fit-content;
+  max-width: 100%;
+  margin: 14px auto 6px;
+  padding: 8px 18px 8px 10px;
+  border: 2px solid var(--verdict-fg);
+  border-radius: var(--radius-md);
+  background: var(--verdict-bg);
+  color: var(--verdict-fg);
+  font: 800 20px/1.3 var(--font-ui);
+  text-align: left;
+}
+
+.verdict .empty-darumi {
+  flex: none;
+  margin: 0;
+  --darumi-ring: var(--verdict-bg);
+}
+
+.verdict-icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-full);
+  background: var(--verdict-fg);
+  color: var(--verdict-bg);  /* el icono, del color del fondo sobre un círculo del color del texto */
+  font-size: 17px;
+}
+
+.verdict-correct { --verdict-bg: var(--matcha-100); --verdict-fg: var(--matcha-ink); }
+.verdict-incorrect { --verdict-bg: var(--wrong-bg); --verdict-fg: var(--danger); }
+.verdict-partial { --verdict-bg: var(--yuzu-100); --verdict-fg: var(--hard-ink); }
+
+.verdict .tr-score {
+  font-weight: 700;
+  font-size: 15px;
+}
+
+@media (max-width: 600px) {
+  .verdict { font-size: 18px; gap: 10px; }
+}
+
+/* Los avisos sueltos (no veredictos), algo más grandes que antes */
+.message.correct,
+.message.incorrect {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+/* Dónde más sale cada kanji de la palabra respondida */
+.also-in {
+  margin: 14px auto 4px;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  max-width: 460px;
+  text-align: left;
+}
+
+.also-title {
+  margin: 0 0 6px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.also-in ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.also-in li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 4px 12px;
+}
+
+.also-kanji {
+  font: 600 22px/1 var(--font-study);
+  color: var(--beni-600);
+}
+
+.also-arrow {
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.also-word {
+  font: 600 18px var(--font-study);
+  color: var(--ink);
+}
+
+.also-word rt {
+  font: 600 10px var(--font-jp);
+  color: var(--muted);
+}

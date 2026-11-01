@@ -31,7 +31,8 @@ Logos y Darumi en `icons/brand/` (copiados del sistema; no se editan) y los icon
 generados desde `yomipop-app-icon.svg`.
 
 **Darumi** (`darumi.js`, el componente `<yomi-darumi>` del sistema, con `darumiHTML` en `app.js`)
-ocupa el sitio del icono en los estados vacíos y al terminar: `curious` cuando no hay nada que
+ocupa el sitio del icono en los estados vacíos, en el veredicto de cada respuesta (celebra o se
+cae y se levanta; apartado 4) y al terminar: `curious` cuando no hay nada que
 hacer (sin textos, sin frases, sin kanjis), `celebrate` unos segundos al terminar una sesión, un
 texto, una prueba o lo de Hoy, `goal-done` al completar un nivel en Demostrar, `oops` si no se
 supera la prueba de Escribir, `sleep` mientras se espera un paso corto y `idle` en el resto.
@@ -194,6 +195,16 @@ palabras que ya conoce o está aprendiendo. En «Palabras y kanjis» se alternan
 - Las respuestas aceptan katakana (se convierte a hiragana), ignoran los espacios y el rōmaji se
   convierte a kana al escribir (WanaKana). Otra lectura válida de la misma palabra (にほん /
   にっぽん) avisa, pero no cuenta como fallo.
+- **Al responder**, el veredicto va en grande y con Darumi: verde matcha con ✓ y Darumi celebrando
+  si está bien; rojo con ✗ y Darumi cayéndose y levantándose si no (`showVerdict` en `app.js`).
+  Igual en Demostrar y en Traducir («En parte», en amarillo con ≈ y Darumi curioso).
+- **También sale en**: con la respuesta de una palabra (bien o mal), cada kanji enseña hasta 3
+  palabras más que lo llevan, con su lectura encima (来年 → 来 › 来る 来月 来週; 年 › 年 今年 去年).
+  Primero las que ya son de sus palabras, después las más frecuentes y, a igualdad, las más
+  cortas; nunca la palabra preguntada ni otra lectura de la misma escritura (`kanjiAlsoIn`,
+  sección 6 de `kanji-core.js`). Salen del banco de todos los niveles que estén cargados.
+- En la práctica extra, «sin cambios» se decide por días: una respuesta aleja la palabra solo si
+  su nuevo día de repaso es posterior al que ya tenía.
 - Una palabra se da por **dominada** con 3 aciertos seguidos en días distintos o un intervalo de 21 días o más.
 
 ### 5. Frases de ejemplo (`sentences.js` + `sentences-core.js`)
