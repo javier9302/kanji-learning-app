@@ -5,6 +5,7 @@
    matcha). Primero sus tokens; debajo, los nombres que ya usaba la app
    apuntan a ellos, así el resto del archivo no cambia de nombres. */
 :root {
+  color-scheme: light;
   --surface-100: #FFF8EE;   /* washi: fondo de página */
   --surface-200: #FFFFFF;   /* tarjetas y paneles */
   --surface-300: #F5EBDD;   /* campos y chips en reposo */
@@ -76,8 +77,12 @@
   --kanji-unknown-line: #CDB9A2;
 }
 
+/* Tema oscuro: el del sistema, salvo que en Ajustes → Apariencia se elija
+   «Claro» (data-theme="light" en <html>), o elegido a mano («Oscuro»). Los dos
+   bloques llevan las mismas variables (una prueba lo comprueba). */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
     --surface-100: #17121A;
     --surface-200: #221C26;
     --surface-300: #2E2633;
@@ -119,6 +124,50 @@
     --kanji-mastered-ink: #17121A;
     --kanji-unknown-line: #56495C;
   }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --surface-100: #17121A;
+  --surface-200: #221C26;
+  --surface-300: #2E2633;
+  --ink-yp: #F7EEE4;
+  --ink-muted: #B8ABB5;
+  --beni-500: #FF6A4C;
+  --beni-600: #FF7A5C;
+  --on-beni: #17121A;
+  --on-yuzu: #17121A;
+  --yuzu-100: #4A3A12;
+  --matcha-600: #5FD3A0;
+  --matcha-100: #173A2B;
+  --matcha-ink: #9BE8C4;
+  --danger: #FF8A80;
+  --focus-ring: #FFC23D;
+  --shadow-ink: rgba(0, 0, 0, .45);
+
+  --label: #CABDC6;
+  --green-dark: #FF9A80;
+  --primary-hover: #FF8F75;
+  --mint: #3A2226;
+  --line: #3F3545;
+  --line-strong: #56495C;
+  --gold: #FFC23D;
+  --wrong-bg: #3D2020;
+  --hard-ink: #FFD77A;
+  --shadow: 0 4px 0 rgba(0, 0, 0, .3);
+
+  --heat-0: #2E2633;
+  --heat-1: #5A2A22;
+  --heat-2: #94402D;
+  --heat-3: #D9603F;
+  --heat-4: #FF7A5C;
+  --state-new: #3F3545;
+  --state-learning: #D9603F;
+  --state-mature: #FF7A5C;
+  --state-prek: #FFC23D;
+
+  --kanji-mastered-ink: #17121A;
+  --kanji-unknown-line: #56495C;
 }
 
 * {
@@ -3316,6 +3365,18 @@ body[data-view="dict"] .intro {
 .brand {
   gap: 10px;
 }
+
+.logo-dark {
+  display: none;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .logo-light { display: none; }
+  :root:not([data-theme="light"]) .logo-dark { display: block; }
+}
+
+:root[data-theme="dark"] .logo-light { display: none; }
+:root[data-theme="dark"] .logo-dark { display: block; }
 
 .brand-logo {
   display: block;

@@ -6,6 +6,9 @@ Cómo funciona todo hoy: [docs/COMO-FUNCIONA.md](docs/COMO-FUNCIONA.md).
 
 ## 2026-11-01
 
+- **Elige claro u oscuro**: en Ajustes → Apariencia, el tema puede ser automático (como tu
+  dispositivo), claro u oscuro, aunque el dispositivo esté en el otro modo.
+
 - **Se nota si has acertado**: al responder en Repasar, Demostrar y Traducir, el resultado sale en
   grande, con ✓ en verde y Darumi celebrando o con ✗ en rojo y Darumi cayéndose y levantándose (`b475202`).
 - **«También sale en»**: al responder una palabra, bien o mal, cada uno de sus kanjis enseña otras

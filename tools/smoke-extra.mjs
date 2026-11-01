@@ -1360,6 +1360,20 @@ export default async function extra({ page, step, check }) {
     check(sw.includes('addEventListener("push"') && sw.includes('"notify.js"'), "sw.js sin el aviso");
   });
 
+  await step("Apariencia: el tema elegido manda sobre el del sistema y se guarda", async () => {
+    const look = async (theme) => page.evaluate((value) => {
+      $("themeSelect").value = value;
+      $("themeSelect").dispatchEvent(new Event("change"));
+      const logo = [...document.querySelectorAll(".topbar picture")].find((pic) => getComputedStyle(pic).display !== "none");
+      return { bg: getComputedStyle(document.body).backgroundColor, logo: logo?.className,
+        saved: JSON.parse(localStorage.getItem("kanji-prefs")).theme };
+    }, theme);
+    const dark = await look("dark"), light = await look("light"), auto = await look("auto");
+    check(dark.bg === "rgb(23, 18, 26)" && dark.logo === "logo-dark" && dark.saved === "dark", JSON.stringify(dark));
+    check(light.bg === "rgb(255, 248, 238)" && light.logo === "logo-light", JSON.stringify(light));
+    check(auto.saved === "auto" && !(await page.evaluate(() => document.documentElement.dataset.theme)), JSON.stringify(auto));
+  });
+
   await step("web: una palabra que llega por enlace se agrega con su frase, que manda en el repaso", async () => {
     const home = page.url().split(/[?#]/)[0];
     const open = async (params) => {

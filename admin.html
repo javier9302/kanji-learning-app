@@ -8,6 +8,13 @@
   <title>Administración · Yomipop</title>
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="style.css">
+  <!-- El tema elegido (Ajustes → Apariencia) se aplica antes de pintar, sin parpadeo -->
+  <script>
+    try {
+      const theme = JSON.parse(localStorage.getItem("kanji-prefs") || "{}").theme;
+      if (theme === "light" || theme === "dark") document.documentElement.dataset.theme = theme;
+    } catch (error) { /* sin localStorage: el del sistema */ }
+  </script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js" defer></script>
   <script src="config.js" defer></script>
   <script src="study-config.js" defer></script>
@@ -17,10 +24,8 @@
 <body>
   <header class="topbar">
     <a class="brand" href="./">
-      <picture>
-        <source media="(prefers-color-scheme: dark)" srcset="icons/brand/yomipop-mark-dark.svg">
-        <img class="brand-logo" src="icons/brand/yomipop-mark.svg" alt="Yomipop">
-      </picture>
+      <img class="brand-logo logo-light" src="icons/brand/yomipop-mark.svg" alt="Yomipop">
+      <img class="brand-logo logo-dark" src="icons/brand/yomipop-mark-dark.svg" alt="Yomipop">
       <span>
         Yomipop
         <span class="brand-sub">Administración</span>

@@ -118,7 +118,8 @@ const prefs = loadLocal("kanji-prefs", {
   furigana: "unknown", // furigana al leer: unknown | all | none
   kanjiGroup: "jlpt",  // Mis palabras → Kanjis: jlpt | grade | frequency
   kanjiBoxes: true,    // Repasar, «Palabra sola»: una casilla por kanji al escribir la lectura
-  notifyMin: 10        // Avisos de repaso: avisar cuando se junten tantas palabras (notify.js)
+  notifyMin: 10,       // Avisos de repaso: avisar cuando se junten tantas palabras (notify.js)
+  theme: "auto"        // Apariencia: auto (la del dispositivo) | light | dark
 });
 // Presentación al escribir la lectura: word (palabra sola) | sentence (en una frase).
 // Sustituye al antiguo ajuste "Repasar con frases": quien lo tenía activado empieza en "sentence".
@@ -1048,8 +1049,34 @@ function bindInstall() {
   renderInstall();
 }
 
+/* Tema claro u oscuro. "auto" quita el atributo y manda el del sistema. El
+   script del <head> de index.html hace lo mismo al cargar, antes de pintar.
+   La barra del navegador (theme-color) sigue al tema elegido. */
+function applyTheme(theme = prefs.theme) {
+  const root = document.documentElement;
+  if (theme === "light" || theme === "dark") root.dataset.theme = theme;
+  else delete root.dataset.theme;
+  for (const meta of document.querySelectorAll('meta[name="theme-color"]')) {
+    const own = meta.dataset.media ??= meta.getAttribute("media") || "";
+    if (theme === "light" || theme === "dark") {
+      meta.removeAttribute("media");
+      meta.content = theme === "dark" ? "#17121A" : "#FFF8EE";
+    } else {
+      meta.setAttribute("media", own);
+      meta.content = own.includes("dark") ? "#17121A" : "#FFF8EE";
+    }
+  }
+}
+
 function bindSettings() {
   bindInstall();
+  applyTheme();
+  $("themeSelect").value = ["light", "dark"].includes(prefs.theme) ? prefs.theme : "auto";
+  $("themeSelect").addEventListener("change", () => {
+    prefs.theme = $("themeSelect").value;
+    saveLocal("kanji-prefs", prefs);
+    applyTheme();
+  });
   for (const id of ["studyType", "studyMode", "studyPresentation", "studyCount"]) {
     if ([...$(id).options].some((o) => o.value === String(prefs[id]))) $(id).value = prefs[id];
     $(id).addEventListener("change", () => {

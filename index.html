@@ -13,6 +13,13 @@
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icons/icon-180.png">
   <link rel="stylesheet" href="style.css">
+  <!-- El tema elegido (Ajustes → Apariencia) se aplica antes de pintar, sin parpadeo -->
+  <script>
+    try {
+      const theme = JSON.parse(localStorage.getItem("kanji-prefs") || "{}").theme;
+      if (theme === "light" || theme === "dark") document.documentElement.dataset.theme = theme;
+    } catch (error) { /* sin localStorage: el del sistema */ }
+  </script>
   <script src="https://unpkg.com/wanakana@5.3.1/wanakana.min.js" defer></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js" defer></script>
   <script src="darumi.js" defer></script>
@@ -53,11 +60,13 @@
   <header class="topbar">
     <a class="brand" href="#" aria-label="Yomipop">
       <!-- En el móvil, solo Darumi (el lockup necesita 140px); cada uno con su versión oscura -->
-      <picture>
-        <source media="(max-width: 600px) and (prefers-color-scheme: dark)" srcset="icons/brand/yomipop-mark-dark.svg">
+      <picture class="logo-light">
         <source media="(max-width: 600px)" srcset="icons/brand/yomipop-mark.svg">
-        <source media="(prefers-color-scheme: dark)" srcset="icons/brand/yomipop-lockup-dark.svg">
         <img class="brand-logo" src="icons/brand/yomipop-lockup.svg" alt="Yomipop">
+      </picture>
+      <picture class="logo-dark">
+        <source media="(max-width: 600px)" srcset="icons/brand/yomipop-mark-dark.svg">
+        <img class="brand-logo" src="icons/brand/yomipop-lockup-dark.svg" alt="Yomipop">
       </picture>
     </a>
     <form id="dictForm" class="dict-form" role="search" autocomplete="off">
@@ -654,6 +663,20 @@
           <button id="notifyOnBtn" class="button button-primary hidden" type="button">Activar avisos</button>
           <button id="notifyTestBtn" class="button button-outline hidden" type="button">Enviar uno de prueba</button>
           <button id="notifyOffBtn" class="button button-outline hidden" type="button">Desactivar</button>
+        </div>
+      </div>
+
+      <div class="panel import-panel">
+        <div>
+          <h3>Apariencia</h3>
+          <p class="helper">Automático sigue el modo claro u oscuro de tu dispositivo.</p>
+        </div>
+        <div class="import-actions">
+          <select id="themeSelect" class="lang-select" aria-label="Tema de color">
+            <option value="auto">Tema: automático</option>
+            <option value="light">Tema: claro</option>
+            <option value="dark">Tema: oscuro</option>
+          </select>
         </div>
       </div>
 

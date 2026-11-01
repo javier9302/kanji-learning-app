@@ -23,7 +23,10 @@ mismo commit que cambie cualquiera de estas reglas. Los cambios, con fecha, est�
 La app se llama **Yomipop** y sigue su sistema de diseño (artefacto «Yomipop» de Claude). Colores,
 radios y sombra son variables de `:root` en `style.css` con los nombres de sus tokens
 (`--surface-100`, `--beni-600`, `--yuzu-400`, `--matcha-600`…, con su versión oscura); los nombres
-antiguos de la app (`--primary`, `--green`, `--paper`…) apuntan a ellos. Letra de interfaz M PLUS
+antiguos de la app (`--primary`, `--green`, `--paper`…) apuntan a ellos. **Tema** (Ajustes →
+Apariencia, `prefs.theme`): automático (el modo claro u oscuro del dispositivo), claro u oscuro. El
+elegido va en `data-theme` de `<html>`, se aplica antes de pintar (script del `<head>`) y también
+cambia el logo y el color de la barra del navegador. Letra de interfaz M PLUS
 Rounded 1c; japonés de estudio (kanji de las tarjetas, el lector, la palabra de una ficha) Klee One,
 y Noto Sans JP para el japonés pequeño de la interfaz. Botones con sombra sólida que baja al
 pulsarlos, activo en beni, insignias en yuzu, el panel de una palabra aparece con un rebote.

@@ -111,7 +111,8 @@ con la tarjeta FSRS en `record.fsrs` (y, en los kanjis, lo acertado de cada lect
 - Diseño: sistema **Yomipop** (artefacto de Claude; nombre de la app, logos y Darumi en
   `icons/brand/`, `<yomi-darumi>` en `darumi.js`, copia de su `bundle.js`; estados vacíos con
   `darumiHTML`). Los colores se definen como variables en `:root` de `style.css` con los nombres
-  de sus tokens, con su versión para modo oscuro. Nada de fondos rellenos en el resaltado de frases: el usuario imprime en blanco y negro.
+  de sus tokens, con su versión para modo oscuro (dos bloques iguales: el del sistema y
+  `data-theme="dark"`, el tema elegido en Ajustes → Apariencia, `prefs.theme`; una prueba los compara). Nada de fondos rellenos en el resaltado de frases: el usuario imprime en blanco y negro.
 - Escapa siempre con `escapeHTML` lo que se inserte en HTML.
 - Preferencias nuevas: valor por defecto en `prefs` (`app.js`). Si sustituyen a otra, migra la
   antigua al cargar.
