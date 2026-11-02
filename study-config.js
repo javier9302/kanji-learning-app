@@ -103,8 +103,12 @@ const STUDY_CONFIG = {
        soonDays     también las que tocarán en estos días
        recentTexts  últimos textos que se miran para variar tipo, tema y personajes y para no repetir frases
        similarity   una frase se repite si coincide en sentenceMatch (trigramas); el texto se pide
-                    otra vez si repite maxRepeated frases o una parte maxShare de ellas */
-  stories: { max: 8, soonDays: 2, recentTexts: 10, similarity: { sentenceMatch: 0.7, maxShare: 0.25, maxRepeated: 3 } },
+                    otra vez si repite maxRepeated frases o una parte maxShare de ellas
+       scenes       escenas gastadas (overusedScenes): en los últimos `recent` textos leídos, lo que
+                    sale en minTexts o más, como mucho `max`; no cuentan las palabras entre las
+                    commonRank más frecuentes */
+  stories: { max: 8, soonDays: 2, recentTexts: 10, similarity: { sentenceMatch: 0.7, maxShare: 0.25, maxRepeated: 3 },
+    scenes: { recent: 10, minTexts: 3, max: 8, commonRank: 300 } },
 
   /* Leer cuenta como repaso (learning-core.js, sección 3): una palabra que toca
      repasar y sale en un texto terminado.

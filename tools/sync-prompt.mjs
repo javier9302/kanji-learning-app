@@ -6,6 +6,8 @@
      SENTENCE_PROMPT_VERSION) -> generate-sentences
    - Revisión de Tatoeba: tools/lib/tatoeba.js (renderReviewPrompt y
      REVIEW_PROMPT_VERSION) -> review-sentences
+   - Limpieza de las listas de palabras: story-core.js (bloque «listas-limpias»)
+     -> generate-text
    Después hay que volver a desplegar la función que haya cambiado. La prueba
    test/prompt.test.mjs falla si alguna copia no coincide. */
 import fs from "node:fs";
@@ -20,7 +22,7 @@ export const PROMPTS = {
   text: {
     source: "reading.js", target: "supabase/functions/generate-text/index.ts",
     fn: "renderPromptSeg", version: "SEGMENTED_VERSION",
-    untyped: "grammar = [] })", typed: "grammar = [] }: any)"
+    untyped: "scenes = [] })", typed: "scenes = [] }: any)"
   },
   sentences: {
     source: "tools/lib/sentence-batches.js", target: "supabase/functions/generate-sentences/index.ts",
@@ -33,6 +35,21 @@ export const PROMPTS = {
     untyped: "{ batch, items })", typed: "{ batch, items }: any)"
   }
 };
+
+/* Bloques de código que una función lleva copiados tal cual, entre dos marcas
+   «// <nombre>» y «// </nombre>» (la limpieza de las listas de palabras) */
+export const REGIONS = [
+  { name: "listas-limpias", source: "story-core.js", target: "supabase/functions/generate-text/index.ts" }
+];
+
+/* Lo que hay entre las marcas de un bloque (sin ellas) */
+export function regionParts(source, name) {
+  const open = `// <${name}>`, close = `// </${name}>`;
+  const start = source.indexOf(open), end = source.indexOf(close);
+  if (start < 0 || end < start) throw new Error(`No se encontraron las marcas ${open}`);
+  const from = source.indexOf("\n", start) + 1;
+  return { from, to: end, body: source.slice(from, end) };
+}
 
 /* La función entera y el valor de su constante de versión en un archivo */
 export function promptParts(source, { fn, version } = PROMPTS.text) {
@@ -55,6 +72,14 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     target = target.replace(new RegExp(`const ${prompt.version} = "[^"]+";`), `const ${prompt.version} = "${client.version}";`);
     fs.writeFileSync(file, target);
     console.log(`${prompt.fn} copiado a ${prompt.target} (versión ${client.version}).`);
+  }
+  for (const region of REGIONS) {
+    const body = regionParts(fs.readFileSync(path.join(ROOT, region.source), "utf8"), region.name).body;
+    const file = path.join(ROOT, region.target);
+    const target = fs.readFileSync(file, "utf8");
+    const current = regionParts(target, region.name);
+    fs.writeFileSync(file, target.slice(0, current.from) + body + target.slice(current.to));
+    console.log(`«${region.name}» copiado a ${region.target}.`);
   }
   console.log("Vuelve a desplegar las funciones que hayan cambiado.");
 }

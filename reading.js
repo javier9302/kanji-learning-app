@@ -313,14 +313,17 @@ const dueWordIds = (day = today()) => new Set([...userWords.values()]
   .filter((rec) => rec.studied && rec.nextReview && rec.nextReview <= day).map((rec) => rec.id));
 
 /* Las que se le piden a la IA en el texto: las que tocan o tocarán pronto y, por
-   cada kanji que toca, una palabra que conoce con él (story-core.js) */
-function currentStoryTargets(label) {
+   cada kanji que toca, una palabra que conoce con él (story-core.js).
+   clean(rec) -> { label } o { drop }: se eligen entre las palabras ya limpias,
+   así una que no vale (下手|したて) no ocupa el sitio de otra que toca */
+function currentStoryTargets(clean) {
   const day = today();
   const known = (rec) => rec.status === "mastered" || rec.studied && rec.canReadKanji;
-  const words = [...userWords.values()].map((rec) => ({ id: rec.id, label: label(rec.lemma, rec.reading), nextReview: rec.nextReview, studied: rec.studied }));
+  const usable = [...userWords.values()].map((rec) => [rec, clean(rec)]).filter(([, word]) => !word.drop);
+  const words = usable.map(([rec, word]) => ({ id: rec.id, label: word.label, nextReview: rec.nextReview, studied: rec.studied }));
   const kanjiDue = [...userKanji.values()].filter((rec) => rec.studied && rec.nextReview <= day).map((rec) => {
-    const word = [...userWords.values()].find((w) => known(w) && (w.lemma || "").includes(rec.id));
-    return { c: rec.id, nextReview: rec.nextReview, word: word && { id: word.id, label: label(word.lemma, word.reading) } };
+    const found = usable.find(([w]) => known(w) && (w.lemma || "").includes(rec.id));
+    return { c: rec.id, nextReview: rec.nextReview, word: found && { id: found[0].id, label: found[1].label } };
   });
   return storyTargets(words, kanjiDue, day, STUDY_CONFIG.stories);
 }
@@ -332,20 +335,82 @@ function currentVariety() {
   return nextVariety(history, TEXT_TYPES.map(([value]) => value), TEXT_TOPICS.map(([value]) => value), CAST_SIZE);
 }
 
-/* Datos del usuario que necesita el prompt. Con niveles altos la lista entera
-   no cabe: se manda el nivel dado por conocido y solo lo confirmado por el usuario. */
-function promptParams({ type, topic, length, cast, avoid = [] }) {
-  // Cómo se le escribe cada palabra a la IA:
-  // - si casi siempre va en kana, en kana (有る -> ある), para que no use su kanji;
-  // - si la escritura tiene varias lecturas, con la que el estudiante conoce: 角(かど).
-  const label = (lemma, reading) => {
-    const senses = BANK.byWriting.get(lemma) || [];
-    if (senses.length && senses.every((word) => word.kana)) return senses[0].r;
-    return senses.length > 1 && reading ? `${lemma}(${reading})` : lemma;
+/* Lo que necesita promptWord (story-core.js, sección 4) para limpiar una
+   palabra: kuromoji (si no se puede cargar, sin él: solo se aplican las reglas
+   que no lo necesitan), si es del banco, si tiene significado y cómo se le
+   escribe a la IA. */
+async function promptTools() {
+  const tokenizer = await loadTokenizer().catch(() => null);
+  const inBank = (lemma, reading) => (BANK.byWriting.get(lemma) || []).some((word) => !reading || word.r === reading);
+  return {
+    tokens: tokenizer && ((text) => tokenizer.tokenize(text).map((token) => ({
+      surface: token.surface_form, pos: token.pos, detail: token.pos_detail_1, base: token.basic_form }))),
+    inBank,
+    // Sin significado solo si se sabe seguro: su ficha propia está vacía, o la escritura es del
+    // banco y esa lectura no (下手|したて). Sin ficha en este dispositivo (palabras leídas en
+    // otro, que llegan solo como progreso) no se puede saber: decide kuromoji.
+    // Sin lectura (venía conjugada: 来て -> 来る) vale la forma de diccionario.
+    hasMeaning: (lemma, reading) => {
+      if (!reading) return true;
+      const id = wordKey(lemma, reading);
+      const own = words.get(id);
+      if (own) return [...(own.meanings || []), ...(own.meaningsEs || [])].length > 0;
+      if (BANK.words.has(id)) return true;
+      const senses = BANK.byWriting.get(lemma);
+      return !senses || senses.some((word) => (word.alt || []).includes(reading));
+    },
+    // Cómo se le escribe cada palabra a la IA:
+    // - si casi siempre va en kana, en kana (有る -> ある; 居る|いる -> いる, no おる);
+    // - un kanji solo con lectura de adjetivo, con su okurigana (堅|かたい -> 堅い);
+    // - si la escritura tiene varias lecturas, con la que el estudiante conoce: 角(かど).
+    label: (lemma, reading) => {
+      const senses = BANK.byWriting.get(lemma) || [];
+      if (senses.length && senses.every((word) => word.kana)) return (senses.find((word) => word.r === reading) || senses[0]).r;
+      let writing = lemma;
+      if (tokenizer && [...lemma].length === 1 && /い$/.test(reading || senses[0]?.r || "")) {
+        const pieces = tokenizer.tokenize(`${lemma}い`);
+        if (pieces.length === 1 && pieces[0].pos === "形容詞") writing = `${lemma}い`;
+      }
+      return senses.length > 1 && reading ? `${writing}(${reading})` : writing;
+    }
   };
+}
+
+/* Escenas gastadas (story-core.js, sección 5): sustantivos de cosas, sitios o
+   animales que salen en muchos de los últimos textos. No cuentan los muy
+   comunes, los de posición (中, 上, 前: dicen dónde, no qué) ni los que se le
+   piden usar (repasar o aprendiendo). */
+async function currentScenes(tools, wanted) {
+  const sessions = await getAll("sessions").catch(() => []);
+  const lemmasOf = (id) => texts.find((text) => text.id === id)?.lemmas || null;
+  const place = /^(上|下|中|前|後|後ろ|外|内|横|隣|側|間|奥|周り|近く|向こう|先|辺り)$/;
+  const skip = (key) => {
+    const [writing] = key.split("|");
+    if (wanted.has(writing) || place.test(writing) || (BANK.frequency[key] || Infinity) <= STUDY_CONFIG.stories.scenes.commonRank) return true;
+    if (!tools.tokens) return false;
+    const pieces = tools.tokens(writing);
+    return !(pieces.length === 1 && pieces[0].pos === "名詞" && ["一般", "固有名詞"].includes(pieces[0].detail));
+  };
+  return overusedScenes(sessions, lemmasOf, STUDY_CONFIG.stories.scenes, skip);
+}
+
+/* Datos del usuario que necesita el prompt. Con niveles altos la lista entera
+   no cabe: se manda el nivel dado por conocido y solo lo confirmado por el usuario.
+   Las tres listas pasan por cleanWordLists (sin formas conjugadas, trozos ni
+   grafías raras, y cada palabra en una sola lista). Es asíncrona: espera a
+   kuromoji y a las sesiones de lectura. */
+async function promptParams({ type, topic, length, cast, avoid = [] }) {
+  const tools = await promptTools();
+  const item = (rec) => ({ lemma: rec.lemma, reading: rec.reading, status: rec.status });
   const readingOf = new Map([...userWords.values()].map((w) => [w.lemma, w.reading]));
-  const all = [...new Set([...knownLemmas()].map((lemma) =>
-    label(lemma, readingOf.get(lemma) || BANK.byWriting.get(lemma)?.[0].r)))];
+  const statusOf = new Map([...userWords.values()].map((w) => [w.lemma, w.status]));
+  let known = [...knownLemmas()].map((lemma) =>
+    ({ lemma, reading: readingOf.get(lemma) || BANK.byWriting.get(lemma)?.[0].r, status: statusOf.get(lemma) }));
+  let assumed = [];
+  if (known.length > PROMPT_WORD_LIMIT) {
+    known = [...userWords.values()].filter((w) => KNOWN_STATUS.has(w.status)).map(item).slice(0, PROMPT_WORD_LIMIT);
+    assumed = assumedLevels();
+  }
   // Palabras solo en kana: no se estudian como tarjeta, así que se aprenden
   // leyendo. Van por frecuencia, primero las que menos han salido en sus lecturas.
   const timesSeen = (kana) => userWords.get(wordKey(kana, kana))?.seen || 0;
@@ -354,24 +419,24 @@ function promptParams({ type, topic, length, cast, avoid = [] }) {
     .sort((a, b) => a.seen - b.seen || a.index - b.index)
     .slice(0, STUDY_CONFIG.kanaWordsInPrompt).map((entry) => entry.kana);
 
-  const targets = currentStoryTargets(label);
-  const params = {
+  const lists = cleanWordLists({
+    targets: currentStoryTargets((rec) => promptWord(item(rec), tools))
+      .map((target) => ({ id: target.id, ...item(userWords.get(target.id)) })),
+    // Las que está aprendiendo; primero las que buscó en el diccionario, para que salgan en sus textos
+    learning: promptLearning([...userWords.values()], 60).map(item),
+    known
+  }, tools);
+  const wanted = new Set([...lists.targets.map((target) => target.label), ...lists.learning]);
+  return {
     level: meta.reading.level, type, topic, length, prefer,
     // Las que toca repasar: la IA las usa y luego se comprueba cuáles salieron (storyTargets)
-    targets: targets.map((target) => target.label), targetIds: targets.map((target) => target.id),
+    targets: lists.targets.map((target) => target.label), targetIds: lists.targets.map((target) => target.id),
     cast: cast ?? currentVariety().cast, avoid,
-    known: all, assumedLevels: [],
-    // Las que está aprendiendo; primero las que buscó en el diccionario, para que salgan en sus textos
-    learning: promptLearning([...userWords.values()], 60).map((w) => label(w.lemma, w.reading)),
+    known: lists.known, assumedLevels: assumed, learning: lists.learning,
     // Las estructuras de su hoja de ruta (premium): { ja, en }
-    grammar: roadmapGrammar()
+    grammar: roadmapGrammar(),
+    scenes: await currentScenes(tools, wanted)
   };
-  if (all.length > PROMPT_WORD_LIMIT) {
-    params.known = [...userWords.values()].filter((w) => KNOWN_STATUS.has(w.status))
-      .map((w) => label(w.lemma, w.reading)).slice(0, PROMPT_WORD_LIMIT);
-    params.assumedLevels = assumedLevels();
-  }
-  return params;
 }
 
 /* Versión del prompt: súbela cada vez que cambies su texto. Se guarda con cada
@@ -382,13 +447,13 @@ const PROMPT_VERSION = "2026-10-08.1";
    la función generate-text conserva su copia para versiones anteriores de la app. */
 
 /* Versión del prompt segmentado (formato nuevo): súbela al cambiar su texto. */
-const SEGMENTED_VERSION = "2026-10-27.1-seg";
+const SEGMENTED_VERSION = "2026-11-02.1-seg";
 
 /* Prompt del formato nuevo: la IA solo escribe el texto separado en unidades
    con "|" y la traducción de cada oración. Lemas, lecturas y significados los
    pone la app (kuromoji + diccionario). IMPORTANTE: la función generate-text
    lleva una copia de esta función; si cambias una, cambia la otra. */
-function renderPromptSeg({ level, type, topic, length, known, assumedLevels, learning, prefer = [], targets = [], cast = [], avoid = [], grammar = [] }) {
+function renderPromptSeg({ level, type, topic, length, known, assumedLevels, learning, prefer = [], targets = [], cast = [], avoid = [], grammar = [], scenes = [] }) {
   // Personajes que se repiten de un texto a otro, cada uno con su carácter; la app elige dos (story-core.js, nextVariety)
   const CAST = [
     "ゆき (Yuki), a cheerful university student who always wants to try something new",
@@ -424,7 +489,7 @@ TEXT
 - Natural Japanese with grammar no harder than JLPT ${level}.
 - Make it enjoyable to read: one concrete situation with a small story arc, a surprise or a touch of humour. Sentences must connect with each other; never a list of unrelated textbook sentences.
 ${characters.length ? `- Characters (write their names exactly as given, in kana, and keep their personalities): ${characters.join("; ")}.\n` : ""}- Avoid overused textbook situations and phrases such as お腹が空きました, お弁当を食べました, 公園に行きました, 友達と遊びました, 天気がいいです, or ending with 楽しかったです. Find a fresher situation and vary how sentences begin.
-${avoid.length ? `- These sentences already appeared in the learner's recent texts: do not repeat them or close variants of them: ${avoid.join(" / ")}\n` : ""}- About 90% of the content words must be known words. Introduce at most ${fresh} new words (about 10%), useful ones at level ${level}.
+${avoid.length ? `- These sentences already appeared in the learner's recent texts: do not repeat them or close variants of them: ${avoid.join(" / ")}\n` : ""}${scenes.length ? `- Places, animals and objects the learner's recent texts keep coming back to: do not build this story around them: ${scenes.join("、")}\n` : ""}- About 90% of the content words must be known words. Introduce at most ${fresh} new words (about 10%), useful ones at level ${level}.
 - Write with the kanji a normal text of this level would use. Words that Japanese normally writes in kana must stay in kana (ある, いる, する, できる, ください, たくさん, かわいい, おいしい): never use rare kanji spellings such as 有る, 居る, 為る, 出来る, 下さい or 沢山.
 
 OUTPUT
@@ -447,7 +512,7 @@ SEGMENTATION RULES
 }
 
 // La app pide siempre el formato nuevo; el antiguo se sigue aceptando al pegar
-const buildPrompt = (options) => renderPromptSeg(promptParams(options));
+const buildPrompt = async (options) => renderPromptSeg(await promptParams(options));
 
 /* Sin cuenta, todo vive solo en este navegador, y algunos (Safari en iPhone,
    sobre todo) borran los datos de una web que no se usa durante semanas. Se
@@ -586,10 +651,10 @@ async function renderReadHome() {
     return topic ? { type: $("promptType").value, topic, length: Number($("promptLength").value) } : null;
   };
 
-  $("promptBuildBtn").onclick = () => {
+  $("promptBuildBtn").onclick = async () => {
     const options = chosen();
     if (!options) return;
-    $("promptOutput").value = buildPrompt(options);
+    $("promptOutput").value = await buildPrompt(options);
     $("promptStep").classList.remove("hidden");
     $("promptCopied").textContent = "";
   };
@@ -704,7 +769,7 @@ async function generateAndOpen(options) {
   say(t("La IA está escribiendo tu texto… puede tardar un minuto."));
 
   try {
-    let params = { ...promptParams(options), requestId: newId(), format: 2 };
+    let params = { ...(await promptParams(options)), requestId: newId(), format: 2 };
     const ask = async () => {
       while (true) {
         try {

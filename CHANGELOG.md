@@ -6,8 +6,11 @@ Cómo funciona todo hoy: [docs/COMO-FUNCIONA.md](docs/COMO-FUNCIONA.md).
 
 ## 2026-11-02
 
-- Interno (en preparación, aún sin usar): limpieza de las listas de palabras que se mandan a la IA al
-  crear un texto (formas conjugadas, trozos, grafías antiguas) y detección de escenas repetidas.
+- **Textos de la IA con mejores palabras**: al crear un texto, la lista de palabras que se le manda
+  a la IA ya no lleva formas conjugadas (いました, 来て), trozos (のは, んだ) ni grafías raras
+  (有る, 御飯, 落す): van como ある, ご飯, 落とす. Una palabra mal guardada (下手 leída したて) ya no
+  sale en todos los textos como «por repasar». Y la IA deja de girar siempre alrededor de lo mismo
+  (猫, 公園, 花…): lo que sale en muchos de tus últimos textos se le pide que no sea el centro.
 
 - **Compartir Yomipop**: un botón al pie de cada pantalla y en Ajustes abre el menú de compartir
   del móvil (WhatsApp, Mensajes…) con el enlace de la app; en el ordenador, lo copia. El enlace se

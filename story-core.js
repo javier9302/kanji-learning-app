@@ -133,6 +133,7 @@ function textSimilarity(sentences, recent, config) {
    cada palabra pasa por promptWord y las tres listas por cleanWordLists.
    ========================================= */
 
+// <listas-limpias> (generate-text lleva una copia: node tools/sync-prompt.mjs)
 /* Grafías que el banco no marca pero que se escriben así (御飯 -> ご飯) */
 const SC_SPELLING = [[/御飯/g, "ご飯"], [/^綺麗$/, "きれい"]];
 
@@ -223,6 +224,7 @@ function cleanWordLists(lists, tools = {}) {
   }
   return out;
 }
+// </listas-limpias>
 
 /* =========================================
    5. ESCENAS GASTADAS

@@ -93,6 +93,12 @@ después de `learning-core.js`)
   `review-sentences`, `notify-due`). No hay CLI de
   Supabase: el usuario ejecuta `schema.sql` y despliega las funciones desde el panel (pasos en
   `SETUP.md`). `admin.html` / `admin.js`: moderación.
+- **Listas del prompt de los textos**: `promptParams` (`reading.js`, asíncrona: espera a kuromoji)
+  pasa las palabras por `cleanWordLists` (`story-core.js`, sección 4) y añade las escenas gastadas
+  (`overusedScenes`, sección 5). El bloque «listas-limpias» de `story-core.js` va copiado en
+  `generate-text` (lo copia `tools/sync-prompt.mjs`). Plan del chat del 2026-11-02 con 3 etapas:
+  hecha la 1 (listas limpias); faltan la 2 (no guardar trozos al leer + migración) y la 3 (texto sin
+  «|», segmentado por la app, con comprobación y un reintento).
 - **Prompts con copia en una función**: la fuente de los textos es `reading.js`; la de las frases,
   `tools/lib/sentence-batches.js`, y la de la revisión de Tatoeba, `tools/lib/tatoeba.js`. Tras cambiar uno, `node tools/sync-prompt.mjs` (una prueba falla
   si las copias no coinciden).

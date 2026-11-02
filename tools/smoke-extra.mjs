@@ -872,13 +872,13 @@ export default async function extra({ page, step, check }) {
   });
 
   await step("diccionario: abrir la ficha anota la consulta sin dar la palabra por conocida", async () => {
-    const state = await page.evaluate(() => {
+    const state = await page.evaluate(async () => {
       const rec = userWords.get("水|みず");
       const first = newWordCandidates().list[0];
       return { origin: rec?.origin, status: rec?.status, lookups: rec?.lookups, studied: !!rec?.studied,
         known: knownLemmas().has("水"), covered: isKnownKey("水|みず", knownLemmas()),
         first: first.id, info: first.info,
-        prompt: promptParams({ type: "short story", topic: "food", length: 50 }) };
+        prompt: await promptParams({ type: "short story", topic: "food", length: 50 }) };
     });
     check(state.origin === "diccionario" && state.status === "unknown" && state.lookups === 1 && !state.studied,
       `registro: ${JSON.stringify(state)}`);
@@ -986,7 +986,7 @@ export default async function extra({ page, step, check }) {
       check(grammar.last === "incorrect" && grammar.before.every((state) => state === "seen") &&
         grammar.after.every((state) => state === "understood"), JSON.stringify(grammar));
       // La hoja de ruta: se dibuja, se guarda, sus palabras salen antes en el repaso y sus estructuras van al prompt
-      const roadmap = await page.evaluate(() => {
+      const roadmap = await page.evaluate(async () => {
         const candidates = newWordCandidates().list;
         const planned = candidates.filter((card) => card.info.planned).map((card) => card.id);
         return {
@@ -995,8 +995,8 @@ export default async function extra({ page, step, check }) {
           level: meta.roadmap.level, words: meta.roadmap.words.length, grammar: meta.roadmap.grammar,
           planned: planned.length && planned.every((id) => meta.roadmap.words.includes(id)),
           first: meta.roadmap.words.includes(candidates[0]?.id),
-          prompt: promptParams({ type: "short story", topic: "food", length: 50 }).grammar.map((point) => point.ja),
-          rendered: buildPrompt({ type: "short story", topic: "food", length: 50 }).includes("Grammar the learner is practising")
+          prompt: (await promptParams({ type: "short story", topic: "food", length: 50 })).grammar.map((point) => point.ja),
+          rendered: (await buildPrompt({ type: "short story", topic: "food", length: 50 })).includes("Grammar the learner is practising")
         };
       });
       check(roadmap.panel && roadmap.steps > 0 && roadmap.level && roadmap.words > 0 && roadmap.planned && roadmap.first &&
@@ -1026,11 +1026,11 @@ export default async function extra({ page, step, check }) {
       check(sent.length === 2 && sent[0][0] === "progress_snapshots" && sent[0][2] === "client_updated_at,data,user_id,week" &&
         sent[1].length === 2, JSON.stringify(sent)); // la segunda vez ya no hay nada que subir
       // Premium caducado: vuelve el aviso, y la hoja de ruta ya no toca ni el repaso ni los textos
-      const expired = await page.evaluate(() => {
+      const expired = await page.evaluate(async () => {
         sync.config.plan = { plan: "premium", until: "2020-01-01T00:00:00Z" };
         switchView("analysis");
         return !document.querySelector("#analysisArea .stat-card") && !newWordCandidates().list.some((card) => card.info.planned) &&
-          !promptParams({ type: "short story", topic: "food", length: 50 }).grammar.length;
+          !(await promptParams({ type: "short story", topic: "food", length: 50 })).grammar.length;
       });
       check(expired, "con el premium caducado se ve el análisis o sigue la hoja de ruta");
     } finally {
@@ -1099,8 +1099,8 @@ export default async function extra({ page, step, check }) {
       const rec = userWords.get("学校|がっこう") || blankUserWord("学校", "がっこう");
       applyCard(rec, masteredCard(5, new Date(Date.now() - 6 * DAY_MS)));
       await saveUserWord(rec);
-      const params = promptParams({ type: "dialogue", topic: "food", length: 50 });
-      const prompt = buildPrompt({ type: "dialogue", topic: "food", length: 50 });
+      const params = await promptParams({ type: "dialogue", topic: "food", length: 50 });
+      const prompt = await buildPrompt({ type: "dialogue", topic: "food", length: 50 });
       // Una respuesta que copia las frases del último texto leído se detecta como repetida
       const last = texts.find((text) => text.readAt) || texts[0];
       const copy = JSON.stringify({ sentences: last.data.sentences.map((sentence) => ({ ja: sentence.tokens.map((token) => token.surface).join("|") })) });

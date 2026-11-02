@@ -171,13 +171,13 @@ RULES
 
 // Copia de SEGMENTED_VERSION y renderPromptSeg de reading.js: si cambias una, cambia la otra.
 /* Versión del prompt segmentado (formato nuevo): súbela al cambiar su texto. */
-const SEGMENTED_VERSION = "2026-10-27.1-seg";
+const SEGMENTED_VERSION = "2026-11-02.1-seg";
 
 /* Prompt del formato nuevo: la IA solo escribe el texto separado en unidades
    con "|" y la traducción de cada oración. Lemas, lecturas y significados los
    pone la app (kuromoji + diccionario). IMPORTANTE: la función generate-text
    lleva una copia de esta función; si cambias una, cambia la otra. */
-function renderPromptSeg({ level, type, topic, length, known, assumedLevels, learning, prefer = [], targets = [], cast = [], avoid = [], grammar = [] }: any) {
+function renderPromptSeg({ level, type, topic, length, known, assumedLevels, learning, prefer = [], targets = [], cast = [], avoid = [], grammar = [], scenes = [] }: any) {
   // Personajes que se repiten de un texto a otro, cada uno con su carácter; la app elige dos (story-core.js, nextVariety)
   const CAST = [
     "ゆき (Yuki), a cheerful university student who always wants to try something new",
@@ -213,7 +213,7 @@ TEXT
 - Natural Japanese with grammar no harder than JLPT ${level}.
 - Make it enjoyable to read: one concrete situation with a small story arc, a surprise or a touch of humour. Sentences must connect with each other; never a list of unrelated textbook sentences.
 ${characters.length ? `- Characters (write their names exactly as given, in kana, and keep their personalities): ${characters.join("; ")}.\n` : ""}- Avoid overused textbook situations and phrases such as お腹が空きました, お弁当を食べました, 公園に行きました, 友達と遊びました, 天気がいいです, or ending with 楽しかったです. Find a fresher situation and vary how sentences begin.
-${avoid.length ? `- These sentences already appeared in the learner's recent texts: do not repeat them or close variants of them: ${avoid.join(" / ")}\n` : ""}- About 90% of the content words must be known words. Introduce at most ${fresh} new words (about 10%), useful ones at level ${level}.
+${avoid.length ? `- These sentences already appeared in the learner's recent texts: do not repeat them or close variants of them: ${avoid.join(" / ")}\n` : ""}${scenes.length ? `- Places, animals and objects the learner's recent texts keep coming back to: do not build this story around them: ${scenes.join("、")}\n` : ""}- About 90% of the content words must be known words. Introduce at most ${fresh} new words (about 10%), useful ones at level ${level}.
 - Write with the kanji a normal text of this level would use. Words that Japanese normally writes in kana must stay in kana (ある, いる, する, できる, ください, たくさん, かわいい, おいしい): never use rare kanji spellings such as 有る, 居る, 為る, 出来る, 下さい or 沢山.
 
 OUTPUT
@@ -268,6 +268,99 @@ function checkSegmented(text: string, length: number, lastAttempt: boolean): Che
   return { code: "", problems: [] };
 }
 
+// <listas-limpias>
+/* Grafías que el banco no marca pero que se escriben así (御飯 -> ご飯) */
+const SC_SPELLING = [[/御飯/g, "ご飯"], [/^綺麗$/, "きれい"]];
+
+/* Okurigana antiguo de las listas JLPT -> el de hoy (落す -> 落とす). Revisada a mano
+   entre las palabras del banco con un alias que solo añade kana: las que ya son la
+   forma normal (行う, 話, 受付, 割合, 葉書…) no están. La usa también la migración. */
+const SC_MODERN = {
+  落す: "落とす", 落る: "落ちる", 終る: "終わる", 楽む: "楽しむ", 曲る: "曲がる", 下る: "下がる",
+  浮ぶ: "浮かぶ", 交す: "交わす", 代る: "代わる", 代る代る: "代わる代わる", 付合う: "付き合う",
+  振舞う: "振る舞う", 捕える: "捕らえる", 損う: "損なう", 吊す: "吊るす", 割込む: "割り込む",
+  引下げる: "引き下げる", 引取る: "引き取る", 引受る: "引き受ける", 落着く: "落ち着く",
+  落し物: "落とし物", 人差指: "人差し指", 支払: "支払い", 答: "答え", 祭: "祭り", 釣: "釣り",
+  年寄: "年寄り", 当り: "当たり", 打合せ: "打ち合わせ", 戸締り: "戸締まり", 取締り: "取り締まり",
+  夜更し: "夜更かし", 目覚し: "目覚まし", 目覚しい: "目覚ましい", 情深い: "情け深い",
+  受持ち: "受け持ち", 組合せ: "組み合わせ", 書取: "書き取り", 割算: "割り算", 引算: "引き算",
+  焚火: "焚き火", 仕組: "仕組み", 仕掛: "仕掛け", 箇条書: "箇条書き", 雛祭: "雛祭り",
+  目盛: "目盛り", 月並: "月並み", 軒並: "軒並み", 俄: "俄か", 賭: "賭け", 届: "届け"
+};
+
+const scKanaOnly = (text) => /^[\p{Script=Hiragana}\p{Script=Katakana}ー]+$/u.test(text);
+// Lo que se pega detrás de un verbo o adjetivo al conjugarlo (ました, て, た, な…)
+const scEnding = (token) => token.pos === "助動詞" || token.pos === "助詞" && token.detail === "接続助詞";
+
+/* Una palabra, lista para el prompt, o por qué no va.
+     item   { lemma, reading, status } (o solo la escritura, como texto)
+     tools  { tokens(texto) -> [{ surface, pos, detail, base }] (kuromoji) o null,
+              inBank(lemma, reading) -> si es una palabra del banco (esas ya son forma
+              de diccionario: 嫌い o 曇り no se «desconjugan»),
+              hasMeaning(lemma, reading) -> si el banco o el diccionario propio le dan
+              significado, label(lemma, reading) -> cómo se le escribe a la IA }
+   Sin tokens (la Edge Function no tiene kuromoji) solo se aplican las reglas
+   que no lo necesitan. Devuelve { lemma, reading, label, changed } o { drop: motivo }. */
+function promptWord(item, tools = {}) {
+  const source = typeof item === "string" ? { lemma: item } : item;
+  let lemma = String(source.lemma || "").normalize("NFKC"), reading = source.reading;
+  if (!lemma) return { drop: "vacía" };
+  if ([...lemma].length === 1 && scKanaOnly(lemma)) return { drop: "kana suelta" }; // い
+  const inBank = tools.inBank ? tools.inBank(lemma, reading) : false;
+  const tokens = tools.tokens && !inBank ? tools.tokens(lemma) : null;
+  let changed = "";
+  if (tokens) {
+    const [first, ...rest] = tokens;
+    if (!first) return { drop: "vacía" };
+    // Un trozo: empieza por partícula o auxiliar, o por algo que no va solo y sigue (のは, んだ);
+    // こと o ため solas sí son palabras
+    if (["助詞", "助動詞"].includes(first.pos) || rest.length && first.pos === "名詞" && first.detail === "非自立") return { drop: "trozo" };
+    const base = first.base && first.base !== "*" ? first.base : first.surface;
+    if (rest.length && rest.every(scEnding)) {
+      // Conjugada: 来て -> 来る, いました -> いる, 有名な -> 有名
+      [lemma, reading, changed] = [base, undefined, "conjugada"];
+    } else if (!rest.length && ["動詞", "形容詞"].includes(first.pos) && base !== lemma && !scKanaOnly(lemma)) {
+      // Cortada o en otra forma: 聞こえ -> 聞こえる, 速く -> 速い (en kana no: たち no es たつ)
+      [lemma, reading, changed] = [base, undefined, "forma"];
+    }
+    // Dos kana que nunca estudió y que suenan a verbo: casi siempre un trozo (ける de 続ける)
+    if (!changed && first.pos === "動詞" && scKanaOnly(lemma) && [...lemma].length <= 2 && source.status === "pre_known") {
+      return { drop: "trozo probable" };
+    }
+    if (changed && [...lemma].length === 1 && scKanaOnly(lemma)) return { drop: "kana suelta" };
+  }
+  if (tools.hasMeaning && !tools.hasMeaning(lemma, reading)) return { drop: "sin significado" };
+  let label = tools.label ? tools.label(lemma, reading) : lemma;
+  for (const [pattern, spelling] of SC_SPELLING) label = label.replace(pattern, spelling);
+  label = label.replace(/^[^(]+/, (writing) => SC_MODERN[writing] || writing); // 落す(おとす) -> 落とす(おとす)
+  return { lemma, reading, label, changed };
+}
+
+/* Las tres listas del prompt, limpias y sin repetirse entre ellas: una palabra
+   que toca repasar no va también como «aprendiendo» ni como «conocida», y una
+   que está aprendiendo no va como conocida. Cada lista conserva su orden.
+     lists  { known, learning, targets }: palabras como las recibe promptWord
+            (las de targets pueden traer id: se conserva para comprobar después)
+   Devuelve { known, learning, targets: [{ id, label }], removed: [{ list, word, reason }],
+   changed: [{ list, from, to }] } */
+function cleanWordLists(lists, tools = {}) {
+  const used = new Set();
+  const out = { known: [], learning: [], targets: [], removed: [], changed: [] };
+  for (const list of ["targets", "learning", "known"]) {
+    for (const item of lists[list] || []) {
+      const word = typeof item === "string" ? item : item.label || item.lemma;
+      const result = promptWord(item, tools);
+      if (result.drop) { out.removed.push({ list, word, reason: result.drop }); continue; }
+      if (used.has(result.label)) continue; // ya va en esta lista o en una más importante
+      used.add(result.label);
+      if (result.label !== word) out.changed.push({ list, from: word, to: result.label });
+      out[list].push(list === "targets" ? { id: item.id, label: result.label } : result.label);
+    }
+  }
+  return out;
+}
+// </listas-limpias>
+
 const words = (value: unknown, max: number): string[] =>
   Array.isArray(value)
     ? value.filter((w) => typeof w === "string" && JAPANESE.test(w)).slice(0, max)
@@ -289,15 +382,21 @@ export function readParams(body: any) {
       !LENGTHS.includes(body.length) || typeof body.topic !== "string") return null;
   const topic = body.topic.replace(/[\r\n`{}<>]/g, " ").trim().slice(0, 80);
   if (!topic) return null;
+  // Las listas pasan otra vez por cleanWordLists (copia de story-core.js): aquí no hay
+  // kuromoji ni banco, así que solo se aplican grafías, kana sueltas y que no se repitan
+  // entre listas. Protege también de versiones de la app que aún no las limpiaban.
+  const lists = cleanWordLists({ known: words(body.known, 1500), learning: words(body.learning, 60), targets: words(body.targets, 12) });
   return {
     level: body.level, type: body.type, topic, length: body.length,
     format: body.format === 2 ? 2 : 1, // 2 = texto segmentado con "|" (las versiones antiguas de la app piden el 1)
-    known: words(body.known, 1500),
+    known: lists.known,
     assumedLevels: Array.isArray(body.assumedLevels) ? LEVELS.filter((l) => body.assumedLevels.includes(l)) : [],
-    learning: words(body.learning, 60),
+    learning: lists.learning,
     prefer: words(body.prefer, 80),
     // Las que le toca repasar (la IA las usa), los personajes (índices de CAST) y frases que no debe repetir
-    targets: words(body.targets, 12),
+    targets: lists.targets.map((target: { label: string }) => target.label),
+    // Escenas gastadas en sus últimos textos (overusedScenes): que no sean el centro de la historia
+    scenes: words(body.scenes, 12),
     cast: Array.isArray(body.cast) ? [...new Set(body.cast.filter((i: unknown) => Number.isInteger(i) && (i as number) >= 0 && (i as number) < 8))].slice(0, 3) : [],
     avoid: Array.isArray(body.avoid)
       ? body.avoid.filter((s: unknown) => typeof s === "string" && SENTENCE.test(s)).slice(0, 10) : [],

@@ -293,6 +293,22 @@ palabras que ya conoce o está aprendiendo. En «Palabras y kanjis» se alternan
   conocidas, las que está aprendiendo (primero las buscadas en el diccionario) y 40 palabras en
   kana frecuentes que ha visto poco. Al alumno premium, además, las estructuras de gramática de su
   hoja de ruta, para que el texto las use al menos una vez.
+- **Listas limpias** (`story-core.js`, `promptWord` / `cleanWordLists`): antes de escribir el prompt,
+  cada palabra de las listas «conocidas», «aprendiendo» y «que tocan» se revisa con kuromoji: una
+  forma conjugada pasa a su forma de diccionario (来て → 来る, いました → いる, 有名な → 有名), los
+  trozos no van (のは, んだ, kana sueltas como い, y verbos de dos kana que nunca estudió como ける), ni
+  las palabras sin significado (ficha propia vacía, o escritura del banco con una lectura que no es
+  suya: 下手|したて). Las palabras del banco no se tocan (嫌い, こと). Grafías de hoy: las que casi
+  siempre van en kana (有る → ある, 美味しい → おいしい), 御飯 → ご飯, 綺麗 → きれい y el okurigana
+  antiguo de las listas JLPT (`SC_MODERN`: 落す → 落とす, 終る → 終わる…). Cada palabra va en una
+  sola lista, con este orden: que tocan, aprendiendo, conocidas. Las que tocan se eligen ya entre las
+  limpias, así que una palabra que no vale no ocupa su sitio. La función `generate-text` repite la
+  limpieza que no necesita kuromoji ni el banco (grafías, kana sueltas, listas sin repetir).
+- **Escenas gastadas** (`overusedScenes`; números en `STUDY_CONFIG.stories.scenes`): los sustantivos
+  de cosas, sitios o animales que salen en **3 o más** de los **10** últimos textos leídos (como mucho
+  8) se le piden a la IA como lo que no debe ser el centro de la historia («猫、公園、花…»). No
+  cuentan los muy comunes (entre las 300 palabras más frecuentes), los de posición (中, 上, 前…) ni los
+  que se le piden usar (que tocan o aprendiendo).
 - **Palabras que tocan** (`story-core.js`, `storyTargets`; números en `STUDY_CONFIG.stories`): hasta
   **8**, que la IA tiene que usar: primero las que toca repasar (la más atrasada antes), después las
   que tocarán en 2 días y, si queda sitio, una palabra conocida por cada kanji cuya tarjeta toca.
