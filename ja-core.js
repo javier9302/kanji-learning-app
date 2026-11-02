@@ -11,6 +11,49 @@ const isKana = (value) => /^[぀-ヿー]+$/.test(value);
    versión: la usan app.js, dictionary.js, sentences-core.js y las herramientas. */
 const toHiragana = (text) => String(text ?? "").normalize("NFKC")
   .replace(/[ァ-ヶ]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0x60));
+/* Kana -> rōmaji (Hepburn, como se escribe para aprender): がっこう -> gakkou,
+   きょう -> kyou, しんぶん -> shinbun, コーヒー -> koohii. Para enseñar la lectura a
+   quien todavía no lee kana; no depende de WanaKana (que viene de una red
+   externa y puede no estar). La partícula は/へ se escribe como suena en la
+   lectura de una palabra suelta (はな -> hana); aquí no hay partículas sueltas. */
+const ROMAJI = {
+  あ: "a", い: "i", う: "u", え: "e", お: "o", か: "ka", き: "ki", く: "ku", け: "ke", こ: "ko",
+  が: "ga", ぎ: "gi", ぐ: "gu", げ: "ge", ご: "go", さ: "sa", し: "shi", す: "su", せ: "se", そ: "so",
+  ざ: "za", じ: "ji", ず: "zu", ぜ: "ze", ぞ: "zo", た: "ta", ち: "chi", つ: "tsu", て: "te", と: "to",
+  だ: "da", ぢ: "ji", づ: "zu", で: "de", ど: "do", な: "na", に: "ni", ぬ: "nu", ね: "ne", の: "no",
+  は: "ha", ひ: "hi", ふ: "fu", へ: "he", ほ: "ho", ば: "ba", び: "bi", ぶ: "bu", べ: "be", ぼ: "bo",
+  ぱ: "pa", ぴ: "pi", ぷ: "pu", ぺ: "pe", ぽ: "po", ま: "ma", み: "mi", む: "mu", め: "me", も: "mo",
+  や: "ya", ゆ: "yu", よ: "yo", ら: "ra", り: "ri", る: "ru", れ: "re", ろ: "ro",
+  わ: "wa", ゐ: "i", ゑ: "e", を: "o", ん: "n", ゔ: "vu",
+  ぁ: "a", ぃ: "i", ぅ: "u", ぇ: "e", ぉ: "o", ゃ: "ya", ゅ: "yu", ょ: "yo", ゎ: "wa"
+};
+/* Con ゃゅょ pequeña: きゃ -> kya, しゃ -> sha, ちゃ -> cha, じゃ -> ja */
+const ROMAJI_YOON = { し: "sh", ち: "ch", じ: "j", ぢ: "j" };
+
+function kanaToRomaji(text) {
+  const kana = toHiragana(text);
+  let out = "";
+  for (let i = 0; i < kana.length; i++) {
+    const c = kana[i], next = kana[i + 1];
+    if (c === "っ") { // consonante doble: がっこう -> gakkou, まっちゃ -> matcha
+      const following = kanaToRomaji(kana.slice(i + 1, i + 3))[0] || "";
+      out += following === "c" ? "t" : /[a-z]/.test(following) && !/[aeiou]/.test(following) ? following : "";
+      continue;
+    }
+    if (c === "ー") { out += out.slice(-1); continue; } // vocal larga: コーヒー -> koohii
+    if (next && "ゃゅょ".includes(next) && ROMAJI[c] && c !== "ん") {
+      const vowel = ROMAJI[next].slice(1);
+      out += (ROMAJI_YOON[c] || ROMAJI[c].slice(0, -1) + "y") + vowel;
+      i++;
+      continue;
+    }
+    // ん antes de vocal o y se separa con apóstrofo: きんえん -> kin'en
+    if (c === "ん" && next && /^[aeiouy]/.test(ROMAJI[next] || "")) { out += "n'"; continue; }
+    out += ROMAJI[c] ?? c;
+  }
+  return out;
+}
+
 /* Tipos de unidad que no son vocabulario: no cuentan para la cobertura, no
    hace falta conocerlos ni resolverlos y no se preguntan. La ÚNICA lista: la
    usan la app (texts.js, sentences-core.js, translate-core.js) y las herramientas. */
@@ -196,7 +239,7 @@ const segmentSentence = (tokenizer, text) =>
 /* Para tools/ y las pruebas (Node); en el navegador son globales */
 if (typeof module !== "undefined") {
   module.exports = {
-    isKana, toHiragana, UNCOUNTED_POS, PUNCTUATION, KUROMOJI_POS, PARTICLES, piecePos, isContentPiece, pieceBase, pieceReading,
+    isKana, toHiragana, kanaToRomaji, UNCOUNTED_POS, PUNCTUATION, KUROMOJI_POS, PARTICLES, piecePos, isContentPiece, pieceBase, pieceReading,
     unitOf, analyseUnits, fixReadings, potentialBase, splitSentences, groupPieces, segmentSentence, kanaFormWord, onlyHomophone
   };
 }

@@ -50,8 +50,8 @@ async function todayState() {
 /* Un paso: [título, explicación, botón] */
 function todayStepText(step, state) {
   switch (step.kind) {
-    case "placement": return [t("Haz la evaluación inicial"),
-      t("Unas preguntas para saber tu nivel. Con ella la app sabe qué palabras darte."), t("Empezar")];
+    case "placement": return [t("Empieza aquí"),
+      t("Dinos si empiezas de cero o haz una prueba corta de nivel: así sabremos qué palabras enseñarte."), t("Empezar")];
     case "story": {
       if (step.done) return [t("Texto leído"), t("Leer un texto ha repasado las palabras que tocaban y salían en él."), t("Leer otro")];
       if (state.story.kind === "create") return [t("Lee un texto con tus palabras"),
@@ -82,6 +82,7 @@ async function renderToday() {
   if (document.body.dataset.view !== "today") return;
   const plan = planToday(state, STUDY_CONFIG.today);
   todayLast = state;
+  document.body.classList.toggle("placed", state.placed); // en el móvil, sin portada después de la prueba
   const finished = !plan.next;
   area.innerHTML = `
     <p class="helper">${escapeHTML(t("Hoy llevas {done} de {goal} respuestas en Repasar.", { done: state.answered, goal: state.goal }))}</p>

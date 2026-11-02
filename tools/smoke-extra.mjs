@@ -102,7 +102,7 @@ export default async function extra({ page, step, check }) {
     if (cardKind === "kanji") await BANK.loadReadings();
     const entry = cardKind === "kanji" ? BANK.kanji.get(cardId) : BANK.words.get(cardId);
     const rec = (cardKind === "kanji" ? userKanji : userWords).get(cardId) || null;
-    session = { queue: [{ kind: cardKind, id: cardId, entry, rec, group: "new" }], total: 1, done: 0, firstTry: 0,
+    session = { queue: [{ kind: cardKind, id: cardId, entry, rec, group: "new", taught: true }], total: 1, done: 0, firstTry: 0,
       missed: new Map(), mode: "type", sentences: inSentences() };
     switchView("study");
     document.body.classList.add("studying");
@@ -757,7 +757,7 @@ export default async function extra({ page, step, check }) {
     await shot(page, "depuracion-orden");
     // Una palabra nueva dice por qué sale, con la respuesta (antes contaría la lectura)
     const why = await page.evaluate(() => {
-      const card = newWordCandidates().list[0];
+      const card = { ...newWordCandidates().list[0], taught: true };
       session = { queue: [card], total: 1, done: 0, firstTry: 0, missed: new Map(), mode: "type", sentences: false };
       document.body.classList.add("studying");
       showCard();
@@ -1281,7 +1281,7 @@ export default async function extra({ page, step, check }) {
       const entry = BANK.words.get("会社|かいしゃ");
       const rec = userWords.get(entry.id);
       if (rec) { userWords.delete(entry.id); await putRecords("userWords", [], [entry.id]); }
-      session = { queue: [{ kind: "word", id: entry.id, entry, rec: null, group: "new" }], total: 1, done: 0, firstTry: 0,
+      session = { queue: [{ kind: "word", id: entry.id, entry, rec: null, group: "new", taught: true }], total: 1, done: 0, firstTry: 0,
         missed: new Map(), mode: "flash", sentences: false };
       document.body.classList.add("studying");
       switchView("study");
@@ -1358,6 +1358,43 @@ export default async function extra({ page, step, check }) {
     check(panel.vapid === "4,1,2,255,239", panel.vapid); // base64 de URL (- y _) a bytes
     const sw = await page.evaluate(() => fetch("sw.js").then((response) => response.text()));
     check(sw.includes('addEventListener("push"') && sw.includes('"notify.js"'), "sw.js sin el aviso");
+  });
+
+  await step("principiante: «Empiezo de cero» sin prueba; la prueba para tras 5 que no sabe y no las apunta como fallos", async () => {
+    const result = await page.evaluate(async () => {
+      const saved = { ...meta.reading };
+      const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+      try {
+        meta.reading = { ...meta.reading, placedAt: 0 };
+        switchView("read");
+        await wait(300);
+        const offered = !!$("beginnerBtn") && !!document.querySelector(".placement-levels");
+        $("beginnerBtn").click();
+        await wait(300);
+        const beginner = { level: meta.reading.level, assumed: meta.reading.assumed, placed: !!meta.reading.placedAt, go: !!$("beginnerGoBtn") };
+        // La prueba: cinco «No la conozco» seguidas la terminan
+        meta.reading = { ...meta.reading, placedAt: 0 };
+        const before = userWords.size;
+        renderOnboarding();
+        await startPlacement("N5");
+        for (let i = 0; i < 5; i++) {
+          document.querySelector('[data-choice="-1"]').click();
+          const said = $("placementSay").textContent;
+          if (i === 0 && !said.includes("：") && !said.length) return { error: "sin anuncio" };
+          await wait(1200);
+        }
+        await wait(300);
+        return { offered, beginner, stopped: !placement && !!$("placementDoneBtn"), button: $("placementDoneBtn")?.textContent.trim(),
+          added: userWords.size - before };
+      } finally {
+        meta.reading = saved;
+        placement = null;
+      }
+    });
+    check(result.offered && result.beginner.level === "N5" && result.beginner.assumed === "" && result.beginner.placed && result.beginner.go,
+      JSON.stringify(result));
+    check(result.stopped && result.added === 0 && /primeras palabras|first words/.test(result.button), JSON.stringify(result));
+    await page.evaluate(() => switchView("today"));
   });
 
   await step("Apariencia: el tema elegido manda sobre el del sistema y se guarda", async () => {

@@ -19,6 +19,7 @@ const COVERAGE_TARGET = 90;   // % mínimo de palabras conocidas para proponer u
 const HARD_RATIO = 0.15;      // palabras marcadas como no conocidas a partir de las que el texto es difícil
 const PLACEMENT_SIZE = 20;
 const PLACEMENT_PASS = 0.7;
+const PLACEMENT_STOP = 5; // tantas seguidas sin saber terminan la prueba
 
 /* Vocabulario de un nivel: las palabras del banco (bank/bank.js) */
 const levelVocabulary = (level) => [...BANK.words.values()].filter((word) => word.level === level);
@@ -84,18 +85,39 @@ function renderOnboarding() {
   $("readArea").innerHTML = `
     <div class="empty-state">
       ${darumiHTML("appear")}
-      <h3>${t("Antes de leer, veamos tu nivel")}</h3>
-      <p>${t("Elige el nivel que crees tener y responde {n} preguntas rápidas. Con eso sabremos qué palabras dar por conocidas y qué textos proponerte.", { n: PLACEMENT_SIZE })}</p>
+      <h3>${t("¿Cuánto japonés sabes ya?")}</h3>
+      <p>${t("Si estás empezando de cero, empieza directamente. Si ya sabes algo, una prueba de {n} preguntas nos dice qué palabras dar por conocidas.", { n: PLACEMENT_SIZE })}</p>
+      <button id="beginnerBtn" class="button button-primary" type="button">${t("Empiezo de cero")}</button>
+      <p class="helper placement-levels">${t("Los niveles son los del examen oficial JLPT: de N5 (el más fácil) a N1.")}</p>
       <div class="inline-form placement-start">
-        <select id="placementLevel" aria-label="${t("Nivel JLPT")}">
+        <select id="placementLevel" aria-label="${t("Nivel que crees tener")}">
           ${LEVELS.map((level) => `<option>${level}</option>`).join("")}
         </select>
-        <button id="placementStartBtn" class="button button-primary" type="button">
-          ${t("Empezar evaluación")}
+        <button id="placementStartBtn" class="button button-outline" type="button">
+          ${t("Hacer la prueba de nivel")}
         </button>
       </div>
     </div>`;
   $("placementStartBtn").onclick = () => startPlacement($("placementLevel").value);
+  $("beginnerBtn").onclick = startAsBeginner;
+}
+
+/* Quien empieza de cero no hace la prueba (no sabría leer ni las opciones):
+   nivel N5, nada dado por conocido, y a aprender sus primeras palabras */
+async function startAsBeginner() {
+  meta.reading = { level: "N5", assumed: "", placedAt: Date.now(), updatedAt: Date.now() };
+  await saveMeta();
+  scheduleSync();
+  $("readLevel").textContent = "N5";
+  $("readArea").innerHTML = `
+    <div class="empty-state">
+      ${darumiHTML("appear")}
+      <h3>${t("¡Bienvenido! Empezamos por lo más básico")}</h3>
+      <p>${t("En Repasar aprenderás tus primeras palabras: primero te enseñamos cada una, con su lectura en rōmaji, y después te la preguntamos. Cuando sepas unas cuantas, podrás leer textos con ellas.")}</p>
+      <button id="beginnerGoBtn" class="button button-primary" type="button">${t("Aprender mis primeras palabras")}</button>
+    </div>`;
+  $("beginnerGoBtn").onclick = () => { switchView("study"); startSession(); };
+  $("beginnerGoBtn").focus();
 }
 
 async function startPlacement(level) {
@@ -139,10 +161,11 @@ function renderPlacement() {
       <div class="choices">
         ${options.map((option, i) => `
           <button class="button button-outline choice" type="button" data-choice="${i}">
-            <span lang="ja">${escapeHTML(option.reading)}</span> · ${escapeHTML(wordGloss(option))}
+            <span lang="ja">${escapeHTML(option.reading)}</span>${romajiHTML(option.reading)} · ${escapeHTML(wordGloss(option))}
           </button>`).join("")}
         <button class="button button-quiet choice" type="button" data-choice="-1">${t("No la conozco")}</button>
       </div>
+      <p id="placementSay" class="sr-only" role="status"></p>
     </div>`;
 
   $("readArea").querySelectorAll("[data-choice]").forEach((button) => {
@@ -154,11 +177,16 @@ function renderPlacement() {
         if (options[Number(b.dataset.choice)] === question.word) b.classList.add("choice-right");
       });
       if (!correct) button.classList.add("choice-wrong");
+      $("placementSay").textContent = correct ? t("¡Correcto!")
+        : t("Era {reading}: {meaning}", { reading: question.word.reading, meaning: wordGloss(question.word) });
       placement.results.push({ ...question, correct });
+      // Cinco seguidas sin saberlas: el nivel ya se ve, no hace falta pasar por las 20
+      const lastFive = placement.results.slice(-PLACEMENT_STOP);
+      const enough = lastFive.length === PLACEMENT_STOP && lastFive.every((result) => !result.correct);
       setTimeout(() => {
         if (!placement) return;
         placement.index++;
-        if (placement.index < questions.length) renderPlacement();
+        if (placement.index < questions.length && !enough) renderPlacement();
         else finishPlacement();
       }, correct ? 450 : 1100);
     };
@@ -185,13 +213,13 @@ async function finishPlacement() {
   await saveMeta();
   scheduleSync();
 
-  // Lo respondido cuenta ya como progreso de cada palabra
+  // Las acertadas cuentan ya como sabidas. Las que no sabía no se apuntan: no son
+  // fallos (aún no las ha estudiado) y saldrán como nuevas en Repasar
+  const known = results.filter((result) => result.correct);
   const fresh = [];
-  for (const { word, correct } of results) {
+  for (const { word } of known) {
     const mine = blankUserWord(word.lemma, word.reading);
-    Object.assign(mine, correct
-      ? { status: "mastered", canReadKanji: true, knowsMeaning: true, evalCorrect: 1 }
-      : { status: "learning", evalWrong: 1 });
+    Object.assign(mine, { status: "mastered", canReadKanji: true, knowsMeaning: true, evalCorrect: 1 });
     userWords.set(mine.id, mine);
     if (!words.has(mine.id)) {
       const entry = { id: mine.id, lemma: mine.lemma, reading: mine.reading, meanings: word.en,
@@ -200,22 +228,24 @@ async function finishPlacement() {
       fresh.push(entry);
     }
   }
-  await putRecords("userWords", results.map(({ word }) => userWords.get(wordKey(word.lemma, word.reading))));
+  await putRecords("userWords", known.map(({ word }) => userWords.get(wordKey(word.lemma, word.reading))));
   await putRecords("words", fresh);
 
   const right = results.filter((r) => r.correct).length;
   placement = null;
   $("readArea").innerHTML = `
     <div class="empty-state">
-      ${darumiHTML("celebrate")}
+      ${darumiHTML(right >= results.length / 2 ? "celebrate" : "idle")}
       <h3>${t("Tu nivel de lectura: {level}", { level: readLevel })}</h3>
       <p>${t("Acertaste {right} de {total}.", { right, total: results.length })} ${
         assumed
           ? t("Daremos por conocido el vocabulario hasta {level}; los textos irán afinándolo.", { level: assumed })
           : t("Empezaremos desde lo más básico; los textos irán marcando lo que ya sabes.")}</p>
-      <button id="placementDoneBtn" class="button button-primary" type="button">${t("Empezar a leer")}</button>
+      <button id="placementDoneBtn" class="button button-primary" type="button">${
+        assumed ? t("Empezar a leer") : t("Aprender mis primeras palabras")}</button>
     </div>`;
-  $("placementDoneBtn").onclick = renderRead;
+  // Sin nada dado por conocido, un texto aún sería ilegible: primero, palabras
+  $("placementDoneBtn").onclick = assumed ? renderRead : () => { switchView("study"); startSession(); };
   $("readLevel").textContent = readLevel;
 }
 
@@ -476,7 +506,12 @@ async function renderReadHome() {
     <div class="empty-state">
       ${darumiHTML("curious")}
       <h3>${t("No hay textos sin leer a tu nivel")}</h3>
-      <p>${t("Crea uno nuevo aquí abajo: elige tipo, tema y longitud, y la IA lo escribe para ti.")}</p>
+      ${sb && sync.user ? `<p>${t("Crea uno nuevo aquí abajo: elige tipo, tema y longitud, y la IA lo escribe para ti.")}</p>` : `
+      <p>${t("Sin cuenta puedes leer el texto de ejemplo o pegar uno en japonés en Biblioteca. Con una cuenta gratis, la IA escribe textos a tu medida con tus palabras.")}</p>
+      <div class="row-actions">
+        <button id="readSampleBtn" class="button button-primary" type="button">${t("Leer el texto de ejemplo")}</button>
+        ${sb ? `<button id="readSignupBtn" class="button button-outline" type="button">${t("Crear una cuenta gratis")}</button>` : ""}
+      </div>`}
     </div>`}
 
     ${candidate ? "" : `
@@ -559,6 +594,8 @@ async function renderReadHome() {
     $("promptCopied").textContent = "";
   };
 
+  if ($("readSampleBtn")) $("readSampleBtn").onclick = readSampleText;
+  if ($("readSignupBtn")) $("readSignupBtn").onclick = () => openAuth("signup");
   $("generateBtn").onclick = () => {
     const options = chosen();
     if (options) generateAndOpen(options);
@@ -635,6 +672,18 @@ async function requestText(params) {
   if (info.error === "limit") rememberAiQuota({ limit: info.limit, remaining: 0, plan: info.plan });
   const code = error.context.status === 404 ? "not_configured" : info.error;
   throw Object.assign(new Error(generationMessage(code, info.limit)), { canRetry: !!info.canRetry });
+}
+
+/* El texto de ejemplo de Biblioteca, para leer sin cuenta: se guarda (si no
+   estaba ya) y se abre */
+async function readSampleText() {
+  let text = texts.find((item) => item.title === SAMPLE_TEXT.title);
+  if (!text) {
+    $("textInput").value = JSON.stringify(SAMPLE_TEXT);
+    await addTextFromInput();
+    text = texts.find((item) => item.title === SAMPLE_TEXT.title);
+  }
+  if (text) openText(text.id);
 }
 
 /* Pide el texto a la IA. Si la respuesta falla (formato roto, error del
@@ -845,7 +894,7 @@ function panelHTML() {
   const current = reader.clicks.get(tokenKey(token));
   return `${close}
     <div class="pop-word" lang="ja">${escapeHTML(token.surface)}</div>
-    <div class="pop-reading" lang="ja">${escapeHTML(token.reading)}</div>
+    <div class="pop-reading"><span lang="ja">${escapeHTML(token.reading)}</span>${romajiHTML(token.reading)}</div>
     ${token.lemma !== token.surface ? `<p class="pop-lemma">${t("Forma de diccionario")}:
       <span lang="ja">${escapeHTML(token.lemma)}（${escapeHTML(entry.reading)}）</span></p>` : ""}
     <p class="meaning">${escapeHTML(meanings.join(", "))}</p>

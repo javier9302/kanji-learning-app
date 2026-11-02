@@ -240,8 +240,8 @@ function dictCardHTML(entry) {
       <div class="dict-head">
         <div class="dict-word" lang="ja">${escapeHTML(entry.w)}</div>
         <div>
-          <div class="dict-reading" lang="ja">${escapeHTML(entry.r)}${
-            entry.alt?.length ? ` <small>（${entry.alt.map(escapeHTML).join("、")}）</small>` : ""}</div>
+          <div class="dict-reading"><span lang="ja">${escapeHTML(entry.r)}${
+            entry.alt?.length ? ` <small>（${entry.alt.map(escapeHTML).join("、")}）</small>` : ""}</span>${romajiHTML(entry.r)}</div>
           <div class="dict-tags">
             <span class="pill">${entry.level || t("Fuera del banco")}</span>
             <span class="helper">${entry.rank ? t("frecuencia n.º {rank}", { rank: entry.rank }) : t("sin puesto de frecuencia")}</span>

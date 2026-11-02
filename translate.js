@@ -359,7 +359,7 @@ function renderTranslateResult() {
       <div class="card-sentence answered" lang="ja">${translateLineHTML(sentence, { reveal: true })}</div>
       <p id="trGloss" class="helper sent-gloss" aria-live="polite"></p>
       <div id="trResult" aria-live="polite">
-        <p class="verdict verdict-${cls}">${verdictInnerHTML(cls, `${escapeHTML(label)}${
+        <p class="verdict verdict-${cls}" role="alert">${verdictInnerHTML(cls, `${escapeHTML(label)}${
           result.source === "ai" ? ` · <span class="tr-score">${t("{score} de 100", { score: result.score })}</span>` : ""}`)}</p>
         ${origin ? `<p class="helper tr-origin">${origin}</p>` : ""}
         ${result.feedback ? `<p class="tr-feedback">${escapeHTML(result.feedback)}</p>` : ""}

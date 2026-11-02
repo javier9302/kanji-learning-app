@@ -6,6 +6,18 @@ Cómo funciona todo hoy: [docs/COMO-FUNCIONA.md](docs/COMO-FUNCIONA.md).
 
 ## 2026-11-02
 
+- **Para quien empieza de cero**: al empezar puedes elegir «Empiezo de cero» en vez de la prueba
+  de nivel, y la prueba termina sola si no sabes cinco seguidas. Las palabras que no sabías ya no
+  salen como «fallos».
+- **Rōmaji**: cada lectura en kana va también en rōmaji (ひ (hi), がっこう (gakkou)), y puedes
+  escribir las respuestas en rōmaji: se convierten solas. Se quita en Ajustes → Repaso.
+- **Las palabras nuevas se enseñan antes de preguntarlas**: la primera vez ves su lectura, su
+  significado y sus kanjis, y unas tarjetas después te la preguntamos.
+- **Leer sin cuenta**: si no tienes cuenta, Leer te ofrece el texto de ejemplo y crear una cuenta
+  gratis, en lugar de llevarte a una IA que la necesita.
+- **Más fácil de leer y de tocar**: textos de ayuda más grandes, botones de al menos 44 px y la
+  portada solo en Hoy. Los lectores de pantalla anuncian si una respuesta está bien o mal.
+
 - Arreglado: justo después de publicar una versión, el navegador podía mezclar la página nueva
   con el diseño viejo (salían dos logos de Darumi arriba a la izquierda y el tema elegido en
   Apariencia no se aplicaba). Ahora cada archivo nuevo se descarga siempre al publicarse (`f939d64`).

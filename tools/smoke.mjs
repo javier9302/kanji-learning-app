@@ -56,6 +56,12 @@ await step("la app arranca", async () => {
 await step("repaso: una palabra escrita y valorada", async () => {
   await page.evaluate(() => { $("studyMode").value = "type"; switchView("study"); });
   await page.click("#startBtn");
+  // Las nuevas se enseñan antes de preguntarlas: palabra, lectura con rōmaji y «Ya la he visto»
+  await page.waitForSelector("#learnedBtn");
+  const intro = await page.evaluate(() => ({ romaji: !!document.querySelector(".new-word-card .romaji"),
+    quiz: !!document.querySelector("#readingForm") }));
+  check(intro.romaji && !intro.quiz, JSON.stringify(intro));
+  while (await page.$("#learnedBtn")) { await page.click("#learnedBtn"); await new Promise((resolve) => setTimeout(resolve, 150)); }
   await page.waitForSelector("#readingForm .reading-input");
   // Una casilla por kanji si la palabra se puede repartir; si no, una sola
   await page.evaluate(() => {

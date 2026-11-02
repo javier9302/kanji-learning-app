@@ -107,3 +107,13 @@ test("何 delante de です o de un contador se lee なん; el potencial es su v
   assert.equal(potentialBase("かける"), null);                     // sin kanji no se adivina
   assert.equal(potentialBase("見る"), null);
 });
+
+test("kanaToRomaji: Hepburn para quien aún no lee kana", () => {
+  const { kanaToRomaji } = require("../ja-core.js");
+  const cases = {
+    がっこう: "gakkou", きょう: "kyou", しんぶん: "shinbun", コーヒー: "koohii", まっちゃ: "matcha",
+    じゃま: "jama", ちゅうしゃ: "chuusha", きんえん: "kin'en", ほんや: "hon'ya", ふじさん: "fujisan",
+    つづく: "tsuzuku", りょこう: "ryokou", ぎゅうにゅう: "gyuunyuu", ざっし: "zasshi", みっつ: "mittsu"
+  };
+  for (const [kana, romaji] of Object.entries(cases)) assert.equal(kanaToRomaji(kana), romaji, kana);
+});

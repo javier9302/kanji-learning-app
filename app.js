@@ -119,7 +119,8 @@ const prefs = loadLocal("kanji-prefs", {
   kanjiGroup: "jlpt",  // Mis palabras → Kanjis: jlpt | grade | frequency
   kanjiBoxes: true,    // Repasar, «Palabra sola»: una casilla por kanji al escribir la lectura
   notifyMin: 10,       // Avisos de repaso: avisar cuando se junten tantas palabras (notify.js)
-  theme: "auto"        // Apariencia: auto (la del dispositivo) | light | dark
+  theme: "auto",       // Apariencia: auto (la del dispositivo) | light | dark
+  romaji: true         // Rōmaji junto a cada lectura en kana: quien empieza aún no lee hiragana
 });
 // Presentación al escribir la lectura: word (palabra sola) | sentence (en una frase).
 // Sustituye al antiguo ajuste "Repasar con frases": quien lo tenía activado empieza en "sentence".
@@ -137,6 +138,19 @@ function escapeHTML(value) {
   return String(value).replace(/[&<>"']/g, (c) => ({
     "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
   })[c]);
+}
+
+/* La lectura en rōmaji (kanaToRomaji, ja-core.js), para quien todavía no lee
+   kana: がっこう -> gakkou. Vacío si se desactivó en Ajustes. */
+function romajiOf(kana) {
+  if (prefs.romaji === false || !kana) return "";
+  return kanaToRomaji(kana);
+}
+
+/* La misma, lista para ir detrás del kana: " (gakkou)" */
+function romajiHTML(kana) {
+  const romaji = romajiOf(kana);
+  return romaji ? ` <span class="romaji">(${escapeHTML(romaji)})</span>` : "";
 }
 
 /* Darumi (darumi.js) en un estado vacío o una celebración. Los estados que
@@ -1099,6 +1113,11 @@ function bindSettings() {
     const value = Math.round(Number($("maxNewInput").value));
     prefs.maxNew = Math.min(50, Math.max(0, Number.isFinite(value) ? value : STUDY_CONFIG.maxNewPerSession));
     $("maxNewInput").value = prefs.maxNew;
+    saveLocal("kanji-prefs", prefs);
+  });
+  $("romajiInput").checked = prefs.romaji !== false;
+  $("romajiInput").addEventListener("change", () => {
+    prefs.romaji = $("romajiInput").checked;
     saveLocal("kanji-prefs", prefs);
   });
   $("kanjiBoxesInput").checked = prefs.kanjiBoxes !== false;

@@ -117,6 +117,10 @@ con la tarjeta FSRS en `record.fsrs` (y, en los kanjis, lo acertado de cada lect
   `darumiHTML`). Los colores se definen como variables en `:root` de `style.css` con los nombres
   de sus tokens, con su versión para modo oscuro (dos bloques iguales: el del sistema y
   `data-theme="dark"`, el tema elegido en Ajustes → Apariencia, `prefs.theme`; una prueba los compara). Nada de fondos rellenos en el resaltado de frases: el usuario imprime en blanco y negro.
+- Accesibilidad (revisión del 2026-11-02): texto de la interfaz ≥ 12 px, lo que se toca ≥ 44 px
+  (bloque «Legibilidad» al final de `style.css`), resultados con `role="status"`/`"alert"`, rōmaji
+  junto al kana con `romajiHTML` (se desactiva en Ajustes), y quien empieza de cero tiene que poder
+  usar cada pantalla sin leer japonés.
 - Escapa siempre con `escapeHTML` lo que se inserte en HTML.
 - Preferencias nuevas: valor por defecto en `prefs` (`app.js`). Si sustituyen a otra, migra la
   antigua al cargar.

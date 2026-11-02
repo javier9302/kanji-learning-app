@@ -3582,3 +3582,106 @@ body[data-view="dict"] .intro {
   font: 600 10px var(--font-jp);
   color: var(--muted);
 }
+
+/* =========================================
+   LEGIBILIDAD Y TAMAÑO DE LO QUE SE TOCA
+   Revisión de usabilidad (2026-11-02): las explicaciones estaban a 10-11 px
+   y los botones medían 37-41 px de alto. Ahora el texto de la interfaz no
+   baja de 12 px (13-14 px lo que se lee de verdad) y todo lo que se toca mide
+   al menos 44 px. La furigana y las etiquetas de los gráficos siguen pequeñas:
+   van encima o debajo de algo más grande.
+   ========================================= */
+
+.helper, .message, .empty-state p, .missed-list li, .steps, .no-items, .kanji-note,
+.pop-lemma, .pop-example .pop-translation, .dict-status, .sent-missing,
+.grammar-list .grammar-example, .today-strip, .level-row {
+  font-size: 14px;
+}
+
+.button, .subtab, .lang-select, .link-btn, .field > span, .stat-card span, .card-progress,
+.legend, .hard-reading, .tr-compare dt, .tr-compare-label, .panel-label, .admin-edit label,
+.toggle, .base-title, .hard-count, .item-sub {
+  font-size: 13px;
+}
+
+.eyebrow, .brand-sub, .pill, footer, .item-state, .state-tag, .sent-credit, .card-actions small,
+.bar-value, .bar-label, .also-title, .tr-chip small, [data-tip]:focus-visible::after {
+  font-size: 12px;
+}
+
+.also-word rt {
+  font-size: 11px;
+}
+
+.button, .subtab, .tab, .lang-select, .link-btn, .search, .field select, .field textarea,
+.reading-input, .goal-input, select, input:not([type="checkbox"]):not([type="radio"]):not([type="range"]) {
+  min-height: 44px;
+}
+
+a.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.brand,
+.sync-btn {
+  min-width: 44px;
+  min-height: 44px;
+}
+
+input[type="checkbox"] {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  accent-color: var(--beni-600);
+}
+
+.check-line {
+  min-height: 44px;
+  font-size: 14px;
+}
+
+/* Solo para lectores de pantalla (lo que se anuncia sin verse) */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* La portada («Un paso más cerca…») solo en Hoy; en el móvil, solo hasta hacer
+   la prueba de nivel: después la tarea tiene que verse sin desplazarse */
+body:not([data-view="today"]) .intro {
+  display: none;
+}
+
+@media (max-width: 600px) {
+  body.placed .intro { display: none; }
+}
+
+/* Rōmaji junto a la lectura en kana (prefs.romaji) */
+.romaji {
+  font: 500 0.8em var(--font-ui);
+  color: var(--muted);
+  letter-spacing: .2px;
+}
+
+.romaji-hint {
+  text-align: center;
+  margin-top: 4px;
+}
+
+.new-word-card #learnedBtn {
+  margin-top: 16px;
+  min-width: 200px;
+}
+
+.placement-levels {
+  margin-top: 14px;
+}

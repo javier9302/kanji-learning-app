@@ -93,7 +93,7 @@ function renderProof() {
       <p class="proof-word" lang="ja">${wordHTML}</p>
       <form id="proofForm" autocomplete="off">
         <input id="proofInput" class="reading-input" type="text" lang="ja" inputmode="text"
-          placeholder="${t("Escribe cómo suena (hiragana)")}" autocapitalize="off" autocomplete="off" spellcheck="false">
+          placeholder="${t("Cómo suena (hiragana o rōmaji)")}" autocapitalize="off" autocomplete="off" spellcheck="false">
         <button class="button button-primary" type="submit">${t("Comprobar")}</button>
       </form>
     </div>`;
@@ -104,12 +104,12 @@ function renderProof() {
   }
   const result = proof.results[proof.results.length - 1];
   area.innerHTML = `<div class="card proof-card">${head}
-    <p class="verdict verdict-${result.ok ? "correct" : "incorrect"}">${verdictInnerHTML(result.ok ? "correct" : "incorrect",
+    <p class="verdict verdict-${result.ok ? "correct" : "incorrect"}" role="alert">${verdictInnerHTML(result.ok ? "correct" : "incorrect",
       escapeHTML(result.ok ? t("¡Demostrado!") : t("Este todavía no.")))}</p>
     <ul class="proof-answers">
       <li class="${result.meaningOk ? "read-good" : "read-again"}">${t("Significado")}: <strong>${escapeHTML(question.meaning)}</strong></li>
       <li class="${result.readingOk ? "read-good" : "read-again"}">${t("En {word} ({reading}) suena", { word: question.word.w, reading: question.word.r })}
-        <strong lang="ja">${escapeHTML(question.word.sound)}</strong></li>
+        <strong lang="ja">${escapeHTML(question.word.sound)}</strong>${romajiHTML(question.word.sound)}</li>
     </ul>
     <button id="proofNextBtn" class="button button-primary" type="button">${t("Siguiente")}</button>
   </div>`;

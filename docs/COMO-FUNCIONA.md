@@ -23,7 +23,9 @@ mismo commit que cambie cualquiera de estas reglas. Los cambios, con fecha, est�
 La app se llama **Yomipop** y sigue su sistema de diseño (artefacto «Yomipop» de Claude). Colores,
 radios y sombra son variables de `:root` en `style.css` con los nombres de sus tokens
 (`--surface-100`, `--beni-600`, `--yuzu-400`, `--matcha-600`…, con su versión oscura); los nombres
-antiguos de la app (`--primary`, `--green`, `--paper`…) apuntan a ellos. **Tema** (Ajustes →
+antiguos de la app (`--primary`, `--green`, `--paper`…) apuntan a ellos. Legibilidad: el texto de
+la interfaz no baja de 12 px (13–14 px lo que se lee) y todo lo que se toca mide al menos 44 px de
+alto. La portada («Un paso más cerca…») sale solo en Hoy, y en el móvil solo hasta la prueba de nivel. **Tema** (Ajustes →
 Apariencia, `prefs.theme`): automático (el modo claro u oscuro del dispositivo), claro u oscuro. El
 elegido va en `data-theme` de `<html>`, se aplica antes de pintar (script del `<head>`) y también
 cambia el logo y el color de la barra del navegador. Letra de interfaz M PLUS
@@ -117,8 +119,12 @@ Se guardan en el dispositivo (IndexedDB) y, con cuenta, se sincronizan con Supab
 
 ### 1. Qué se da por conocido
 
-La **evaluación inicial** hace 20 preguntas del nivel elegido (el 40 % del nivel anterior). Con un
-70 % o más se aprueba. De ahí salen dos datos:
+Al empezar se elige entre **«Empiezo de cero»** (nivel N5, nada dado por conocido, sin prueba: no
+sabría leer ni las opciones; lleva a Repasar a aprender sus primeras palabras) y la **prueba de
+nivel**: 20 preguntas del nivel elegido (el 40 % del nivel anterior), con la lectura de cada opción
+también en rōmaji. Cinco seguidas sin saberlas la terminan antes (`PLACEMENT_STOP`). Con un 70 % o
+más se aprueba. Las acertadas quedan como sabidas; las que no sabía **no se apuntan** (ni como
+fallo): saldrán como nuevas. De ahí salen dos datos:
 
 - **Nivel de lectura**: el de los textos que se proponen. Si no se aprueba, un nivel menos.
 - **Nivel supuesto**: todo el vocabulario de ese nivel y de los anteriores se da por conocido.
@@ -198,6 +204,14 @@ palabras que ya conoce o está aprendiendo. En «Palabras y kanjis» se alternan
 - Las respuestas aceptan katakana (se convierte a hiragana), ignoran los espacios y el rōmaji se
   convierte a kana al escribir (WanaKana). Otra lectura válida de la misma palabra (にほん /
   にっぽん) avisa, pero no cuenta como fallo.
+- **Palabra nueva**: la primera vez que sale en una sesión se **enseña antes de preguntarla**
+  (escritura, lectura con rōmaji, significado, sus kanjis y «También sale en»). Con «Ya la he
+  visto» pasa dos tarjetas más atrás (o enseguida, si es la única) y entonces se pregunta. No cuenta
+  como respuesta.
+- **Rōmaji**: junto a cada lectura en kana (respuestas, prueba de nivel, Demostrar, lector y
+  diccionario), con `kanaToRomaji` (`ja-core.js`, Hepburn: がっこう gakkou, まっちゃ matcha). Se quita en
+  Ajustes → Repaso. Al escribir la lectura se puede teclear en rōmaji (WanaKana la convierte), y la
+  tarjeta lo dice.
 - **Al responder**, el veredicto va en grande y con Darumi: verde matcha con ✓ y Darumi celebrando
   si está bien; rojo con ✗ y Darumi cayéndose y levantándose si no (`showVerdict` en `app.js`).
   Igual en Demostrar y en Traducir («En parte», en amarillo con ≈ y Darumi curioso).

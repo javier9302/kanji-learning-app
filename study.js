@@ -602,7 +602,7 @@ function answerHTML(card, pick = null) {
     const token = pick.sentence.tokens[pick.target];
     const word = token.key ? wordEntry(token.key) : null;
     return `
-      <p class="reading" lang="ja">${escapeHTML(pick.sound)}${base !== pick.sound ? ` <small>（${escapeHTML(base)}）</small>` : ""}</p>
+      <p class="reading"><span lang="ja">${escapeHTML(pick.sound)}${base !== pick.sound ? ` <small>（${escapeHTML(base)}）</small>` : ""}</span>${romajiHTML(pick.sound)}</p>
       <p class="meaning">${escapeHTML(gloss(entry, 4))}</p>
       <p class="kanji-note"><span lang="ja">${escapeHTML(token.surface)}（${escapeHTML(normalizeReading(token.reading))}）</span>${
         word && meaningOf(word).length ? ` · ${escapeHTML(gloss(word, 2))}` : ""}</p>`;
@@ -620,9 +620,9 @@ function answerHTML(card, pick = null) {
   // Sin frase en la pregunta, la que guardó de la web para esta palabra (si hay) va con la respuesta
   const own = pick ? null : capturedPick(card);
   return `
-    <p class="reading" lang="ja">${token && token.surface !== entry.w
+    <p class="reading"><span lang="ja">${token && token.surface !== entry.w
       ? `${escapeHTML(normalizeReading(token.reading))} <small>（${escapeHTML(entry.w)} ${escapeHTML(entry.r)}）</small>`
-      : escapeHTML(entry.r)}</p>
+      : escapeHTML(entry.r)}</span>${romajiHTML(token && token.surface !== entry.w ? normalizeReading(token.reading) : entry.r)}</p>
     <p class="meaning">${escapeHTML(gloss(entry))}</p>
     ${parts.length && !(parts.length === 1 && entry.w === parts[0].c) ? `<p class="kanji-note">${parts.map((k) =>
       `${escapeHTML(k.c)} ${escapeHTML(gloss(k, 2))}`).join(" · ")}</p>` : ""}
@@ -631,6 +631,37 @@ function answerHTML(card, pick = null) {
     ${alsoInHTML(entry)}
     ${"speechSynthesis" in window
       ? `<button id="speakBtn" class="button button-quiet speak-btn" type="button">🔊 ${t("Escuchar")}</button>` : ""}`;
+}
+
+/* Primera vez que sale una palabra nueva: escritura, lectura (con rōmaji),
+   significado y sus kanjis, sin preguntar nada. Con «Ya la he visto» va unas
+   tarjetas más atrás (o enseguida, si es la única) y entonces se pregunta.
+   No cuenta como respuesta ni toca su repaso. */
+function showNewWord(card) {
+  const { entry } = card;
+  $("studyArea").innerHTML = `
+    <div class="card new-word-card">
+      <div class="card-top">
+        <span class="pill">${t("Palabra nueva")}</span>
+        <span class="card-progress">${session.done + 1} / ${session.total}</span>
+      </div>
+      <div class="meter" aria-hidden="true">
+        <div style="width:${(session.done / session.total) * 100}%"></div>
+      </div>
+      <div class="card-symbol ${[...entry.w].length > 1 ? "word" : ""}" lang="ja">${escapeHTML(entry.w)}</div>
+      ${answerHTML(card)}
+      <p class="helper">${t("Fíjate en cómo se lee: en unas tarjetas te la preguntaremos.")}</p>
+      <button id="learnedBtn" class="button button-primary" type="button">${t("Ya la he visto")}</button>
+    </div>`;
+  if ($("speakBtn")) $("speakBtn").onclick = () => speak(entry.w);
+  $("learnedBtn").onclick = () => {
+    card.taught = true;
+    // Unas tarjetas después, para que recordarla cueste un poco (si no hay más, ahora)
+    session.queue.splice(session.queue.indexOf(card), 1);
+    session.queue.splice(Math.min(2, session.queue.length), 0, card);
+    showNextReady();
+  };
+  $("learnedBtn").focus();
 }
 
 /* Dónde más sale cada kanji de la palabra (kanji-core.js, sección 6), con su
@@ -697,6 +728,8 @@ function showCard() {
   const boxes = card.boxes = form === "type" && card.kind === "word" && !pick ? wordBoxes(entry) : null;
   // La primera vez que sale una palabra nueva se dice por qué (con la respuesta, que lo cuenta)
   const firstTime = !card.attempts;
+  // Una palabra nueva se enseña antes de preguntarla: nadie sabe la lectura de algo que nunca vio
+  if (card.group === "new" && card.kind === "word" && firstTime && !card.taught) return showNewWord(card);
 
   area.innerHTML = `
     <div class="card">
@@ -712,15 +745,16 @@ function showCard() {
       ${form === "type" ? `
       <form id="readingForm" autocomplete="off">
         ${boxes ? readingBoxesHTML(boxes) : `<input id="readingInput" class="reading-input" type="text" lang="ja" inputmode="text"
-          placeholder="${t("Escribe la lectura (hiragana)")}"
+          placeholder="${t("Lectura (hiragana o rōmaji)")}"
           autocapitalize="off" autocomplete="off" spellcheck="false">`}
         <button id="checkBtn" class="button button-primary" type="submit">${t("Comprobar")}</button>
         <button id="unknownBtn" class="button button-secondary" type="button">${t("No lo sé")}</button>
+        ${prefs.romaji !== false ? `<p class="helper romaji-hint">${t("¿Aún no escribes en japonés? Escribe en rōmaji y se convierte solo: gakkou → がっこう.")}</p>` : ""}
       </form>` : `
       <div id="readingForm">
         <button id="revealBtn" class="button button-primary" type="button">${t("Mostrar respuesta")}</button>
       </div>`}
-      <p id="feedback" class="message"></p>
+      <p id="feedback" class="message" role="status"></p>
       <div id="answer"></div>
       ${prefs.debugStudy && card.info ? `<p class="helper debug-line">${t("Puntos")}: ${card.info.score.toFixed(2)}</p>` : ""}
     </div>`;
@@ -1407,7 +1441,7 @@ async function nextDraw() {
         ${strokes.map((d) => `<path class="stroke" d="${escapeHTML(d)}"/>`).join("")}
         <polyline id="drawInk" class="ink" points=""/>
       </svg>
-      <p id="drawFeedback" class="message"></p>
+      <p id="drawFeedback" class="message" role="status"></p>
       <div class="row-actions">
         <button id="drawHintBtn" class="button button-outline" type="button">${t("Pista")}</button>
         <button id="drawShowBtn" class="button button-outline" type="button">${t("Mostrar")}</button>
