@@ -1079,6 +1079,46 @@ function renderInstall() {
     : t("Abre el menú del navegador y elige “Instalar app” o “Añadir a pantalla de inicio”. Si no aparece, usa Chrome o Edge.");
 }
 
+/* Compartir la app: el menú de compartir del sistema (WhatsApp, Mensajes…) donde
+   lo hay y, si no (la mayoría de ordenadores), copiar el enlace. El enlace es
+   siempre el de la portada, sin lo que haya después de «?» (?add=…). */
+async function shareApp() {
+  const url = location.origin + location.pathname.replace(/[^/]*$/, "");
+  const text = t("Aprende japonés leyendo con Yomipop: kanjis, palabras y textos a tu nivel. Es gratis.");
+  const say = (message, kind = "correct") => {
+    const target = document.body.dataset.view === "data" ? $("shareMessage") : null;
+    if (target) { target.className = `message ${kind}`; target.textContent = message; }
+    else showToast(message);
+  };
+  if (navigator.share) {
+    try { return await navigator.share({ title: "Yomipop", text, url }); }
+    catch (error) { if (error?.name === "AbortError") return; } // cerró el menú: nada que decir
+  }
+  try {
+    await navigator.clipboard.writeText(url);
+    say(t("Enlace copiado: pégalo donde quieras compartirlo."));
+  } catch {
+    say(t("Copia este enlace para compartirlo: {url}", { url }), "");
+  }
+}
+
+/* Un aviso breve abajo de la pantalla (para lo que no tiene sitio propio) */
+function showToast(message) {
+  document.querySelector(".toast")?.remove();
+  const toast = document.createElement("div");
+  toast.className = "toast";
+  toast.setAttribute("role", "status");
+  toast.textContent = message;
+  document.body.append(toast);
+  setTimeout(() => toast.remove(), 4000);
+}
+
+function bindShare() {
+  document.addEventListener("click", (event) => {
+    if (event.target.closest("[data-share]")) shareApp();
+  });
+}
+
 function bindInstall() {
   window.addEventListener("beforeinstallprompt", (event) => {
     event.preventDefault(); // se ofrece con nuestro botón, no con el aviso del navegador
@@ -1215,6 +1255,7 @@ async function init() {
   bindKanjiTable();
   bindToday();
   bindProof();
+  bindShare();
   bindNotify();
   bindLibrary();
   bindDictionary();

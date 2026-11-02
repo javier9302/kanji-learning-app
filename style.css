@@ -3768,3 +3768,29 @@ body.studying .study-settings {
     flex-basis: 100%;
   }
 }
+
+/* Compartir Yomipop: en el pie (todas las pantallas) y en Ajustes */
+footer {
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.share-btn {
+  font-size: 13px;
+}
+
+/* Aviso breve sobre la barra de pestañas del móvil (showToast) */
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 88px;
+  transform: translateX(-50%);
+  z-index: 60;
+  max-width: calc(100vw - 32px);
+  padding: 10px 16px;
+  border-radius: var(--radius-md);
+  background: var(--ink);
+  color: var(--paper);
+  font-size: 14px;
+  box-shadow: var(--shadow-pop);
+}

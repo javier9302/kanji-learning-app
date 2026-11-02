@@ -51,6 +51,9 @@ consultas», «Las que más fallas al comprobarlas», «Palabras de tus lecturas
 practicadas», «Los que más se te resisten») van plegadas y se abren al tocarlas. **Demostrar** y el
 **diccionario** no tienen pestaña: llevan «← Volver» a la pantalla de la que se vino. En el móvil,
 el botón de sincronización dice su estado en una palabra (Local, Entrar, Al día, Sin red).
+**Compartir Yomipop** (pie de todas las pantallas y Ajustes, `shareApp` en `app.js`): abre el menú
+de compartir del sistema con el enlace de la portada (sin `?add=…`) y, donde no lo hay, lo copia.
+La vista previa del enlace (título, descripción e icono) sale de las etiquetas `og:` de `index.html`.
 
 ## Listas y archivos de datos
 

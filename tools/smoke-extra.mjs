@@ -1432,6 +1432,29 @@ export default async function extra({ page, step, check }) {
     await page.evaluate(() => switchView("today"));
   });
 
+  await step("Compartir Yomipop: el menú del sistema con el enlace de la portada; sin él, se copia el enlace", async () => {
+    const result = await page.evaluate(async () => {
+      const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+      const shared = [], copied = [];
+      Object.defineProperty(navigator, "share", { configurable: true, value: async (data) => { shared.push(data); } });
+      Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: async (text) => { copied.push(text); } } });
+      history.replaceState(null, "", location.pathname + "?add=%E7%8C%AB");
+      switchView("data");
+      document.querySelector("#view-data [data-share]").click();
+      await wait(100);
+      delete navigator.share;
+      Object.defineProperty(navigator, "share", { configurable: true, value: undefined });
+      document.querySelector("footer [data-share]").click();
+      await wait(100);
+      history.replaceState(null, "", location.pathname);
+      return { shared, copied, message: $("shareMessage").textContent, footer: !!document.querySelector("footer [data-share]") };
+    });
+    const home = page.url().split(/[?#]/)[0];
+    check(result.footer && result.shared.length === 1 && result.shared[0].url === home && result.shared[0].title === "Yomipop", JSON.stringify(result));
+    check(result.copied[0] === home && /copiado|copied/i.test(result.message), JSON.stringify(result));
+    await page.evaluate(() => switchView("today"));
+  });
+
   await step("Apariencia: el tema elegido manda sobre el del sistema y se guarda", async () => {
     const look = async (theme) => page.evaluate((value) => {
       $("themeSelect").value = value;
