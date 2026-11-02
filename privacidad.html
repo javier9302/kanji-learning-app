@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Yomipop · Privacidad</title>
+  <meta name="description" content="Qué datos guarda Yomipop, dónde y cómo borrarlos.">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <!-- Página suelta (sin app.js ni style.css): es la dirección de la política de
+       privacidad que pide Google Play y tiene que abrirse siempre, rápida y sin
+       nada más. Los colores son los tokens de style.css, con su modo oscuro. -->
+  <style>
+    :root {
+      --surface-100: #FFF8EE; --surface-200: #FFFFFF; --ink-yp: #221A26; --ink-muted: #6E6272; --beni-600: #C2341C;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root { color-scheme: dark; --surface-100: #17121A; --surface-200: #221C26; --ink-yp: #F7EEE4; --ink-muted: #B8ABB5; --beni-600: #FF7A5C; }
+    }
+    body { margin: 0; background: var(--surface-100); color: var(--ink-yp);
+      font: 16px/1.6 "M PLUS Rounded 1c", "Hiragino Maru Gothic ProN", system-ui, sans-serif; }
+    main { max-width: 720px; margin: 0 auto; padding: 24px 16px 64px; }
+    h1 { font-size: 1.8rem; line-height: 1.2; }
+    h2 { font-size: 1.2rem; margin-top: 2em; }
+    a { color: var(--beni-600); }
+    .muted { color: var(--ink-muted); font-size: .9rem; }
+    nav a { display: inline-block; min-height: 44px; line-height: 44px; margin-right: 16px; }
+    hr { border: 0; border-top: 1px solid var(--ink-muted); opacity: .4; margin: 48px 0; }
+  </style>
+</head>
+<body>
+<main>
+  <nav><a href="./">← Yomipop</a><a href="#en" lang="en">English</a></nav>
+
+  <h1>Política de privacidad</h1>
+  <p class="muted">Última actualización: 2 de noviembre de 2026</p>
+
+  <p>Yomipop es una app para aprender japonés. Funciona sin cuenta: en ese caso todo se guarda solo
+    en tu dispositivo y nadie más lo ve. Esta página explica qué se guarda, dónde y cómo borrarlo.</p>
+
+  <h2>Sin cuenta</h2>
+  <p>Tu progreso (palabras, kanjis, repasos, textos y preferencias) se guarda en el almacenamiento del
+    navegador o de la app en tu dispositivo. No se envía a ningún servidor. Se borra al desinstalar la
+    app o al borrar los datos del sitio en el navegador.</p>
+
+  <h2>Con cuenta</h2>
+  <p>Si creas una cuenta, guardamos en <a href="https://supabase.com/privacy">Supabase</a> (nuestro
+    proveedor de base de datos y de inicio de sesión):</p>
+  <ul>
+    <li>tu correo electrónico y la contraseña cifrada, o tu identificador de Google si entras con Google;</li>
+    <li>tu progreso de estudio: palabras, kanjis, repasos, textos que guardas o generas, traducciones,
+      sesiones de lectura y estadísticas, para sincronizarlo entre tus dispositivos;</li>
+    <li>si activas los avisos de repaso, la suscripción de notificaciones de ese dispositivo y su zona horaria.</li>
+  </ul>
+  <p>Solo tú puedes ver tus datos. La persona que administra la app puede ver tu correo, tu plan y el
+    uso de las funciones con IA, para gestionar los planes y evitar abusos.</p>
+
+  <h2>Funciones con inteligencia artificial</h2>
+  <p>Al generar textos o frases de ejemplo, corregir una traducción o pedir el resumen semanal, la app
+    envía a <a href="https://ai.google.dev/gemini-api/terms">Google Gemini</a> lo necesario para esa
+    petición: las palabras y el nivel con los que se hace el texto, tu traducción y la frase original, o
+    los números de tu progreso. No se envía tu correo ni tu nombre.</p>
+
+  <h2>Lo que se comparte con otros usuarios</h2>
+  <p>Las frases de ejemplo generadas con IA y los textos que propones a la comunidad pueden mostrarse a
+    otros usuarios tras su revisión, sin tu nombre ni tu correo. Las frases que guardas desde la web
+    («+ Kanji», compartir) no se comparten nunca.</p>
+
+  <h2>Otros servicios</h2>
+  <p>La app carga algunas librerías desde unpkg.com y cdn.jsdelivr.net, y sus letras desde Google Fonts, que reciben la petición como
+    cualquier web (dirección IP y navegador). Si el administrador lo activa, recibe un correo (con
+    Resend) cuando alguien propone un texto. No usamos publicidad, cookies de seguimiento ni analítica.</p>
+
+  <h2>Borrar tu cuenta y tus datos</h2>
+  <p>En la app (también en la web), entra en <strong>Ajustes → Mi perfil → Borrar mi cuenta</strong>. Se borran al
+    momento tu cuenta y todo tu progreso en todos tus dispositivos. Lo que ya era de todos (frases
+    compartidas, avisos de error en los textos) se queda sin autor. Las copias de seguridad de Supabase
+    desaparecen en sus plazos habituales.</p>
+
+  <h2>Contacto</h2>
+  <p>Para cualquier duda sobre tus datos, escribe a <a href="mailto:CORREO-DE-CONTACTO">CORREO-DE-CONTACTO</a>.</p>
+
+  <hr>
+
+  <section id="en" lang="en">
+    <h1>Privacy policy</h1>
+    <p class="muted">Last updated: November 2, 2026</p>
+
+    <p>Yomipop is an app for learning Japanese. It works without an account: then everything is stored
+      only on your device and nobody else sees it.</p>
+
+    <h2>Without an account</h2>
+    <p>Your progress (words, kanji, reviews, texts and settings) is stored on your device, in the browser
+      or app storage. It isn't sent to any server. It's removed when you uninstall the app or clear the
+      site's data.</p>
+
+    <h2>With an account</h2>
+    <p>If you create an account, we store in <a href="https://supabase.com/privacy">Supabase</a> (our
+      database and sign-in provider): your email and hashed password, or your Google ID if you sign in with
+      Google; your study progress (words, kanji, reviews, texts, translations, reading sessions and
+      statistics) so it syncs across your devices; and, if you turn on review reminders, that device's push
+      subscription and time zone. Only you can see your data. The app's administrator can see your email,
+      plan and AI usage, to manage plans and prevent abuse.</p>
+
+    <h2>AI features</h2>
+    <p>When you generate texts or example sentences, get a translation graded or ask for the weekly
+      summary, the app sends <a href="https://ai.google.dev/gemini-api/terms">Google Gemini</a> what that
+      request needs: the words and level for the text, your translation and the original sentence, or your
+      progress numbers. Your email and name are never sent.</p>
+
+    <h2>What other users can see</h2>
+    <p>AI-generated example sentences and texts you submit to the community may be shown to other users
+      after review, without your name or email. Sentences you save from the web are never shared.</p>
+
+    <h2>Other services</h2>
+    <p>The app loads some libraries from unpkg.com and cdn.jsdelivr.net, and its fonts from Google Fonts, which see the request like any
+      website (IP address and browser). If the administrator turns it on, they get an email (via Resend)
+      when someone submits a text. No ads, tracking cookies or analytics.</p>
+
+    <h2>Deleting your account and data</h2>
+    <p>In the app (on the web too), go to <strong>Settings → My profile → Delete my account</strong>. Your account and all
+      your progress are deleted immediately on all your devices. Shared content (shared sentences, error
+      reports on texts) stays without an author. Supabase backups expire on their usual schedule.</p>
+
+    <h2>Contact</h2>
+    <p>For any question about your data, write to <a href="mailto:CORREO-DE-CONTACTO">CORREO-DE-CONTACTO</a>.</p>
+  </section>
+</main>
+</body>
+</html>

@@ -1301,3 +1301,25 @@ do $$ begin
     grant all on public.push_config, public.push_subscriptions to service_role;
   end if;
 end $$;
+
+-- Borrar la cuenta (lo exige Google Play a toda app que deja crear cuentas).
+-- Se borra la fila de auth.users y la base de datos borra en cascada todo lo
+-- suyo (palabras, kanjis, textos, sesiones, fotos, avisos…). Lo que ya era de
+-- todos se queda sin autor (on delete set null): frases compartidas, avisos
+-- de error y palabras por revisar. El cliente no puede tocar auth.users, por
+-- eso es security definer y solo borra al que llama.
+create or replace function public.delete_my_account()
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if (select auth.uid()) is null then
+    raise exception 'sin sesión' using errcode = '42501';
+  end if;
+  delete from auth.users where id = (select auth.uid());
+end;
+$$;
+revoke all on function public.delete_my_account() from public, anon;
+grant execute on function public.delete_my_account() to authenticated;

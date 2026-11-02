@@ -15,7 +15,8 @@ mismo commit que cambie cualquiera de estas reglas. Los cambios, con fecha, est�
 | **Escribir** | Trazos de kanjis (KanjiVG) con repaso espaciado: primero los kanjis que ya has visto y los que toca repasar, y una prueba para saltarse un nivel. |
 | **Diccionario** | Búsqueda por kanji, kana, rōmaji o significado (español o inglés). |
 | **Mis palabras** | Agregar palabras a mano o desde la web (marcador «+ Kanji», «Compartir» de Android o un enlace `?add=`), progreso y estadísticas. **Análisis** (solo premium): lo demostrado por nivel JLPT, nivel estimado y evolución semanal. **Kanjis** (solo premium): tabla de kanjis dominados, parciales y sin conocer según las palabras que conoces. |
-| **Cuenta** (opcional) | Sincronización con Supabase, plan gratuito (10 textos de IA al día) o premium (30). |
+| **Cuenta** (opcional) | Sincronización con Supabase, plan gratuito (10 textos de IA al día) o premium (30). «Borrar mi cuenta» borra la cuenta y todo lo suyo en el servidor (`delete_my_account`) y la copia del dispositivo; lo compartido se queda sin autor. Qué se guarda y dónde: `privacidad.html`. |
+| **App de Android** | La de Google Play es una Trusted Web Activity: abre esta misma web con Chrome, así que se actualiza con cada publicación. Configuración en `android/`; pasos en `SETUP.md`, apartado 8. |
 | **admin.html** | Aprobar textos de la comunidad, revisar palabras, traducciones y frases compartidas, cambiar planes y ver el progreso de cada estudiante (pestaña Progreso). |
 
 ## Aspecto: el sistema de diseño Yomipop

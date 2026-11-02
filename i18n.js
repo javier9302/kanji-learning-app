@@ -1037,6 +1037,13 @@ const EN = {
   "Cambiar contraseña": "Change password",
   "Panel de administración": "Admin panel",
   "Cerrar sesión": "Sign out",
+  "Borrar mi cuenta": "Delete my account",
+  "Política de privacidad": "Privacy policy",
+  "Se borrarán tu cuenta y todo tu progreso guardado en ella (palabras, kanjis, textos y estadísticas), en todos tus dispositivos. No se puede deshacer. ¿Continuar?": "Your account and all the progress saved in it (words, kanji, texts and statistics) will be deleted on all your devices. This can't be undone. Continue?",
+  "Para confirmar, escribe BORRAR": "To confirm, type DELETE",
+  "BORRAR": "DELETE",
+  "Tu cuenta y sus datos se han borrado.": "Your account and its data have been deleted.",
+  "No se pudo borrar la cuenta. Comprueba la conexión e inténtalo otra vez.": "Couldn't delete the account. Check your connection and try again.",
   "Las cuentas no están configuradas en esta instalación (falta rellenar config.js).":
     "Accounts are not configured in this installation (config.js has not been filled in).",
   "No se pudo cargar el servicio de cuentas. Comprueba la conexión y vuelve a abrir la app.":

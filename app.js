@@ -836,6 +836,32 @@ async function signOut() {
   $("signOutBtn").disabled = false;
 }
 
+/* Borrar la cuenta (Google Play lo exige a las apps con cuentas). La base de
+   datos borra al usuario y todo lo suyo en cascada (delete_my_account, en
+   schema.sql); aquí se quitan antes los avisos de este dispositivo y después la
+   copia local, para que no vuelva a subirse con otra cuenta. */
+async function deleteAccount() {
+  if (!confirm(t("Se borrarán tu cuenta y todo tu progreso guardado en ella (palabras, kanjis, textos y estadísticas), en todos tus dispositivos. No se puede deshacer. ¿Continuar?"))) return;
+  if (prompt(t("Para confirmar, escribe BORRAR"))?.trim().toUpperCase() !== t("BORRAR")) return;
+  $("deleteAccountBtn").disabled = true;
+  try {
+    clearTimeout(sync.timer);
+    await Promise.race([removeNotify().catch(() => {}), sleep(4000)]);
+    const { error } = await sb.rpc("delete_my_account");
+    if (error) throw error;
+    await sb.auth.signOut({ scope: "local" });
+    await clearLocalData();
+    resetSyncMemory("");
+    showToast(t("Tu cuenta y sus datos se han borrado.")); // aparte: al cerrar la sesión se vacía syncMessage
+  } catch (error) {
+    console.error("Error al borrar la cuenta:", error);
+    $("syncMessage").className = "message incorrect";
+    $("syncMessage").textContent = t("No se pudo borrar la cuenta. Comprueba la conexión e inténtalo otra vez.");
+  } finally {
+    $("deleteAccountBtn").disabled = false;
+  }
+}
+
 /* El permiso lo decide la base de datos; aquí solo se muestra el enlace al panel */
 async function checkAdmin() {
   const { data, error } = await sb.rpc("is_admin");
@@ -1029,6 +1055,7 @@ function bindSync() {
 
   $("accountOpenBtn").addEventListener("click", () => openAuth("login"));
   $("signOutBtn").addEventListener("click", signOut);
+  $("deleteAccountBtn").addEventListener("click", deleteAccount);
   $("changePasswordBtn").addEventListener("click", () => openAuth("newpass"));
   $("authForm").addEventListener("submit", submitAuth);
   $("authCancelBtn").addEventListener("click", () => $("authDialog").close());
