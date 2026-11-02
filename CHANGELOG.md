@@ -8,7 +8,7 @@ Cómo funciona todo hoy: [docs/COMO-FUNCIONA.md](docs/COMO-FUNCIONA.md).
 
 - Arreglado: justo después de publicar una versión, el navegador podía mezclar la página nueva
   con el diseño viejo (salían dos logos de Darumi arriba a la izquierda y el tema elegido en
-  Apariencia no se aplicaba). Ahora cada archivo nuevo se descarga siempre al publicarse.
+  Apariencia no se aplicaba). Ahora cada archivo nuevo se descarga siempre al publicarse (`f939d64`).
 
 ## 2026-11-01
 
