@@ -102,7 +102,7 @@ async function renderReadingStats() {
     return list.length ? list.map((word) => `
       <div class="hard-item">
         <span class="hard-symbol" lang="ja">${escapeHTML(word.lemma)}</span>
-        <span class="hard-reading">${escapeHTML(word.reading)} · ${escapeHTML(wordGlossOf(word.id))}</span>
+        <span class="hard-reading"><span lang="ja">${escapeHTML(word.reading)}</span> · ${escapeHTML(wordGlossOf(word.id))}</span>
         <span class="hard-count">${plural(word[field], one, many)}</span>
       </div>`).join("")
       : `<p class="helper">${t(empty)}</p>`;

@@ -883,6 +883,10 @@ function openAuth(mode = "login") {
   $("authPassword").disabled = !view.password;
   $("authPassword").value = "";
   $("authPassword").autocomplete = mode === "login" ? "current-password" : "new-password";
+  // Ver lo escrito evita errores al teclear en el móvil; se vuelve a ocultar al abrir
+  $("authShowField").classList.toggle("hidden", !view.password);
+  $("authShowPass").checked = false;
+  $("authPassword").type = "password";
   $("authPasswordLabel").textContent =
     mode === "login" ? t("Contraseña") : t("Contraseña (mínimo 8 caracteres)");
 
@@ -1003,6 +1007,8 @@ function renderDataView() {
     $("profilePlan").title = aiQuotaText();
   }
   $("adminLink").classList.toggle("hidden", !signedIn || !sync.isAdmin);
+  // La depuración del orden de las palabras nuevas es para el administrador (o quien ya la activó, para quitarla)
+  $("debugStudyField").classList.toggle("hidden", !(signedIn && sync.isAdmin) && !prefs.debugStudy);
   $("curatedPanel").classList.toggle("hidden", !signedIn || !sync.isAdmin);
   $("adminLink").textContent = t("Panel de administración") +
     (sync.pendingTexts ? ` (${plural(sync.pendingTexts, "pendiente", "pendientes")})` : "");
@@ -1025,6 +1031,9 @@ function bindSync() {
   $("changePasswordBtn").addEventListener("click", () => openAuth("newpass"));
   $("authForm").addEventListener("submit", submitAuth);
   $("authCancelBtn").addEventListener("click", () => $("authDialog").close());
+  $("authShowPass").addEventListener("change", () => {
+    $("authPassword").type = $("authShowPass").checked ? "text" : "password";
+  });
   $("authGoogleBtn").addEventListener("click", signInWithGoogle);
   $("authToSignup").addEventListener("click", () => openAuth("signup"));
   $("authToLogin").addEventListener("click", () => openAuth("login"));

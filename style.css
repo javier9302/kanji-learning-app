@@ -2032,14 +2032,16 @@ div.hard-item {
 .state-pre_known { background: var(--hard-bg); color: var(--hard-ink); }
 .state-learning { background: var(--mint); color: var(--green); }
 
+/* Lo que aún no domina: texto atenuado pero legible y borde discontinuo (no solo
+   el color lo distingue de lo dominado, con borde lleno y fondo) */
 .skills i {
   font: 500 11px var(--font-jp);
   font-style: normal;
   margin-left: 3px;
   padding: 1px 3px;
   border-radius: 4px;
-  color: var(--line-strong);
-  border: 1px solid var(--line);
+  color: var(--muted);
+  border: 1px dashed var(--line-strong);
 }
 
 .skills i.on {
@@ -3751,4 +3753,18 @@ body.studying .study-settings {
 
 .word-list-details {
   margin: 18px 0;
+}
+
+/* «Ahora no» sobre el aviso amarillo: en beni no llegaba a 4,5:1 en el tema oscuro */
+.guest-notice .button-quiet {
+  color: var(--ink);
+  border-color: var(--line-strong);
+}
+
+/* Repasar en el móvil: un ajuste por fila; en dos columnas se cortaban («Escribir la lectu…») */
+@media (max-width: 430px) {
+  .study-settings .field,
+  .study-settings .button {
+    flex-basis: 100%;
+  }
 }

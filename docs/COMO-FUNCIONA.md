@@ -478,7 +478,7 @@ botón).
 Tres formas de llegar, que abren la app con la palabra en Agregar palabra:
 
 - **Enlace** `?add=<palabra>&sentence=<frase>&source=<página>`; es lo que construye el **marcador
-  «+ Kanji»** (Ajustes → Añadir palabras desde la web): la selección, la oración que la rodea
+  «+ Kanji»** (Ajustes → Agregar palabras desde la web): la selección, la oración que la rodea
   (`sentenceAround`: del fin de la anterior a su 。！？ o al salto de línea, 300 caracteres como
   mucho) y la dirección de la página. En el móvil el marcador se guarda copiando su código.
 - **Compartir de Android** (`share_target` en `manifest.webmanifest`, solo con la app instalada):
