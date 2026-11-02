@@ -6,6 +6,9 @@ Cómo funciona todo hoy: [docs/COMO-FUNCIONA.md](docs/COMO-FUNCIONA.md).
 
 ## 2026-11-02
 
+- Interno (en preparación, aún sin usar): limpieza de las listas de palabras que se mandan a la IA al
+  crear un texto (formas conjugadas, trozos, grafías antiguas) y detección de escenas repetidas.
+
 - **Compartir Yomipop**: un botón al pie de cada pantalla y en Ajustes abre el menú de compartir
   del móvil (WhatsApp, Mensajes…) con el enlace de la app; en el ordenador, lo copia. El enlace se
   ve con su título, descripción e icono al pegarlo (`421afd1`).
