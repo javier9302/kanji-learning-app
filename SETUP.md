@@ -607,6 +607,115 @@ Abre <http://localhost:8000/>. Las cuentas funcionan en local si añadiste esa d
 3. Inicia sesión con la misma cuenta que en el ordenador y comprueba que aparecen tus listas y tu progreso.
 4. Activa el modo avión y abre la app: debe abrirse y permitir repasar. Al recuperar la conexión, los cambios se suben solos.
 
+## 8. Publicar en Google Play (opcional)
+
+La app de Google Play es una **Trusted Web Activity** (TWA): un envoltorio de Android que abre la
+web publicada a pantalla completa con el Chrome del teléfono. Por eso no hay que mantener otra app:
+cada `git push` a la web actualiza también la de Google Play (y funcionan igual las cuentas, los
+avisos de repaso y el modo sin conexión). Solo hay que subir otro paquete si cambian el nombre, el
+icono o los colores.
+
+Todo lo de Android vive en `android/`:
+
+| Archivo | Para qué |
+|---|---|
+| `twa-manifest.json` | configuración de Bubblewrap: nombre del paquete `io.github.javier9302.yomipop`, dirección, colores, iconos, avisos y «Compartir» |
+| `assetlinks.json` | plantilla de la prueba de que la web y la app son del mismo dueño (falta la huella de la firma) |
+
+Además: `privacidad.html` (la política de privacidad que pide Google), el botón **Ajustes → Mi
+perfil → Borrar mi cuenta** (también lo exige Google a toda app con cuentas; usa la función
+`delete_my_account` de `schema.sql`), el icono adaptable `icons/icon-maskable-*.png` y la imagen
+destacada de la ficha, `docs/play-store/feature-graphic.png` (1024 × 500).
+
+**El nombre del paquete no se puede cambiar** una vez subido a Google Play. Si vas a cambiar
+`io.github.javier9302.yomipop`, hazlo antes de crear el primer paquete, en `twa-manifest.json` y
+`assetlinks.json`.
+
+### 8.1 Antes de empezar
+
+1. Ejecuta otra vez `supabase/schema.sql` (añade `delete_my_account`).
+2. En `privacidad.html`, cambia las dos apariciones de `CORREO-DE-CONTACTO` por un correo tuyo y publica.
+3. Crea una cuenta de desarrollador en <https://play.google.com/console> (pago único de 25 USD).
+   Las cuentas personales nuevas tienen que hacer una **prueba cerrada con al menos 12 personas
+   durante 14 días** antes de poder publicar en producción.
+
+### 8.2 Crear el paquete (.aab)
+
+**Opción A, sin instalar nada (recomendada): PWABuilder.**
+
+1. Abre <https://www.pwabuilder.com>, escribe `https://javier9302.github.io/kanji-learning-app/` y pulsa **Start**.
+2. **Package for stores → Android → Generate package**. En **Options** pon:
+   - Package ID: `io.github.javier9302.yomipop`
+   - App name y Short name: `Yomipop`
+   - Signing key: **Create new**
+3. Descarga el zip. Trae el `.aab` (el que se sube a Google Play), un `.apk` para probar en tu
+   teléfono, `signing.keystore`, `signing-key-info.txt` y un `assetlinks.json`.
+4. **Guarda `signing.keystore` y `signing-key-info.txt` en un sitio seguro y fuera del repositorio.**
+   Sin ellos no podrás subir versiones nuevas.
+
+**Opción B, en tu ordenador: Bubblewrap** (usa `android/twa-manifest.json`).
+
+```sh
+npm install -g @bubblewrap/cli
+cd android
+bubblewrap doctor        # la primera vez ofrece descargar el JDK 17 y el SDK de Android
+keytool -genkeypair -v -keystore yomipop-upload.keystore -alias upload -keyalg RSA -keysize 2048 -validity 10000
+bubblewrap build         # genera el proyecto de Android y firma app-release-bundle.aab
+```
+
+`keytool` viene con el JDK que instala Bubblewrap (en `~/.bubblewrap/jdk/…/bin/`). La clave, el
+proyecto generado y los paquetes no se suben a git (`.gitignore`). Para una versión nueva, sube
+`appVersionCode` en `twa-manifest.json` y vuelve a ejecutar `bubblewrap build`.
+
+### 8.3 Subirlo a Google Play
+
+1. En Play Console: **Crear aplicación** → nombre Yomipop, idioma español, aplicación, gratuita.
+2. **Prueba → Prueba cerrada** (o interna para empezar): crea una versión y sube el `.aab`. Acepta
+   **Firma de aplicaciones de Google Play**.
+3. Completa la ficha y los formularios del **Contenido de la aplicación**:
+   - Política de privacidad: `https://javier9302.github.io/kanji-learning-app/privacidad.html`.
+   - Acceso a la app: todo se puede usar sin cuenta.
+   - Anuncios: no.
+   - Eliminación de la cuenta: la misma dirección de `privacidad.html` (explica cómo hacerlo).
+   - Seguridad de los datos: se recogen la **dirección de correo** (gestión de la cuenta) y el
+     **contenido generado por el usuario y la actividad en la app** (funcionalidad de la app);
+     cifrados en tránsito; el usuario puede pedir que se borren; no se comparten con terceros
+     para otros fines.
+   - Público objetivo: mayores de 13 años (o la edad que decidas).
+   - Iconos e imágenes: `icons/icon-512.png`, `docs/play-store/feature-graphic.png` y al menos dos
+     capturas del móvil (hazlas en el teléfono, o con `SMOKE_SHOTS=<carpeta> npm run smoke`).
+
+### 8.4 Quitar la barra de dirección: assetlinks.json
+
+Si la web no prueba que la app es suya, la app se abre con una barra de dirección arriba, como una
+pestaña de Chrome. Para quitarla:
+
+1. En Play Console: **Prueba y publicación → Configuración → Integridad de la aplicación → Firma de
+   aplicaciones**, copia la **huella del certificado SHA-256** de la clave de firma de la aplicación
+   (la de Google, no la de subida).
+2. Ponla en `android/assetlinks.json` en lugar de `HUELLA-SHA256-…` (con Bubblewrap:
+   `bubblewrap fingerprint add <huella>` y `bubblewrap fingerprint generateAssetLinks`). Si
+   también instalas a mano el `.apk` firmado con tu clave, añade su huella como segundo elemento
+   de `sha256_cert_fingerprints`.
+3. Publícalo en la **raíz del dominio**, en `/.well-known/assetlinks.json`. Android no lo busca
+   dentro de `/kanji-learning-app/`:
+   - **GitHub Pages** (`javier9302.github.io/kanji-learning-app/`): crea el repositorio
+     `javier9302/javier9302.github.io`, con Pages activado, con el archivo en
+     `.well-known/assetlinks.json` y un archivo vacío `.nojekyll` en la raíz (sin él, GitHub Pages
+     no publica las carpetas que empiezan por punto).
+   - **Cloudflare Pages o dominio propio** (la app en la raíz): cópialo a `.well-known/assetlinks.json`
+     de este repositorio. Si cambias de dirección, cambia también `host`, `startUrl`, los iconos y
+     `fullScopeUrl` en `twa-manifest.json` y genera un paquete nuevo.
+4. Compruébalo en
+   <https://developers.google.com/digital-asset-links/tools/generator>, o abre
+   `https://javier9302.github.io/.well-known/assetlinks.json` en el navegador. La app instalada lo
+   lee al abrirse; si la barra sigue, borra los datos de la app y vuelve a abrirla.
+
+### 8.5 Si un día se cobra el plan premium
+
+Hoy el plan lo asigna el administrador y no se paga dentro de la app. Si se vendiera dentro de la
+app de Google Play, Google exige usar su sistema de pagos (Google Play Billing) para contenido digital.
+
 ## Cómo funciona, en breve
 
 - La app guarda siempre una copia en el navegador y trabaja con ella, por eso funciona sin conexión y sin cuenta.

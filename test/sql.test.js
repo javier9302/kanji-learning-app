@@ -306,3 +306,26 @@ test("push_due_counts: los pasos cortos a su hora y las demás por el día de su
   assert.match(rows[0].local_day, /^\d{4}-\d{2}-\d{2}$/);
   assert.equal(rows[0].last_day, null);
 });
+
+test("delete_my_account: borra al que llama y todo lo suyo; lo compartido se queda sin autor", async () => {
+  const db = await database();
+  const USER = "00000000-0000-0000-0000-0000000000e1", OTHER = "00000000-0000-0000-0000-0000000000e2";
+  await db.exec(`insert into auth.users (id, email) values ('${USER}', 'borrar@ejemplo.com'), ('${OTHER}', 'otro@ejemplo.com') on conflict do nothing`);
+  await db.query(`insert into public.user_words (user_id, id, lemma, reading) values
+    ($1, '学校|がっこう', '学校', 'がっこう'), ($2, '学校|がっこう', '学校', 'がっこう')`, [USER, OTHER]);
+  await db.query(`insert into public.shared_sentences (id, user_id, source, words, data) values ('ai:borrar', $1, 'ai', '{水|みず}', '{}'::jsonb)`, [USER]);
+  const as = (id) => db.exec(`create or replace function auth.uid() returns uuid language sql stable as $$ select ${id ? `'${id}'` : "null"}::uuid $$;`);
+  try {
+    await assert.rejects(db.query("select public.delete_my_account()"), /sin sesión/);
+    await as(USER);
+    await db.query("select public.delete_my_account()");
+  } finally {
+    await as(null);
+  }
+  const users = (await db.query("select id from auth.users where id in ($1, $2)", [USER, OTHER])).rows.map((row) => row.id);
+  assert.deepEqual(users, [OTHER]);
+  const words = (await db.query("select user_id from public.user_words where id = '学校|がっこう' and user_id in ($1, $2)", [USER, OTHER])).rows;
+  assert.deepEqual(words.map((row) => row.user_id), [OTHER]);
+  const shared = (await db.query("select user_id from public.shared_sentences where id = 'ai:borrar'")).rows;
+  assert.deepEqual(shared, [{ user_id: null }]);
+});

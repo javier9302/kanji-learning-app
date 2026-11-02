@@ -14,3 +14,20 @@ data/
 
 # Herramientas (tools/): descargas, respuestas de la IA sin procesar y cachés
 tools/cache/
+
+# Android (Bubblewrap): la clave de firma NUNCA se sube; el proyecto y los paquetes se generan
+android/*.keystore
+android/*.jks
+android/*.aab
+android/*.apk
+android/*.idsig
+android/app/
+android/gradle/
+android/.gradle/
+android/build/
+android/gradlew*
+android/*.gradle
+android/gradle.properties
+android/local.properties
+android/store_icon.png
+android/manifest-checksum.txt

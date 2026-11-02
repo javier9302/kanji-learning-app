@@ -1,0 +1,14 @@
+[
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "io.github.javier9302.yomipop",
+      "sha256_cert_fingerprints": [
+        "HUELLA-SHA256-DE-LA-CLAVE-DE-FIRMA-DE-GOOGLE-PLAY"
+      ]
+    }
+  }
+]

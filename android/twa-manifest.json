@@ -1,0 +1,56 @@
+{
+  "packageId": "io.github.javier9302.yomipop",
+  "host": "javier9302.github.io",
+  "name": "Yomipop",
+  "launcherName": "Yomipop",
+  "display": "standalone",
+  "themeColor": "#FFF8EE",
+  "themeColorDark": "#17121A",
+  "navigationColor": "#FFF8EE",
+  "navigationColorDark": "#17121A",
+  "navigationDividerColor": "#FFF8EE",
+  "navigationDividerColorDark": "#17121A",
+  "backgroundColor": "#FFF8EE",
+  "enableNotifications": true,
+  "startUrl": "/kanji-learning-app/",
+  "iconUrl": "https://javier9302.github.io/kanji-learning-app/icons/icon-512.png",
+  "maskableIconUrl": "https://javier9302.github.io/kanji-learning-app/icons/icon-maskable-512.png",
+  "splashScreenFadeOutDuration": 300,
+  "signingKey": {
+    "path": "./yomipop-upload.keystore",
+    "alias": "upload"
+  },
+  "appVersionName": "1.0.0",
+  "appVersionCode": 1,
+  "shortcuts": [],
+  "generatorApp": "bubblewrap-cli",
+  "webManifestUrl": "https://javier9302.github.io/kanji-learning-app/manifest.webmanifest",
+  "fallbackType": "customtabs",
+  "features": {},
+  "alphaDependencies": {
+    "enabled": false
+  },
+  "enableSiteSettingsShortcut": true,
+  "isChromeOSOnly": false,
+  "isMetaQuest": false,
+  "fullScopeUrl": "https://javier9302.github.io/kanji-learning-app/",
+  "minSdkVersion": 21,
+  "shareTarget": {
+    "action": "https://javier9302.github.io/kanji-learning-app/",
+    "method": "GET",
+    "params": {
+      "title": "share_title",
+      "text": "share_text",
+      "url": "share_url"
+    }
+  },
+  "orientation": "default",
+  "fingerprints": [],
+  "additionalTrustedOrigins": [],
+  "retainedBundles": [],
+  "protocolHandlers": [],
+  "fileHandlers": [],
+  "launchHandlerClientMode": "",
+  "displayOverride": [],
+  "appVersion": "1.0.0"
+}
