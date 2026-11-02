@@ -652,7 +652,9 @@ function showNewWord(card) {
       ${answerHTML(card)}
       <p class="helper">${t("Fíjate en cómo se lee: en unas tarjetas te la preguntaremos.")}</p>
       <button id="learnedBtn" class="button button-primary" type="button">${t("Ya la he visto")}</button>
-    </div>`;
+    </div>
+    ${sessionExitHTML()}`;
+  bindSessionExit();
   if ($("speakBtn")) $("speakBtn").onclick = () => speak(entry.w);
   $("learnedBtn").onclick = () => {
     card.taught = true;
@@ -681,8 +683,11 @@ function alsoInHTML(entry) {
 }
 
 function endSession() {
-  const { total, firstTry, missed } = session;
-  const waiting = session.queue.length; // las que esperan su hora (pasos cortos): saldrán en Repasar
+  const { done, firstTry, missed } = session;
+  // Las que esperan su hora (pasos cortos) saldrán en Repasar; las demás quedan si se terminó antes
+  const now = Date.now();
+  const waiting = session.queue.filter((card) => card.waitUntil > now).length;
+  const left = session.queue.length - waiting;
   session = null;
   document.body.classList.remove("studying");
 
@@ -692,14 +697,15 @@ function endSession() {
 
   $("studyArea").innerHTML = `
     <div class="empty-state">
-      ${darumiHTML("celebrate")}
+      ${darumiHTML(done ? "celebrate" : "idle")}
       <h3>${t("Sesión terminada")}</h3>
-      <p>${total
+      <p>${done
         ? t("Has repasado {n} · {percent} % a la primera.", {
-            n: plural(total, "elemento", "elementos"), percent: Math.round((firstTry / total) * 100) })
-        : t("No quedaban tarjetas por repasar.")}</p>
+            n: plural(done, "elemento", "elementos"), percent: Math.round((firstTry / done) * 100) })
+        : t("No has respondido ninguna tarjeta: puedes empezar cuando quieras.")}</p>
       ${missedList ? `<ul class="missed-list">${missedList}</ul>` : ""}
       ${waiting ? `<p class="helper">${t("{n} vuelven dentro de unos minutos: saldrán en Repasar a su hora.", { n: plural(waiting, "palabra", "palabras") })}</p>` : ""}
+      ${left ? `<p class="helper">${t("Te quedaron {n} sin hacer: saldrán en la próxima sesión.", { n: plural(left, "tarjeta", "tarjetas") })}</p>` : ""}
       <div class="row-actions">
         <button id="againBtn" class="button button-primary" type="button">${t("Otra sesión")}</button>
         <button class="button button-outline" data-go="today" type="button">${t("Volver a Hoy")}</button>
@@ -757,7 +763,9 @@ function showCard() {
       <p id="feedback" class="message" role="status"></p>
       <div id="answer"></div>
       ${prefs.debugStudy && card.info ? `<p class="helper debug-line">${t("Puntos")}: ${card.info.score.toFixed(2)}</p>` : ""}
-    </div>`;
+    </div>
+    ${sessionExitHTML()}`;
+  bindSessionExit();
 
   const feedback = $("feedback");
   const answer = $("answer");
@@ -794,8 +802,11 @@ function showCard() {
     answer.querySelectorAll("[data-rate]").forEach((button) => {
       button.onclick = async () => {
         answer.querySelectorAll("[data-rate]").forEach((b) => { b.disabled = true; });
-        if (button.dataset.rate !== "next") await gradeCard(card, button.dataset.rate);
+        const rating = button.dataset.rate;
+        const before = rating !== "next" ? undoSnapshot(card) : null;
+        if (rating !== "next") await gradeCard(card, rating);
         advance(card);
+        if (before) offerUndo(before, button.textContent.trim().split("\n")[0]);
       };
     });
     answer.querySelector(`[data-rate="${preferred}"]`).focus(); // Enter otra vez = siguiente
@@ -1023,6 +1034,77 @@ function advance(card) {
     if (!card.failed) session.firstTry++;
   }
   showNextReady();
+}
+
+/* Salir de una sesión a medias: lo respondido ya está guardado; lo que queda
+   sale en la próxima. Sin esto, la única salida era cambiar de pestaña. */
+const sessionExitHTML = () => `<p class="session-exit">
+  <button id="endSessionBtn" class="link-btn" type="button">${t("Terminar la sesión")}</button></p>`;
+
+function bindSessionExit() {
+  $("endSessionBtn").onclick = () => {
+    clearTimeout(waitTimer);
+    endSession();
+  };
+}
+
+/* ---------- Deshacer una valoración ----------
+   Un «Fácil» pulsado sin querer aleja la palabra semanas. Durante unos
+   segundos, en la tarjeta siguiente sale «Deshacer»: vuelve la palabra (o el
+   kanji) a como estaba, la sesión al punto anterior y la tarjeta a la vista.
+   Lo anotado en las casillas de cada kanji y en las frases no se deshace. */
+const UNDO_MS = 8000;
+let undoTimer = null;
+
+function undoSnapshot(card) {
+  const map = card.kind === "word" ? userWords : userKanji;
+  const stored = map.get(card.id);
+  const day = meta.days[today()];
+  return {
+    card, session, cardRec: card.rec,
+    rec: stored ? structuredClone(stored) : null,
+    cardState: { attempts: card.attempts, failed: card.failed, requeue: card.requeue, waitUntil: card.waitUntil },
+    queue: [...session.queue], done: session.done, firstTry: session.firstTry, missed: new Map(session.missed),
+    day: day ? { ...day } : null
+  };
+}
+
+function offerUndo(before, label) {
+  clearTimeout(undoTimer);
+  document.querySelector(".undo-bar")?.remove();
+  const bar = document.createElement("div");
+  bar.className = "undo-bar";
+  bar.setAttribute("role", "status");
+  bar.innerHTML = `<span>${escapeHTML(t("Valorada: {rating}", { rating: label }))}</span>
+    <button class="button button-quiet" type="button">${t("Deshacer")}</button>`;
+  bar.querySelector("button").onclick = () => undoRating(before);
+  $("studyArea").prepend(bar);
+  undoTimer = setTimeout(() => bar.remove(), UNDO_MS);
+}
+
+async function undoRating(before) {
+  clearTimeout(undoTimer);
+  clearTimeout(waitTimer);
+  const { card } = before;
+  const store = card.kind === "word" ? "userWords" : "userKanji";
+  const map = card.kind === "word" ? userWords : userKanji;
+  if (before.rec) {
+    map.set(card.id, before.rec);
+    await putRecords(store, [before.rec]);
+  } else {
+    map.delete(card.id);
+    await putRecords(store, [], [card.id]);
+  }
+  card.rec = before.rec || before.cardRec;
+  Object.assign(card, before.cardState);
+  if (before.day) meta.days[today()] = before.day; else delete meta.days[today()];
+  await saveMeta();
+  // La sesión vuelve al punto anterior (también si la valoración la había terminado)
+  session = before.session;
+  Object.assign(session, { queue: before.queue, done: before.done, firstTry: before.firstTry, missed: before.missed });
+  document.body.classList.add("studying");
+  updateCounts();
+  showCard();
 }
 
 /* Pone delante la primera tarjeta cuya hora ya llegó y la enseña; si todas las
@@ -1409,7 +1491,7 @@ async function nextDraw() {
     if (draw !== current) return;
     area.innerHTML = `
       <div class="card">
-        <p class="message incorrect">${t("No se pudieron cargar los trazos ({error}).", { error: escapeHTML(error.message) })}</p>
+        <p class="message incorrect">${escapeHTML(friendlyError(error, t("No se pudo cargar el dibujo de este kanji. Comprueba tu conexión y toca «Otro kanji».")))}</p>
         <div class="row-actions">
           <button id="drawNextBtn" class="button button-outline" type="button">${t("Otro kanji")}</button>
         </div>

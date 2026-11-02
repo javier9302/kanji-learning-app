@@ -6,6 +6,17 @@ Cómo funciona todo hoy: [docs/COMO-FUNCIONA.md](docs/COMO-FUNCIONA.md).
 
 ## 2026-11-02
 
+- **Deshacer y salir**: tras valorar una tarjeta en Repasar puedes deshacerlo unos segundos, y
+  «Terminar la sesión» te deja salir a medias (lo respondido se guarda). Durante la sesión ya no
+  se ven los ajustes encima de la tarjeta.
+- **Palabras más claras**: la primera prueba se llama siempre «prueba de nivel» y lo de después de
+  leer, «Comprobar palabras»; los ajustes de Repasar y la furigana se explican; Biblioteca pide un
+  texto en japonés (lo de la IA queda como avanzado) y el ejemplo se guarda con un toque; «Usar
+  otro chat de IA» en vez de «Modo manual».
+- **Mensajes de error que dicen qué hacer** en lugar de detalles técnicos.
+- **Orientarse mejor**: Demostrar y el diccionario tienen «← Volver»; en el móvil, la
+  sincronización dice su estado en una palabra; Estadísticas pliega las listas largas.
+
 - **Para quien empieza de cero**: al empezar puedes elegir «Empiezo de cero» en vez de la prueba
   de nivel, y la prueba termina sola si no sabes cinco seguidas. Las palabras que no sabías ya no
   salen como «fallos».

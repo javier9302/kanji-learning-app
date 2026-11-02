@@ -140,6 +140,17 @@ function escapeHTML(value) {
   })[c]);
 }
 
+/* El mensaje de un error para quien usa la app. Los nuestros ya están escritos
+   para ella; los del navegador o la red («Failed to fetch», «Unexpected token»,
+   «04e00.svg not found») no le dicen qué hacer: entonces va `fallback` (y el
+   detalle, a la consola). */
+function friendlyError(error, fallback) {
+  const text = String(error?.message ?? error ?? "");
+  const technical = !text || /fetch|network|typeerror|syntaxerror|unexpected|undefined|null|json|\.svg|status \d|http|load failed|abort/i.test(text);
+  if (technical) console.warn(error); // aviso, no error: sin conexión no es un fallo de la app
+  return technical ? fallback : text;
+}
+
 /* La lectura en rōmaji (kanaToRomaji, ja-core.js), para quien todavía no lee
    kana: がっこう -> gakkou. Vacío si se desactivó en Ajustes. */
 function romajiOf(kana) {
@@ -233,19 +244,29 @@ const NAV = {
 // Vista que se abre al pulsar cada sección: la última usada
 const lastView = {};
 
+/* La vista de la que se viene: Demostrar y el diccionario no tienen pestaña
+   propia y su botón «Volver» lleva aquí */
+let previousView = "today";
+
 function switchView(name) {
   const group = Object.keys(NAV).find((g) => NAV[g].includes(name));
+  const from = document.body.dataset.view;
+  if (from && from !== name && !["proof", "dict"].includes(from)) previousView = from;
   lastView[group] = name;
   closeWordPop();
 
   document.querySelectorAll(".view").forEach((v) =>
     v.classList.toggle("hidden", v.id !== `view-${name}`));
-  document.querySelectorAll(".tab").forEach((t) =>
-    t.classList.toggle("active", t.dataset.group === group));
+  document.querySelectorAll(".tab").forEach((t) => {
+    t.classList.toggle("active", t.dataset.group === group);
+    t.toggleAttribute("aria-current", t.dataset.group === group);
+  });
   document.querySelectorAll(".subtabs").forEach((n) =>
     n.classList.toggle("hidden", n.dataset.group !== group));
-  document.querySelectorAll(".subtab").forEach((t) =>
-    t.classList.toggle("active", t.dataset.view === name));
+  document.querySelectorAll(".subtab").forEach((t) => {
+    t.classList.toggle("active", t.dataset.view === name);
+    t.toggleAttribute("aria-current", t.dataset.view === name);
+  });
   document.body.dataset.view = name;
   if (name === "today") renderToday();
   if (name === "proof") renderProof();
@@ -266,6 +287,7 @@ function bindNavigation() {
   document.addEventListener("click", (event) => {
     const tab = event.target.closest(".tab");
     if (tab) return switchView(lastView[tab.dataset.group] || NAV[tab.dataset.group][0]);
+    if (event.target.closest("[data-back]")) return switchView(previousView);
     const go = event.target.closest(".subtab, [data-go]");
     if (go) switchView(go.dataset.view || go.dataset.go);
   });
@@ -563,8 +585,13 @@ function setSyncState(state, message = "") {
     offline: t("Sin conexión"),
     error: t("Error al sincronizar")
   };
+  // En el móvil no cabe la frase: una palabra, para que el punto no quede sin explicar
+  const short = {
+    off: sb ? t("Entrar") : t("Local"), syncing: "…", ok: t("Al día"), offline: t("Sin red"), error: t("Error")
+  };
   $("syncBtn").dataset.state = state;
   $("syncLabel").textContent = labels[state];
+  $("syncShort").textContent = short[state];
   $("syncBtn").title = message || (sync.user ? sync.user.email : labels[state]);
   $("syncMessage").textContent = message;
   $("syncMessage").classList.toggle("incorrect", state === "error");

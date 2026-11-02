@@ -544,7 +544,7 @@ async function validateText(raw) {
     const partial = recoverSentences(String(raw));
     const errors = partial
       ? [t("La respuesta está incompleta: llegaron {chars} caracteres y el JSON se corta a medias. Suele pasar al pegar en el móvil o cuando la IA no termina de escribir. Prueba el botón “Pegar del portapapeles”, o pega el resto a continuación.", { chars: String(raw).length })]
-      : [t("No es un JSON válido: {error}", { error: error.message })];
+      : [t("No tiene el formato esperado. Copia la respuesta entera de la IA, desde la primera llave { hasta la última }, y pégala otra vez.")];
     return { errors, text: null, flagged: [], repairs: [], partial };
   }
   const repairs = []; // lo que la app tuvo que arreglar: sirve para mejorar el prompt
@@ -1016,9 +1016,15 @@ async function addTextFromInput() {
 function bindLibrary() {
   bindPasteBox($("textInput"), $("textInputCount"), $("textPasteBtn"));
   $("addTextBtn").addEventListener("click", addTextFromInput);
-  $("sampleTextBtn").addEventListener("click", () => {
-    $("textInput").value = JSON.stringify(SAMPLE_TEXT, null, 2);
-    $("textMessage").textContent = "";
+  // El ejemplo se guarda directamente (va con traducción): nadie tiene que ver su JSON
+  $("sampleTextBtn").addEventListener("click", async () => {
+    if (texts.some((text) => text.title === SAMPLE_TEXT.title)) {
+      $("textMessage").className = "message";
+      $("textMessage").textContent = t("El ejemplo ya está en tu biblioteca, aquí abajo.");
+      return;
+    }
+    $("textInput").value = JSON.stringify(SAMPLE_TEXT);
+    await addTextFromInput();
   });
   $("textList").addEventListener("click", async (event) => {
     const read = event.target.closest("[data-read-text]");

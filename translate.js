@@ -215,7 +215,7 @@ async function gradeTranslation(sentence, answer) {
   try {
     return await requestGrade(sentence, answer);
   } catch (error) {
-    translating.notice = error.message;
+    translating.notice = friendlyError(error, t("No se pudo corregir con la IA ahora mismo (¿sin conexión?). Corrígela tú con la traducción de referencia."));
     return null;
   }
 }

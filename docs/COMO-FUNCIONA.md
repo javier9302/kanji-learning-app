@@ -9,7 +9,7 @@ mismo commit que cambie cualquiera de estas reglas. Los cambios, con fecha, est�
 | Sección | Qué hace |
 |---|---|
 | **Hoy** (pantalla de inicio) | La sesión del día en una lista: un texto con las palabras que tocan, Repasar, unos kanjis que escribir y unas frases que traducir. Cada paso abre su sección. |
-| **Leer** | Textos en japonés (generados por IA, de la comunidad o pegados) con furigana según el nivel. Tocar una palabra enseña su lectura y su significado. Al terminar, una evaluación corta de las palabras del texto. |
+| **Leer** | Textos en japonés (generados por IA, de la comunidad o pegados) con furigana según el nivel. Tocar una palabra enseña su lectura y su significado. Al terminar, «Comprobar palabras»: unas preguntas cortas sobre las palabras del texto. Sin cuenta, el texto de ejemplo y lo pegado en Biblioteca (la IA necesita cuenta). |
 | **Repasar** | Repaso espaciado (FSRS) de palabras y kanjis. Modo «Escribir la lectura» o «Tarjetas»; presentación «Palabra sola» o «En una frase». |
 | **Traducir** | El usuario traduce frases de sus textos y lo corrige la IA (o él mismo con la traducción de referencia). Mide si entiende el significado; no mueve el calendario de repaso. |
 | **Escribir** | Trazos de kanjis (KanjiVG) con repaso espaciado: primero los kanjis que ya has visto y los que toca repasar, y una prueba para saltarse un nivel. |
@@ -45,6 +45,12 @@ Tocarlo hace `pop`.
 
 El resaltado de las frases sigue sin fondos rellenos (subrayados y bordes), porque se imprime en
 blanco y negro, aunque Yomipop marque con fondo yuzu las palabras guardadas.
+
+**Estadísticas** empieza por los números y los gráficos; las listas largas («Las que más
+consultas», «Las que más fallas al comprobarlas», «Palabras de tus lecturas», «Lecturas de kanji
+practicadas», «Los que más se te resisten») van plegadas y se abren al tocarlas. **Demostrar** y el
+**diccionario** no tienen pestaña: llevan «← Volver» a la pantalla de la que se vino. En el móvil,
+el botón de sincronización dice su estado en una palabra (Local, Entrar, Al día, Sin red).
 
 ## Listas y archivos de datos
 
@@ -222,6 +228,11 @@ palabras que ya conoce o está aprendiendo. En «Palabras y kanjis» se alternan
   sección 6 de `kanji-core.js`). Salen del banco de todos los niveles que estén cargados.
 - En la práctica extra, «sin cambios» se decide por días: una respuesta aleja la palabra solo si
   su nuevo día de repaso es posterior al que ya tenía.
+- **Durante una sesión** solo se ve la tarjeta (los ajustes vuelven al terminar) y debajo,
+  «Terminar la sesión»: lo respondido queda guardado y lo que falta sale en la próxima.
+- **Deshacer**: tras valorar una tarjeta, durante 8 segundos sale «Deshacer» encima de la siguiente.
+  Vuelve la palabra (o el kanji) a como estaba, la sesión al punto anterior y la respuesta del día
+  se descuenta. Lo anotado en las casillas de cada kanji no se deshace.
 - Una palabra se da por **dominada** con 3 aciertos seguidos en días distintos o un intervalo de 21 días o más.
 
 ### 5. Frases de ejemplo (`sentences.js` + `sentences-core.js`)
@@ -364,12 +375,12 @@ esta semana); un resumen de la semana escrito por la IA, y la vista del profesor
 - **Listas que se miden**: las palabras con kanji de cada nivel del banco (las que casi siempre van
   en kana no se estudian) y todos los kanjis de cada nivel.
 - **Estado de cada palabra** (`wordState`): *dominada* (estado `mastered`), *aprendiendo* (en el
-  repaso o en estado `learning`), *dada por sabida* (su nivel se aprobó en la evaluación inicial,
+  repaso o en estado `learning`), *dada por sabida* (su nivel se aprobó en la prueba de nivel,
   o salió en una lectura sin consultarla: «por confirmar») y *sin estudiar*. Si el alumno marcó
   una palabra como desconocida, cuenta como sin estudiar aunque su nivel se diera por sabido.
 - **Estado de cada kanji** (`kanjiState`): *dominado* si sabe su significado o escribirlo,
   *aprendiendo* si está en el repaso, *dado por sabido* si aparece en palabras dominadas o dadas
-  por sabidas. Esto último es generoso: quien aprobó N5 en la evaluación ya tiene buena parte de
+  por sabidas. Esto último es generoso: quien aprobó N5 en la prueba de nivel ya tiene buena parte de
   los kanjis de N4 dados por sabidos.
 - **Nivel estimado** (`estimateLevel`): el último nivel del que sabe (dominado + dado por sabido)
   al menos el 80 %, siempre que también sepa los anteriores, y cuánto lleva del siguiente.
@@ -423,7 +434,7 @@ Mis palabras → Kanjis. Lo que se sabe de cada kanji sale de las **palabras** q
 guarda aparte, se calcula al abrir la tabla.
 
 - **Palabras que cuentan como conocidas**: las dominadas, las repasadas cuya lectura acertaste la
-  última vez y las de los niveles que la evaluación dio por sabidos (salvo que luego dijeras que
+  última vez y las de los niveles que la prueba de nivel dio por sabidos (salvo que luego dijeras que
   no la sabes o la estés aprendiendo). Las que solo viste al leer no cuentan.
 - **Lecturas relevantes de un kanji**: las que usan al menos 2 palabras del banco, y siempre la
   más usada (名: めい ×21, な ×12, みょう ×2). Las demás salen como «poco usadas» y no hacen falta.
@@ -505,7 +516,7 @@ Junta lo del día en este orden, y el siguiente paso sin hacer va resaltado:
 
 No guarda nada propio: lo hecho se deduce de lo de hoy (un texto terminado hoy; nada que toque en
 Repasar y alguna respuesta hoy; kanjis escritos hoy; traducciones de hoy). Un paso sin nada que
-hacer (sin texto posible, sin kanjis o sin frases) no sale. Sin la evaluación inicial, solo sale
+hacer (sin texto posible, sin kanjis o sin frases) no sale. Sin la prueba de nivel (o «Empiezo de cero»), solo sale
 ella. Encima, cuántas respuestas lleva de su meta diaria.
 
 ### 13. Avisos de repaso (`notify.js` + `sw.js` + Edge Function `notify-due`)
@@ -547,7 +558,7 @@ días de dominio, reglas de Escribir y de Traducir. Lo que no:
   `STUDY_CONFIG.ranking`. Cuánto pesa todo eso frente a las razones del estudiante: `weights.ranking`.
 - Tabla de kanjis: palabras que tienen que usar una lectura para que haga falta conocerla (2):
   `STUDY_CONFIG.kanji.relevantMinWords`.
-- Tamaño y aprobado de la evaluación inicial: `PLACEMENT_SIZE` y `PLACEMENT_PASS` en `reading.js`.
+- Tamaño, aprobado y parada de la prueba de nivel: `PLACEMENT_SIZE`, `PLACEMENT_PASS` y `PLACEMENT_STOP` en `reading.js`.
 - Textos de IA al día: variables `DAILY_TEXTS` y `PREMIUM_DAILY_TEXTS` de la función `generate-text` en Supabase.
 - Frases de IA al día: `SENTENCE_DAILY_WORDS` y `SENTENCE_DAILY_CALLS` de la función `generate-sentences`.
   Palabras por llamada y días sin volver a pedir una palabra: `SENTENCE_BATCH` y `SENTENCE_RETRY_DAYS`

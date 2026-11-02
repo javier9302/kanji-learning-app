@@ -1360,6 +1360,37 @@ export default async function extra({ page, step, check }) {
     check(sw.includes('addEventListener("push"') && sw.includes('"notify.js"'), "sw.js sin el aviso");
   });
 
+  await step("Repasar: «Deshacer» tras valorar devuelve la palabra y la tarjeta; «Terminar la sesión» sale a medias", async () => {
+    const result = await page.evaluate(async () => {
+      const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+      const ids = ["会社|かいしゃ", "電車|でんしゃ"];
+      for (const id of ids) if (userWords.has(id)) { userWords.delete(id); await putRecords("userWords", [], [id]); }
+      const answersBefore = meta.days[today()]?.r || 0;
+      session = { queue: ids.map((id) => ({ kind: "word", id, entry: BANK.words.get(id), rec: null, group: "new", taught: true })),
+        total: 2, done: 0, firstTry: 0, missed: new Map(), mode: "flash", sentences: false };
+      document.body.classList.add("studying");
+      switchView("study");
+      showCard();
+      const settingsHidden = getComputedStyle(document.querySelector(".study-settings")).display === "none";
+      $("revealBtn").click();
+      document.querySelector('[data-rate="easy"]').click();
+      for (let i = 0; i < 30 && !document.querySelector(".undo-bar"); i++) await wait(100);
+      const graded = !!userWords.get(ids[0])?.studied;
+      document.querySelector(".undo-bar button").click();
+      for (let i = 0; i < 30 && session?.queue[0]?.id !== ids[0]; i++) await wait(100);
+      const undone = { rec: userWords.has(ids[0]), first: session.queue[0].id, done: session.done,
+        answers: (meta.days[today()]?.r || 0) - answersBefore, card: !!$("revealBtn") };
+      $("endSessionBtn").click();
+      await wait(200);
+      return { settingsHidden, graded, undone, ended: !session, text: $("studyArea").textContent };
+    });
+    check(result.settingsHidden && result.graded, JSON.stringify(result).slice(0, 300));
+    check(!result.undone.rec && result.undone.first === "会社|かいしゃ" && result.undone.done === 0 && result.undone.answers === 0 && result.undone.card,
+      JSON.stringify(result.undone));
+    check(result.ended && /Te quedaron 2|2 cards left/.test(result.text), result.text.replace(/\s+/g, " ").slice(0, 200));
+    await page.evaluate(() => switchView("today"));
+  });
+
   await step("principiante: «Empiezo de cero» sin prueba; la prueba para tras 5 que no sabe y no las apunta como fallos", async () => {
     const result = await page.evaluate(async () => {
       const saved = { ...meta.reading };

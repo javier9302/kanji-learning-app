@@ -150,7 +150,7 @@ function renderPlacement() {
   $("readArea").innerHTML = `
     <div class="card">
       <div class="card-top">
-        <span class="pill">${t("Evaluación de nivel")}</span>
+        <span class="pill">${t("Prueba de nivel")}</span>
         <span class="card-progress">${index + 1} / ${questions.length}</span>
       </div>
       <div class="meter" aria-hidden="true">
@@ -532,7 +532,7 @@ async function renderReadHome() {
         <p class="helper">${t("La IA escribe un texto a tu medida con las palabras que ya conoces. Tarda alrededor de un minuto.")}${
           aiQuotaText() ? `<br><span class="ai-quota">${escapeHTML(aiQuotaText())}</span>` : ""}</p>
         <div class="import-actions">
-          <button id="promptBuildBtn" class="button button-quiet" type="button">${t("Modo manual")}</button>
+          <button id="promptBuildBtn" class="button button-quiet" type="button">${t("Usar otro chat de IA")}</button>
           <button id="generateBtn" class="button button-primary" type="button">✦ ${t("Generar con IA")}</button>
         </div>
       </div>
@@ -742,7 +742,7 @@ async function generateAndOpen(options) {
     if (Array.isArray(error)) showTextErrors(error, message); // texto roto
     else {
       message.className = "message incorrect";
-      message.textContent = error.message;
+      message.textContent = friendlyError(error, t("No se pudo crear el texto. Comprueba tu conexión e inténtalo otra vez en un momento."));
     }
   } finally {
     button.disabled = false;
@@ -1166,7 +1166,7 @@ function renderReadSummary(summary) {
       ${darumiHTML(discarded ? "idle" : "celebrate")}
       <h3>${discarded ? t("Texto saltado") : t("Lectura terminada")}</h3>
       <p>${t("Consultaste {n} de este texto.", { n: plural(looked, "palabra", "palabras") })}
-        ${mastered === undefined ? "" : t("En la evaluación: {mastered} y {learning}.", {
+        ${mastered === undefined ? "" : t("Al comprobarlas: {mastered} y {learning}.", {
           mastered: plural(mastered, "palabra dominada", "palabras dominadas"),
           learning: plural(learning, "por aprender", "por aprender") })}
         ${hard && easier ? t("Parece que este nivel te queda difícil. ¿Quieres textos de {level}?", { level: easier }) : ""}
@@ -1220,11 +1220,11 @@ function renderEvaluationIntro() {
     <div class="empty-state">
       ${darumiHTML("curious")}
       <h3>${t("Lectura terminada. ¿Las conocías de verdad?")}</h3>
-      <p>${t("Hay {n} sin confirmar. Una evaluación rápida comprueba cuáles dominas ya.", {
+      <p>${t("Hay {n} sin confirmar. Una comprobación rápida dice cuáles dominas ya.", {
         n: plural(evaluation.queue.length, "palabra", "palabras") })}</p>
       <div class="row-actions">
         <button id="evalSkipBtn" class="button button-quiet" type="button">${t("Ahora no")}</button>
-        <button id="evalStartBtn" class="button button-primary" type="button">${t("Empezar evaluación")}</button>
+        <button id="evalStartBtn" class="button button-primary" type="button">${t("Comprobar las palabras")}</button>
       </div>
     </div>`;
   $("evalStartBtn").onclick = () => { evaluation.started = true; renderEvaluation(); };
@@ -1261,7 +1261,7 @@ function renderEvaluation() {
   $("readArea").innerHTML = `
     <div class="card">
       <div class="card-top">
-        <span class="pill">${t("Evaluación")}</span>
+        <span class="pill">${t("Comprobar palabras")}</span>
         <span class="card-progress">${index + 1} / ${queue.length}</span>
       </div>
       <div class="meter" aria-hidden="true">

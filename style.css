@@ -1503,10 +1503,18 @@ footer {
   }
 }
 
+#syncShort {
+  display: none;
+}
+
 @media (max-width: 430px) {
   .brand-sub,
   #syncLabel {
     display: none;
+  }
+
+  #syncShort {
+    display: inline;
   }
 
   .button {
@@ -3684,4 +3692,63 @@ body:not([data-view="today"]) .intro {
 
 .placement-levels {
   margin-top: 14px;
+}
+
+/* «Deshacer» tras valorar una tarjeta (unos segundos, encima de la siguiente) */
+.undo-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin: 0 auto 10px;
+  padding: 4px 6px 4px 16px;
+  width: fit-content;
+  max-width: 100%;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-full);
+  background: var(--surface-200);
+  font-size: 14px;
+  color: var(--muted);
+}
+
+/* Durante una sesión de Repasar solo la tarjeta: los ajustes vuelven al terminar */
+body.studying .study-settings {
+  display: none;
+}
+
+.session-exit {
+  text-align: center;
+  margin: 12px 0 0;
+}
+
+/* Estadísticas: las listas largas van plegadas; primero el resumen y los gráficos */
+.stat-details > summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.stat-details > summary::-webkit-details-marker {
+  display: none;
+}
+
+.stat-details > summary::before {
+  content: "▸";
+  color: var(--muted);
+  transition: transform .15s;
+}
+
+.stat-details[open] > summary::before {
+  transform: rotate(90deg);
+}
+
+.stat-details > summary h3 {
+  margin: 0;
+}
+
+.word-list-details {
+  margin: 18px 0;
 }
