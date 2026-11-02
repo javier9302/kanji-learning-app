@@ -8,7 +8,7 @@ Cómo funciona todo hoy: [docs/COMO-FUNCIONA.md](docs/COMO-FUNCIONA.md).
 
 - **Compartir Yomipop**: un botón al pie de cada pantalla y en Ajustes abre el menú de compartir
   del móvil (WhatsApp, Mensajes…) con el enlace de la app; en el ordenador, lo copia. El enlace se
-  ve con su título, descripción e icono al pegarlo.
+  ve con su título, descripción e icono al pegarlo (`421afd1`).
 
 - Interno: «Probar con el ejemplo» no guarda el texto dos veces con dos toques seguidos, y la prueba
   de humo del análisis de gramática ya no depende de qué frases se tradujeron antes al azar.
