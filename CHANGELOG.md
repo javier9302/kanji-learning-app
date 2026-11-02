@@ -9,7 +9,7 @@ Cómo funciona todo hoy: [docs/COMO-FUNCIONA.md](docs/COMO-FUNCIONA.md).
 - Detalles: los créditos en inglés ya no mezclan español; el ajuste de depuración del orden de
   palabras solo lo ve el administrador; mejor contraste en «Ahora no» (tema oscuro) y en las letras
   de Estadísticas; «Mostrar contraseña» al iniciar sesión; los ajustes de Repasar, uno por fila en
-  el móvil; Biblioteca vacía con Darumi; «Agregar» en toda la interfaz.
+  el móvil; Biblioteca vacía con Darumi; «Agregar» en toda la interfaz (`75e8497`).
 
 - **Deshacer y salir**: tras valorar una tarjeta en Repasar puedes deshacerlo unos segundos, y
   «Terminar la sesión» te deja salir a medias (lo respondido se guarda). Durante la sesión ya no
