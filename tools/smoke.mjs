@@ -79,8 +79,7 @@ await step("repaso: una palabra escrita y valorada", async () => {
 
 await step("lectura: guardar el ejemplo, abrirlo, tocar una palabra y terminar", async () => {
   await page.evaluate(() => { session = null; document.body.classList.remove("studying"); switchView("library"); });
-  await page.click("#sampleTextBtn");
-  await page.click("#addTextBtn");
+  await page.click("#sampleTextBtn"); // el ejemplo se guarda directamente
   await page.waitForSelector("[data-read-text]", { timeout: 60000 }); // el banco entero se descarga aquí
   await page.click("[data-read-text]");
   await page.waitForSelector(".tok", { timeout: 5000 });

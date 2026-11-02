@@ -6,6 +6,9 @@ Cómo funciona todo hoy: [docs/COMO-FUNCIONA.md](docs/COMO-FUNCIONA.md).
 
 ## 2026-11-02
 
+- Interno: «Probar con el ejemplo» no guarda el texto dos veces con dos toques seguidos, y la prueba
+  de humo del análisis de gramática ya no depende de qué frases se tradujeron antes al azar.
+
 - Detalles: los créditos en inglés ya no mezclan español; el ajuste de depuración del orden de
   palabras solo lo ve el administrador; mejor contraste en «Ahora no» (tema oscuro) y en las letras
   de Estadísticas; «Mostrar contraseña» al iniciar sesión; los ajustes de Repasar, uno por fila en

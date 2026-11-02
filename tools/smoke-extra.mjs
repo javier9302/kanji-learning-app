@@ -969,15 +969,19 @@ export default async function extra({ page, step, check }) {
         state.levels.every((text) => text && text !== "undefined"), JSON.stringify(state));
       // La frase traducida (私は毎朝コーヒーを飲みます) acabó con «No lo sé»: sus estructuras quedan vistas.
       // Con una traducción buena después, pasan a entendidas.
+      // Solo con esas dos traducciones: las de los pasos anteriores (frases elegidas al azar)
+      // podían traer ya は, を o ます bien traducidas y dejarlas entendidas desde el principio
       const grammar = await page.evaluate(async () => {
         const ids = ["wo", "masu", "wa"];
-        const record = translationLog[translationLog.length - 1];
-        const before = (await computeProfile({ grammar: true })).grammarStates;
-        translationLog.push({ ...record, verdict: "correct", at: Date.now() });
+        const saved = translationLog;
+        const record = [...saved].reverse().find((entry) => entry.verdict === "incorrect");
         try {
+          translationLog = [record];
+          const before = (await computeProfile({ grammar: true })).grammarStates;
+          translationLog = [record, { ...record, verdict: "correct", at: Date.now() }];
           const after = (await computeProfile({ grammar: true })).grammarStates;
           return { last: record.verdict, before: ids.map((id) => before.get(id)), after: ids.map((id) => after.get(id)) };
-        } finally { translationLog.pop(); }
+        } finally { translationLog = saved; }
       });
       check(grammar.last === "incorrect" && grammar.before.every((state) => state === "seen") &&
         grammar.after.every((state) => state === "understood"), JSON.stringify(grammar));

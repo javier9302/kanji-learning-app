@@ -1023,8 +1023,10 @@ function bindLibrary() {
       $("textMessage").textContent = t("El ejemplo ya está en tu biblioteca, aquí abajo.");
       return;
     }
+    // Sin dos toques seguidos: el segundo lo guardaría otra vez
+    $("sampleTextBtn").disabled = $("addTextBtn").disabled = true;
     $("textInput").value = JSON.stringify(SAMPLE_TEXT);
-    await addTextFromInput();
+    try { await addTextFromInput(); } finally { $("sampleTextBtn").disabled = $("addTextBtn").disabled = false; }
   });
   $("textList").addEventListener("click", async (event) => {
     const read = event.target.closest("[data-read-text]");
