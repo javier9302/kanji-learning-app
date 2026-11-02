@@ -16,7 +16,7 @@ Cómo funciona todo hoy: [docs/COMO-FUNCIONA.md](docs/COMO-FUNCIONA.md).
 - **Leer sin cuenta**: si no tienes cuenta, Leer te ofrece el texto de ejemplo y crear una cuenta
   gratis, en lugar de llevarte a una IA que la necesita.
 - **Más fácil de leer y de tocar**: textos de ayuda más grandes, botones de al menos 44 px y la
-  portada solo en Hoy. Los lectores de pantalla anuncian si una respuesta está bien o mal.
+  portada solo en Hoy. Los lectores de pantalla anuncian si una respuesta está bien o mal (`bee2f60`).
 
 - Arreglado: justo después de publicar una versión, el navegador podía mezclar la página nueva
   con el diseño viejo (salían dos logos de Darumi arriba a la izquierda y el tema elegido en
