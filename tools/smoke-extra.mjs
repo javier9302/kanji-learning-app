@@ -1291,15 +1291,21 @@ export default async function extra({ page, step, check }) {
       switchView("study");
       showCard();
       $("revealBtn").click();
+      // Recién enseñada, la primera respuesta no se valora: solo Otra vez o Bien (no 8 días con Fácil)
+      const firstRates = [...document.querySelectorAll("[data-rate]")].map((b) => b.dataset.rate).join(",");
+      session.queue[0].attempts = 1; // el segundo intento ya reparte Difícil / Bien / Fácil
+      showCard();
+      $("revealBtn").click();
       document.querySelector('[data-rate="hard"]').click();
       // Guardar la valoración es asíncrono: se espera a la pantalla de espera (hasta 5 s), no un tiempo fijo
       for (let i = 0; i < 50 && !$("waitEndBtn"); i++) await new Promise((resolve) => setTimeout(resolve, 100));
       const waiting = !!$("waitEndBtn") && !document.querySelector("[data-rate]");
       const dueNow = isDue(userWords.get(entry.id));
       $("waitEndBtn")?.click();
-      return { waiting, dueNow, ended: !session, text: $("studyArea").textContent };
+      return { firstRates, waiting, dueNow, ended: !session, text: $("studyArea").textContent };
     });
     await shot(page, "espera");
+    check(result.firstRates === "again,good", result.firstRates);
     check(result.waiting && !result.dueNow && result.ended, JSON.stringify(result).slice(0, 300));
     await page.evaluate(() => switchView("today"));
   });
@@ -1377,7 +1383,7 @@ export default async function extra({ page, step, check }) {
       showCard();
       const settingsHidden = getComputedStyle(document.querySelector(".study-settings")).display === "none";
       $("revealBtn").click();
-      document.querySelector('[data-rate="easy"]').click();
+      document.querySelector('[data-rate="good"]').click();
       for (let i = 0; i < 30 && !document.querySelector(".undo-bar"); i++) await wait(100);
       const graded = !!userWords.get(ids[0])?.studied;
       document.querySelector(".undo-bar button").click();

@@ -201,6 +201,11 @@ aunque sea de un nivel supuesto, y una acertada cuenta aunque sea de un nivel su
   esperan, la sesión dice cuándo vuelven («Vuelven dentro de 9 min») y deja terminar; sale sola al
   llegar la hora. Fuera de la sesión, en Repasar, también toca a su hora y no antes (las de días,
   desde el día que vencen). Reglas en `learning-core.js` (`nextReadyCard`, `recordDue`).
+- **La primera pregunta tras enseñarla** no se valora: la palabra se vio hace unos segundos, así
+  que acertarla solo prueba la memoria inmediata. Si la acierta solo hay «Bien» (vuelve a los
+  10 minutos); si falla, vuelve al minuto. La valoración de verdad llega en ese segundo intento:
+  Difícil (6 min), Bien (2 días) o Fácil (4 días). Antes, «Fácil» en la primera pregunta la
+  mandaba a 8 días sin pasar por ningún paso corto.
 - **Práctica extra**: si con los repasos pendientes y las nuevas no se llega al número de preguntas
   elegido, se completa con palabras ya estudiadas que aún no tocan, las que vuelven antes primero.
   Nunca las ya repasadas hoy, y las dominadas al final. Si la aciertas, FSRS la calcula como un

@@ -794,7 +794,8 @@ function showCard() {
             <small>${i + 1}${when(rating)}</small>
           </button>`).join("")}
       </div>
-      ${ratings.length > 1 ? `<p class="helper rating-help">${ratings.some(([rating]) => rating === "again")
+      ${justTaught && ratings[0][0] !== "next" ? `<p class="helper rating-help">${t("Acabas de verla: vuelve en unos minutos para comprobar que se queda. Entonces decides cuándo vuelve.")}</p>`
+        : ratings.length > 1 ? `<p class="helper rating-help">${ratings.some(([rating]) => rating === "again")
         ? t("Otra vez: no la sabías, vuelve a salir en esta sesión. Difícil: te costó. Bien: la recordaste. Fácil: la sabías al instante. Debajo de cada botón ves cuándo volverá a salir.")
         : t("Difícil: te costó. Bien: la recordaste. Fácil: la sabías al instante. Debajo de cada botón ves cuándo volverá a salir.")}</p>` : ""}`;
     if ($("speakBtn")) $("speakBtn").onclick = () => speak(entry.w);
@@ -813,7 +814,14 @@ function showCard() {
   }
 
   const NEXT = [["next", t("Siguiente"), "button-primary"]];
-  const PASSED = [["hard", t("Difícil"), "button-hard"], ["good", t("Bien"), "button-good"], ["easy", t("Fácil"), "button-easy"]];
+  /* La primera pregunta de una palabra que se acaba de enseñar (showNewWord) no mide la
+     memoria: la vio hace unos segundos. Ahí FSRS daría 6 min (Difícil), 10 min (Bien) u
+     8 días (Fácil, que se salta los pasos cortos), y nadie sabe a los 8 días algo que vio
+     una vez. Por eso solo vale Bien: vuelve a los 10 minutos, y ese segundo intento ya
+     reparte Difícil / Bien / Fácil en minutos o días (2 d / 4 d con los pasos de ahora). */
+  const justTaught = card.taught && firstTime;
+  const PASSED = justTaught ? [["good", t("Bien"), "button-good"]]
+    : [["hard", t("Difícil"), "button-hard"], ["good", t("Bien"), "button-good"], ["easy", t("Fácil"), "button-easy"]];
 
   /* Tras responder: acertada -> valorar; fallada -> se registra ya y solo queda seguir */
   async function finish(correct, message) {
