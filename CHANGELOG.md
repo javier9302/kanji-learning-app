@@ -10,7 +10,7 @@ Cómo funciona todo hoy: [docs/COMO-FUNCIONA.md](docs/COMO-FUNCIONA.md).
   esta misma web, así que siempre está al día); los pasos están en `SETUP.md`, apartado 8. Nuevo
   botón **Ajustes → Mi perfil → Borrar mi cuenta**, que borra la cuenta y todo tu progreso en todos
   tus dispositivos (hay que volver a ejecutar `schema.sql`). Nueva página de política de privacidad
-  (enlazada en Créditos), y un icono que ya no se recorta en los móviles que lo muestran redondo.
+  (enlazada en Créditos), y un icono que ya no se recorta en los móviles que lo muestran redondo (`750b005`).
 
 - **Palabras guardadas más limpias**: al leer, lo que consultas o ves en un texto se guarda en su
   forma de diccionario (来ました → 来る, 喜んで → 喜ぶ, 有名な → 有名), y en kana si casi siempre se
