@@ -7,7 +7,7 @@ const path = require("node:path");
 const vm = require("node:vm");
 
 const ROOT = path.join(__dirname, "..");
-const scripts = [...fs.readFileSync(path.join(ROOT, "index.html"), "utf8").matchAll(/<script src="([^"]+\.js)"/g)]
+const scripts = [...fs.readFileSync(path.join(ROOT, "index.html"), "utf8").matchAll(/<script src="([^"?]+\.js)(?:\?v=[0-9a-f]+)?"/g)] // con su huella (?v=…)
   .map((match) => match[1]).filter((src) => !src.startsWith("http"));
 
 test("index.html carga scripts que existen y se pueden analizar", () => {

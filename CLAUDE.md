@@ -9,6 +9,9 @@ Funciona sin cuenta (todo en IndexedDB); con cuenta sincroniza con Supabase.
 - `npm test`: pruebas con `node --test` (carpeta `test/`). Deben pasar todas antes de un commit.
 - `npm run smoke`: prueba de humo en Chrome sin ventana (`tools/smoke.mjs` + `tools/smoke-extra.mjs`).
   Con `SMOKE_SHOTS=<carpeta>` guarda capturas de escritorio y móvil para revisarlas.
+- `node tools/stamp-assets.mjs`: tras cambiar cualquier CSS o JS que carguen `index.html` o
+  `admin.html`, actualiza su huella (`style.css?v=…`); si no, `npm test` falla. Sin huella, al
+  publicar el navegador mezclaba la página nueva con el CSS viejo.
 - La integración continua (`.github/workflows/test.yml`) ejecuta las dos en cada push.
 - Para probar a mano: servir la carpeta con cualquier servidor estático (`python3 -m http.server`).
 
@@ -94,7 +97,8 @@ después de `learning-core.js`)
   `tools/lib/sentence-batches.js`, y la de la revisión de Tatoeba, `tools/lib/tatoeba.js`. Tras cambiar uno, `node tools/sync-prompt.mjs` (una prueba falla
   si las copias no coinciden).
 - **`vendor/`**: kuromoji (análisis del japonés) y ts-fsrs, con versión fija.
-- **`sw.js`**: service worker; red primero para la app y caché permanente para `vendor/`.
+- **`sw.js`**: service worker; red primero para la app (sin la caché HTTP del navegador, `fresh`)
+  y caché permanente para `vendor/`.
 
 Progreso del usuario: `userWords` (clave `"escritura|lectura"`) y `userKanji` (clave el carácter),
 con la tarjeta FSRS en `record.fsrs` (y, en los kanjis, lo acertado de cada lectura en `record.readings`). `meta` guarda el historial diario, el perfil de lectura y

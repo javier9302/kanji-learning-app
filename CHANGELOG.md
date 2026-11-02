@@ -4,6 +4,12 @@ Lo que cambia para quien usa la app, el más reciente primero. Cada cambio añad
 el mismo commit. El detalle técnico está en el mensaje de cada commit (`git show <commit>`).
 Cómo funciona todo hoy: [docs/COMO-FUNCIONA.md](docs/COMO-FUNCIONA.md).
 
+## 2026-11-02
+
+- Arreglado: justo después de publicar una versión, el navegador podía mezclar la página nueva
+  con el diseño viejo (salían dos logos de Darumi arriba a la izquierda y el tema elegido en
+  Apariencia no se aplicaba). Ahora cada archivo nuevo se descarga siempre al publicarse.
+
 ## 2026-11-01
 
 - **Elige claro u oscuro**: en Ajustes → Apariencia, el tema puede ser automático (como tu

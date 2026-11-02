@@ -11,7 +11,7 @@ const SOURCE = fs.readFileSync(path.join(__dirname, "../sw.js"), "utf8");
 
 /* Un navegador mínimo: CacheStorage, fetch que cuenta descargas y los eventos del SW */
 function browser(stores = new Map()) {
-  const downloads = [];
+  const downloads = [], modes = [];
   let online = true;
   const makeCache = (name) => {
     if (!stores.has(name)) stores.set(name, new Map());
@@ -32,9 +32,10 @@ function browser(stores = new Map()) {
   const listeners = {};
   const self = { location: { origin: ORIGIN }, addEventListener: (type, fn) => { listeners[type] = fn; },
     skipWaiting: async () => {}, clients: { claim: async () => {} } };
-  const fetch = async (request) => {
+  const fetch = async (request, init = {}) => {
     if (!online) throw new TypeError("Failed to fetch");
     downloads.push(request.url ?? request);
+    modes.push(init.cache || "default");
     return new Response(`body of ${request.url ?? request}`, { status: 200 });
   };
   vm.runInNewContext(SOURCE, { self, caches, fetch, Response, URL, Promise, console });
@@ -49,7 +50,7 @@ function browser(stores = new Map()) {
     const answer = await run("fetch", { request });
     return answer ? await (await answer).text() : null; // null: el SW no la intercepta
   };
-  return { stores, downloads, run, get, offline: () => { online = false; } };
+  return { stores, downloads, modes, run, get, offline: () => { online = false; } };
 }
 
 const DICT = `${ORIGIN}/kanji-learning-app/vendor/kuromoji/dict/base.dat.gz`;
@@ -108,4 +109,13 @@ test("la app abierta con ?add=… (palabras de la web) funciona sin conexión y 
   assert.deepEqual(saved, [HOME]);                        // una sola copia de la página
   b.offline();
   assert.equal(await b.get(`${HOME}?add=%E7%8A%AC`), `body of ${HOME}?share_text=%E9%9B%A8`);
+});
+
+test("la app y la página se piden sin la caché HTTP (no-cache): nunca la página nueva con el CSS viejo", async () => {
+  const b = browser();
+  await b.get(APP);
+  await b.get(`${ORIGIN}/kanji-learning-app/`);
+  assert.deepEqual(b.modes, ["no-cache", "no-cache"]);
+  await b.get(DICT); // lo duradero sigue saliendo de su copia o de la caché normal
+  assert.equal(b.modes[2], "default");
 });

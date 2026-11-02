@@ -9,7 +9,7 @@
      versión nueva de la app no lo borra.
    ========================================= */
 
-const CACHE = "kanji-learning-v27";
+const CACHE = "kanji-learning-v28";
 /* Súbelo SOLO si cambian los archivos de vendor/: obliga a descargarlos otra vez */
 const LASTING = "kanji-lasting-v1";
 const SHELL = [
@@ -104,6 +104,20 @@ self.addEventListener("activate", (event) => {
   })());
 });
 
+/* Pedir a la red sin fiarse de la caché HTTP del navegador. GitHub Pages deja
+   guardar cada archivo 10 minutos (max-age=600): justo después de publicar,
+   un fetch normal podía traer index.html nuevo con style.css o app.js viejos
+   (se vieron los dos logos y el tema elegido no se aplicaba). Con "no-cache" el
+   navegador pregunta si su copia sigue valiendo (ETag): si sí, 304 sin
+   descargarla otra vez. La página (navigate) no admite cambiar su petición: se
+   pide por su dirección y, si el servidor redirige (sin la barra final), se
+   redirige igual. */
+function fresh(request) {
+  if (request.mode !== "navigate") return fetch(request, { cache: "no-cache" });
+  return fetch(request.url, { cache: "no-cache", credentials: "same-origin" })
+    .then((response) => response.redirected ? Response.redirect(response.url, 302) : response);
+}
+
 self.addEventListener("fetch", (event) => {
   const { request } = event;
   if (request.method !== "GET" || !CACHEABLE.includes(new URL(request.url).origin)) return;
@@ -126,7 +140,7 @@ self.addEventListener("fetch", (event) => {
   // página: se guarda una sola copia, sin la parte de después de "?"
   const key = request.mode === "navigate" ? new URL(request.url).origin + new URL(request.url).pathname : request;
   event.respondWith(
-    fetch(request)
+    fresh(request)
       .then((response) => {
         if (response.ok || response.type === "opaque") {
           const copy = response.clone();
@@ -134,7 +148,9 @@ self.addEventListener("fetch", (event) => {
         }
         return response;
       })
-      .catch(() => caches.match(key, { ignoreSearch: request.mode === "navigate" }))
+      // Sin conexión, cualquier copia propia vale aunque su huella (?v=…, tools/stamp-assets.mjs)
+      // sea otra: las de SHELL se guardaron sin ella
+      .catch(() => caches.match(key, { ignoreSearch: new URL(request.url).origin === self.location.origin }))
   );
 });
 
