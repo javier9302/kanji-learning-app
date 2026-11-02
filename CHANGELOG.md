@@ -15,7 +15,7 @@ Cómo funciona todo hoy: [docs/COMO-FUNCIONA.md](docs/COMO-FUNCIONA.md).
   otro chat de IA» en vez de «Modo manual».
 - **Mensajes de error que dicen qué hacer** en lugar de detalles técnicos.
 - **Orientarse mejor**: Demostrar y el diccionario tienen «← Volver»; en el móvil, la
-  sincronización dice su estado en una palabra; Estadísticas pliega las listas largas.
+  sincronización dice su estado en una palabra; Estadísticas pliega las listas largas (`99ef78b`).
 
 - **Para quien empieza de cero**: al empezar puedes elegir «Empiezo de cero» en vez de la prueba
   de nivel, y la prueba termina sola si no sabes cinco seguidas. Las palabras que no sabías ya no
