@@ -6,6 +6,11 @@ Cómo funciona todo hoy: [docs/COMO-FUNCIONA.md](docs/COMO-FUNCIONA.md).
 
 ## 2026-11-02
 
+- **Primera pregunta de una palabra nueva**: justo después de enseñártela ya no hay que elegir
+  entre 6 minutos, 10 minutos u 8 días. Si la aciertas solo sale «Bien» y vuelve a los 10 minutos;
+  en ese segundo intento decides de verdad (Difícil 6 min, Bien 2 días, Fácil 4 días). Así nadie
+  manda a 8 días una palabra que vio hace unos segundos.
+
 - **Lista para Google Play**: la app se puede publicar en Google Play como app de Android (abre
   esta misma web, así que siempre está al día); los pasos están en `SETUP.md`, apartado 8. Nuevo
   botón **Ajustes → Mi perfil → Borrar mi cuenta**, que borra la cuenta y todo tu progreso en todos

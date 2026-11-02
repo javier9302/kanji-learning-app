@@ -608,6 +608,7 @@ const EN = {
   "Crear una cuenta gratis": "Create a free account",
   "Palabra nueva": "New word",
   "Fíjate en cómo se lee: en unas tarjetas te la preguntaremos.": "Notice how it's read: we'll ask you in a few cards.",
+  "Acabas de verla: vuelve en unos minutos para comprobar que se queda. Entonces decides cuándo vuelve.": "You just saw it: it comes back in a few minutes to check that it sticks. Then you decide when it returns.",
   "Ya la he visto": "Got it",
   "Lectura (hiragana o rōmaji)": "Reading (hiragana or rōmaji)",
   "¿Aún no escribes en japonés? Escribe en rōmaji y se convierte solo: gakkou → がっこう.": "Can't type Japanese yet? Type in rōmaji and it converts by itself: gakkou → がっこう.",
