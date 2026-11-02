@@ -12,7 +12,9 @@
    - texts: los propios y los aprobados de otros usuarios. Un texto subido
      queda "pending" hasta que un administrador lo aprueba.
    - text_states: leído / descartado / oculto, por usuario.
-   - user_words, reading_sessions, profiles: solo del usuario.
+   - user_words, reading_sessions, profiles: solo del usuario. Una palabra
+     borrada se sube con deleted_at (la fila se queda como marca): así el
+     borrado llega a los demás dispositivos y la palabra no vuelve.
    El diccionario (words) no se sube: se reconstruye de los textos.
    ========================================= */
 
@@ -69,7 +71,7 @@ const PHASE2_COLUMNS = ["fsrs", "origin", "meaning", "seen_at"];
    cada kanji y el repaso al leer. Si faltan solo se quitan estas: el resto del
    progreso, también el de la fase 2, se sigue subiendo. */
 const MEANING_COLUMNS = ["meaning_correct", "meaning_wrong", "last_meaning_at", "last_written_at", "write_fsrs", "kanji_readings",
-  "read_streak", "last_read_review", "proof_at"];
+  "read_streak", "last_read_review", "proof_at", "deleted_at"];
 const NEWER_ORIGINS = ["diccionario", "traducir"]; // orígenes que una base de datos sin actualizar no admite
 const without = (rows, columns) => rows.map((row) => Object.fromEntries(Object.entries(row).filter(([key]) => !columns.includes(key))));
 
@@ -183,8 +185,17 @@ async function pullReading(userId) {
   for (const row of rows) {
     const stamp = Number(row.client_updated_at);
     sync.pushed.words[row.id] = String(stamp);
-    const mine = userWords.get(row.id);
+    const mine = userWords.get(row.id) || deletedWords.get(row.id);
     if (mine && mine.updatedAt >= stamp) continue;
+    if (row.deleted_at) {
+      // Borrada en otro dispositivo (o en este, antes): se quita, y se queda la marca
+      const gone = { id: row.id, lemma: row.lemma, reading: row.reading, deletedAt: msOf(row.deleted_at), updatedAt: stamp };
+      userWords.delete(row.id);
+      deletedWords.set(row.id, gone);
+      newer.push(gone);
+      continue;
+    }
+    deletedWords.delete(row.id);
     const record = {
       id: row.id, lemma: row.lemma, reading: row.reading, status: row.status,
       canReadKanji: row.can_read_kanji, knowsMeaning: row.knows_meaning, canWrite: row.can_write,
@@ -317,8 +328,9 @@ async function pushReading(userId) {
     first_seen: isoOf(word.firstSeen), last_seen: isoOf(word.lastSeen),
     origin: word.origin || null, meaning: word.meaning || null,
     read_streak: whole(word.readStreak), last_read_review: /^\d{4}-\d{2}-\d{2}$/.test(word.lastReadReview || "") ? word.lastReadReview : null,
-    client_updated_at: Math.round(word.updatedAt), ...srsToRow(word)
+    client_updated_at: Math.round(word.updatedAt), deleted_at: null, ...srsToRow(word)
   })), changed.map((word) => [word.id, String(word.updatedAt)]), pushed.words);
+  await pushWordDeletions(userId);
 
   // Progreso por kanji
   const kanjiChanged = [...userKanji.values()].filter((k) => pushed.kanji[k.id] !== String(k.updatedAt));
@@ -346,6 +358,34 @@ async function pushReading(userId) {
     if (error?.code !== "PGRST204") throw error;
     console.warn("Faltan columnas en reading_sessions: ejecuta supabase/schema.sql.");
     await pushRows("reading_sessions", "user_id,id", without(sessionRows, ["reviews"]), [], pushed.sessions);
+  }
+}
+
+/* Palabras borradas: la fila se queda con deleted_at, para que los demás
+   dispositivos también la quiten. Si la base de datos aún no tiene la columna
+   (falta ejecutar supabase/schema.sql), se borra la fila: en este dispositivo y
+   en los que se instalen después no vuelve; en otro que ya la tuviera se quita
+   al pasar por la misma limpieza. */
+async function pushWordDeletions(userId) {
+  const pushed = sync.pushed.words;
+  const gone = [...deletedWords.values()].filter((word) => !userWords.has(word.id) && pushed[word.id] !== String(word.updatedAt));
+  if (!gone.length) return;
+  const rows = gone.map((word) => ({
+    user_id: userId, id: word.id, lemma: word.lemma || word.id.split("|")[0], reading: word.reading ?? word.id.split("|")[1] ?? "",
+    status: "unknown", studied: false, client_updated_at: Math.round(word.updatedAt), deleted_at: isoOf(word.deletedAt)
+  }));
+  const marks = gone.map((word) => [word.id, String(word.updatedAt)]);
+  try {
+    await pushRows("user_words", "user_id,id", rows, marks, pushed);
+  } catch (error) {
+    if (error?.code !== "PGRST204") throw error;
+    console.warn("Falta la columna deleted_at en user_words: ejecuta supabase/schema.sql. Se borran las filas.");
+    for (let i = 0; i < gone.length; i += SYNC_BATCH) {
+      const ids = gone.slice(i, i + SYNC_BATCH).map((word) => word.id);
+      const { error: failed } = await sb.from("user_words").delete().eq("user_id", userId).in("id", ids);
+      if (failed) throw failed;
+      for (const [id, print] of marks.slice(i, i + SYNC_BATCH)) pushed[id] = print;
+    }
   }
 }
 

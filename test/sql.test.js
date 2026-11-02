@@ -298,6 +298,9 @@ test("push_due_counts: los pasos cortos a su hora y las demás por el día de su
     ($1, '名前|なまえ', '名前', 'なまえ', true, current_date + 1, jsonb_build_object('scheduled_days', 0, 'due', now() - interval '1 minute')),
     ($1, '山|やま', '山', 'やま', true, current_date, jsonb_build_object('scheduled_days', 0, 'due', now() + interval '10 minutes')),
     ($1, '川|かわ', '川', 'かわ', false, current_date - 1, null)`, [id]);
+  // Una palabra borrada (la marca de deleted_at) no cuenta aunque tuviera tarjeta
+  await db.query(`insert into public.user_words (user_id, id, lemma, reading, studied, next_review, deleted_at) values
+    ($1, '来ました|きました', '来ました', 'きました', true, current_date - 1, now())`, [id]);
   const { rows } = await db.query(`select * from public.push_due_counts() where endpoint like 'https://push.example/%' order by endpoint`);
   assert.deepEqual(rows.map((row) => row.due), [2, 2]); // 学校 y 名前; 山 espera sus 10 minutos
   assert.match(rows[0].local_day, /^\d{4}-\d{2}-\d{2}$/);

@@ -6,6 +6,14 @@ Cómo funciona todo hoy: [docs/COMO-FUNCIONA.md](docs/COMO-FUNCIONA.md).
 
 ## 2026-11-02
 
+- **Palabras guardadas más limpias**: al leer, lo que consultas o ves en un texto se guarda en su
+  forma de diccionario (来ました → 来る, 喜んで → 喜ぶ, 有名な → 有名), y en kana si casi siempre se
+  escribe así (有る → ある). Ya no se guardan partículas ni trozos (のは, んだ, ける) ni kana sueltas.
+  Una vez, la app te enseña la lista entera de lo que ya tenías mal guardado y, si aceptas,
+  descarga una copia y lo arregla: une cada forma con su palabra (con el mejor estado y el repaso
+  de la que más repasaste), borra lo que no es una palabra o no tiene significado (y 下手 leída
+  したて) y moderniza grafías (御飯 → ご飯). Lo borrado se borra también en tus otros dispositivos.
+
 - **Textos de la IA con mejores palabras**: al crear un texto, la lista de palabras que se le manda
   a la IA ya no lleva formas conjugadas (いました, 来て), trozos (のは, んだ) ni grafías raras
   (有る, 御飯, 落す): van como ある, ご飯, 落とす. Una palabra mal guardada (下手 leída したて) ya no

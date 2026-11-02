@@ -1146,7 +1146,30 @@ const EN = {
   "Tu frase, de": "Your sentence, from",
   "No se pudo abrir el almacenamiento local": "Local storage could not be opened",
   "Abre la aplicación desde un navegador compatible con IndexedDB.":
-    "Open the app in a browser that supports IndexedDB."
+    "Open the app in a browser that supports IndexedDB.",
+  // Limpiar las palabras guardadas (reading.js, sección 13)
+  "Limpiar tus palabras guardadas": "Clean up your saved words",
+  "Al leer se guardaban a veces formas conjugadas, trozos o partículas como si fueran palabras. Esto es lo que cambiaría. Antes se descarga una copia de todas tus palabras. Lo que ya repasaste se conserva: al unir dos, se queda el mejor estado y el repaso de la que más repasaste.":
+    "Reading sometimes saved conjugated forms, fragments or particles as if they were words. This is what would change. A copy of all your words is downloaded first. What you have already reviewed is kept: when two are merged, the best state and the review history of the one you reviewed most are kept.",
+  "Descargar la copia y limpiar": "Download the copy and clean up",
+  "Se borran": "Deleted",
+  "Pasan a su forma de diccionario": "Changed to their dictionary form",
+  "se une a la que ya tenías": "merged into the one you already had",
+  "vacía": "empty",
+  "una kana suelta": "a single kana",
+  "partícula o auxiliar, no es una palabra": "particle or auxiliary, not a word",
+  "trozo de otra palabra, sin entrada en el diccionario": "a piece of another word, not in the dictionary",
+  "esa lectura no existe": "that reading does not exist",
+  "sin significado en ningún diccionario": "no meaning in any dictionary",
+  "sin lectura": "no reading",
+  "forma conjugada": "conjugated form",
+  "otra forma del verbo o adjetivo": "another form of the verb or adjective",
+  "escritura antigua": "old spelling",
+  "casi siempre se escribe en kana": "usually written in kana",
+  "Hecho: {gone} palabras borradas y {moved} pasadas a su forma de diccionario. La copia se ha descargado.":
+    "Done: {gone} words deleted and {moved} changed to their dictionary form. The copy has been downloaded.",
+  "No se pudo aplicar. Inténtalo otra vez; la copia descargada tiene tus palabras de antes.":
+    "It could not be applied. Try again; the downloaded copy has your words from before."
 };
 
 /* Idioma elegido en este dispositivo; si no hay ninguno, el del navegador */

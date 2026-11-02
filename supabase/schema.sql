@@ -1194,6 +1194,16 @@ alter table public.user_words add column if not exists last_read_review date;
 alter table public.reading_sessions add column if not exists reviews jsonb;
 
 -- =========================================
+-- PALABRAS BORRADAS
+-- =========================================
+
+-- La limpieza de las palabras guardadas al leer (story-core.js, sección 6) borra
+-- palabras (のは, 下手|したて) y une formas en su lema (来ました -> 来る). La fila
+-- borrada se queda con deleted_at como marca: así el borrado llega a los demás
+-- dispositivos del usuario y la palabra no vuelve con la siguiente sincronización.
+alter table public.user_words add column if not exists deleted_at timestamptz;
+
+-- =========================================
 -- DEMOSTRAR LOS KANJIS DE UN NIVEL
 -- =========================================
 
@@ -1270,7 +1280,7 @@ returns table (endpoint text, p256dh text, auth text, lang text, min_due integer
 language sql stable security definer set search_path = '' as $$
   select s.endpoint, s.p256dh, s.auth, s.lang, s.min_due,
     (select count(*)::integer from public.user_words w
-      where w.user_id = s.user_id and w.studied and (
+      where w.user_id = s.user_id and w.studied and w.deleted_at is null and (
         case when (w.fsrs ->> 'scheduled_days') = '0' and w.fsrs ? 'due'
           then (w.fsrs ->> 'due')::timestamptz <= now()
           else w.next_review <= (now() at time zone s.tz)::date end)),

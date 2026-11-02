@@ -883,16 +883,73 @@ async function openText(id) {
   const resume = saved.textId === id && !text.readAt;
   // rubyShown: palabras que han salido con furigana (al leer no cuentan como repaso: la lectura estaba a la vista)
   reader = { text, dictionary, entries, canSkip, clicks: new Map(resume ? saved.clicks : []), panel: null,
-    startedAt: resume && saved.startedAt || Date.now(), rubyShown: new Set() };
+    startedAt: resume && saved.startedAt || Date.now(), rubyShown: new Set(), keyMap: new Map() };
+  // Las claves de un texto guardado antes de la limpieza (来ました, のは) se pasan a su
+  // lema; sin esperar a kuromoji para abrirlo: al estar, se vuelve a pintar
+  reader.keyMapReady = textKeyMap(text).then((map) => {
+    if (reader?.text !== text) return;
+    reader.keyMap = map;
+    if (map.size && !reader.panel) refreshReader();
+  });
   saveReaderState();
   switchView("read");
 }
 
+/* La clave con la que se guarda cada palabra de un texto (savedWord, story-core.js,
+   sección 6): Map(clave del texto -> clave buena, o "" si no se guarda). Solo lleva
+   las que cambian. Las palabras nuevas reciben su ficha en el diccionario propio. */
+async function textKeyMap(text) {
+  const map = new Map();
+  try {
+    const tools = await readingWordTools();
+    const fresh = [];
+    for (const key of Object.keys(text.lemmas || {})) {
+      const [lemma, reading] = key.split("|");
+      const result = savedWord({ ...userWords.get(key), lemma, reading }, tools);
+      if (result.drop) { map.set(key, ""); continue; }
+      if (result.id === key) continue;
+      map.set(key, result.id);
+      const entry = lemmaEntry(result, words.get(key));
+      if (entry) fresh.push(entry);
+    }
+    await putRecords("words", fresh);
+  } catch (error) {
+    console.error("No se pudieron revisar las palabras del texto:", error); // se lee igual, con sus claves
+  }
+  return map;
+}
+
+/* Lo que necesita savedWord en el navegador */
+async function readingWordTools() {
+  await BANK.loadUpTo("N1").catch(() => {});
+  const [tokenizer, jmdict] = await Promise.all([loadTokenizer().catch(() => null), loadLocalDictionary()]);
+  return savedWordTools({ bank: BANK, jmdict, entries: words, records: userWords, tokenizer });
+}
+
+/* La ficha de una palabra que pasa a su lema (来ました -> 来る): la del banco, o la
+   de la forma que tenía (su significado), con la escritura nueva. null si ya la hay. */
+function lemmaEntry(target, old) {
+  if (words.has(target.id)) return null;
+  const word = BANK.words.get(target.id);
+  const entry = word
+    ? { id: target.id, lemma: word.w, reading: word.r, meanings: word.en, meaningsEs: word.es, pos: "", source: "jmdict", updatedAt: Date.now() }
+    : old ? { ...old, id: target.id, lemma: target.lemma, reading: target.reading, updatedAt: Date.now() } : null;
+  if (entry) words.set(entry.id, entry);
+  return entry;
+}
+
+/* Las claves de las palabras de un texto, ya pasadas a su lema y sin repetirse */
+const readerKeys = (text, keyMap = new Map()) =>
+  [...new Set(Object.keys(text.lemmas).map((key) => keyMap.has(key) ? keyMap.get(key) : key))].filter(Boolean);
+
 /* La palabra de una unidad del texto: su clave y su entrada. Los textos nuevos
    llevan la clave en cada unidad; los anteriores, un diccionario por lema. */
 const tokenEntry = (token) => token.key && reader.entries?.[token.key] || reader.dictionary[token.lemma] || null;
-const tokenKey = (token) => token.key && reader.entries?.[token.key] ? token.key
-  : reader.dictionary[token.lemma] ? wordKey(token.lemma, reader.dictionary[token.lemma].reading) : "";
+function tokenKey(token) {
+  const key = token.key && reader.entries?.[token.key] ? token.key
+    : reader.dictionary[token.lemma] ? wordKey(token.lemma, reader.dictionary[token.lemma].reading) : "";
+  return reader.keyMap?.has(key) ? reader.keyMap.get(key) : key;
+}
 
 /* Furigana solo sobre la parte en kanji: 飲みます -> 飲(の)みます */
 function rubyHTML(surface, reading) {
@@ -1077,7 +1134,8 @@ async function classifyWord(cls) {
   const { s, t: index } = reader.panel;
   const token = reader.text.data.sentences[s].tokens[index];
   const key = tokenKey(token);
-  const mine = userWords.get(key) || blankUserWord(token.lemma, tokenEntry(token).reading);
+  if (!key) return;
+  const mine = userWords.get(key) || blankUserWord(...key.split("|"));
   if (reader.clicks.get(key) === "looked" || !reader.clicks.has(key)) mine.lookups++;
   mine.lastSeen = Date.now();
   mine.origin ??= "lectura";
@@ -1095,7 +1153,9 @@ async function classifyWord(cls) {
 /* ---------- Fin de la lectura ---------- */
 
 async function finishReading(discarded) {
+  await reader.keyMapReady;
   const { text, clicks, startedAt } = reader;
+  const keys = readerKeys(text, reader.keyMap);
   const now = Date.now();
 
   let record;
@@ -1109,7 +1169,7 @@ async function finishReading(discarded) {
   }
 
   const marked = [...clicks.values()].filter((cls) => cls === "new" || cls === "kanji").length;
-  const unique = Object.keys(text.lemmas).length || 1;
+  const unique = keys.length || 1;
   const summary = {
     discarded, record,
     looked: clicks.size,
@@ -1118,8 +1178,8 @@ async function finishReading(discarded) {
   };
 
   // Un texto descartado no se leyó: sus palabras no cambian de estado
-  const candidates = discarded ? [] : await markSeenWords(text, clicks);
-  if (!discarded) summary.reviews = await reviewByReading(text, clicks, reader.rubyShown, record);
+  const candidates = discarded ? [] : await markSeenWords(keys, clicks);
+  if (!discarded) summary.reviews = await reviewByReading(keys, clicks, reader.rubyShown, record);
   reader = null;
   clearReaderState();
   scheduleSync();
@@ -1130,10 +1190,10 @@ async function finishReading(discarded) {
 /* Al terminar un texto, sus palabras sin progreso pasan a pre_known
    (posiblemente conocidas, sin confirmar). Devuelve las pre_known vistas,
    primero las que el usuario consultó. */
-async function markSeenWords(text, clicks) {
+async function markSeenWords(keys, clicks) {
   const now = Date.now();
   const seen = [];
-  for (const key of Object.keys(text.lemmas)) {
+  for (const key of keys) {
     const entry = words.get(key);
     if (!entry) continue;
     let mine = userWords.get(key);
@@ -1151,7 +1211,7 @@ async function markSeenWords(text, clicks) {
 
   // Los kanjis del texto quedan como "vistos": desbloquean las palabras básicas que los llevan
   const seenKanji = [];
-  for (const c of new Set(Object.keys(text.lemmas).flatMap((key) => kanjiOf(key.split("|")[0])))) {
+  for (const c of new Set(keys.flatMap((key) => kanjiOf(key.split("|")[0])))) {
     const record = userKanji.get(c) || blankUserKanji(c);
     if (record.seenAt) continue;
     record.seenAt = record.updatedAt = now;
@@ -1169,9 +1229,9 @@ async function markSeenWords(text, clicks) {
    que tocaba repasar. Devuelve [{ key, result, before }] (before: el registro
    como estaba, para poder deshacerlo desde el resumen) y lo apunta en la sesión
    (record.reviews = { clave: "good" | "again" }). */
-async function reviewByReading(text, clicks, rubyShown, record) {
+async function reviewByReading(keys, clicks, rubyShown, record) {
   const day = today(), done = [];
-  for (const key of Object.keys(text.lemmas)) {
+  for (const key of keys) {
     const rec = userWords.get(key);
     const { result } = readingCredit({
       rec, tapped: clicks.has(key), checked: clicks.get(key) === "check", furigana: rubyShown.has(key), day
@@ -1469,5 +1529,143 @@ function bindReader() {
     reader = evaluation = null;
     meta.reading = {};
     switchView("read");
+  });
+}
+
+/* =========================================
+   13. LIMPIEZA DE LAS PALABRAS GUARDADAS (una sola vez)
+   -----------------------------------------
+   Antes, al leer se guardaba a veces lo que salía en el texto tal cual
+   (来ました, のは, い, 下手|したて). La regla de lo que se guarda ahora es
+   savedWord (story-core.js, sección 6); aquí se aplica una vez a lo ya
+   guardado. Primero se enseña la lista entera y se descarga una copia;
+   solo se aplica si el usuario lo acepta. Con sesión, después de sincronizar,
+   para partir de lo último de los demás dispositivos. Lo borrado se queda
+   como marca (deletedWords) y se sube con deleted_at.
+   prefs.wordCleanup: 1 cuando ya está hecha (o no había nada que limpiar).
+   ========================================= */
+
+let wordCleanup = null; // { plan, backup } mientras el diálogo está abierto
+
+const CLEANUP_REASONS = {
+  "vacía": "vacía", "kana suelta": "una kana suelta", "partícula o auxiliar": "partícula o auxiliar, no es una palabra",
+  "trozo probable": "trozo de otra palabra, sin entrada en el diccionario", "lectura inventada": "esa lectura no existe",
+  "sin significado": "sin significado en ningún diccionario", "sin lectura": "sin lectura",
+  "conjugada": "forma conjugada", "forma": "otra forma del verbo o adjetivo", "grafía": "escritura antigua",
+  "kana": "casi siempre se escribe en kana"
+};
+
+async function offerWordCleanup() {
+  if (prefs.wordCleanup === 1 || prefs.wordCleanupLater === today()) return;
+  if (sync.user) {
+    // Lo que otro dispositivo ya limpió llega antes: así no se une dos veces
+    for (let i = 0; sync.running && i < 60; i++) await new Promise((done) => setTimeout(done, 500));
+    await syncNow();
+    if (sync.user && !sync.config.lastSync) return; // sin conexión: otro día
+  }
+  if (!userWords.size) { prefs.wordCleanup = 1; return saveLocal("kanji-prefs", prefs); }
+  const tools = await readingWordTools();
+  if (!tools.tokens) return; // sin kuromoji no se puede decidir bien: otro día
+  const plan = planWordCleanup([...userWords.values()], tools);
+  if (!plan.remove.length && !plan.save.length) { prefs.wordCleanup = 1; return saveLocal("kanji-prefs", prefs); }
+  wordCleanup = { plan };
+  renderWordCleanup();
+  $("cleanupDialog").showModal();
+}
+
+function renderWordCleanup() {
+  const { plan } = wordCleanup;
+  const word = (id) => {
+    const [lemma, reading] = id.split("|");
+    return `<span lang="ja">${escapeHTML(lemma)}</span>${reading && reading !== lemma
+      ? ` <span class="helper" lang="ja">${escapeHTML(reading)}</span>` : ""}`;
+  };
+  const state = (rec) => escapeHTML(t(WORD_STATUS_ONE[rec.status] || rec.status)) +
+    (rec.repetitions ? ` · ${plural(rec.repetitions, "repaso", "repasos")}` : "");
+  const merged = new Set(plan.save.map((rec) => rec.id));
+  const existing = (id) => userWords.has(id);
+  $("cleanupList").innerHTML = `
+    <h4>${t("Se borran")} (${plan.drops.length})</h4>
+    <ul class="cleanup-list">${plan.drops.map(({ id, reason, rec }) => `<li>${word(id)}
+      <span class="cleanup-why">${state(rec)} — ${escapeHTML(t(CLEANUP_REASONS[reason] || reason))}</span></li>`).join("")}</ul>
+    <h4>${t("Pasan a su forma de diccionario")} (${plan.moves.length})</h4>
+    <ul class="cleanup-list">${plan.moves.map(({ from, to, why, rec }) => `<li>${word(from)} → ${word(to)}
+      <span class="cleanup-why">${state(rec)} — ${escapeHTML(t(CLEANUP_REASONS[why] || why))}${
+        existing(to) && merged.has(to) ? ` · ${t("se une a la que ya tenías")}` : ""}</span></li>`).join("")}</ul>`;
+  $("cleanupMessage").textContent = "";
+}
+
+/* La copia de antes de limpiar: todo el progreso por palabra y lo que lo nombra.
+   tools/word-cleanup.mjs la lee para volver a calcular la lista. */
+function downloadWordBackup() {
+  const affected = new Set([...wordCleanup.plan.remove, ...wordCleanup.plan.save.map((rec) => rec.id)]);
+  const backup = {
+    app: "yomipop", kind: "word-cleanup-backup", createdAt: new Date().toISOString(),
+    userWords: [...userWords.values()],
+    words: [...affected].map((id) => words.get(id)).filter(Boolean),
+    queue: meta.queue || null, roadmap: meta.roadmap || null,
+    captured: [...userSentences.values()].filter((sentence) => sentence.source === "web" && affected.has(sentence.word))
+  };
+  const json = JSON.stringify(backup);
+  try { localStorage.setItem("kanji-words-backup", json); } catch { /* sin sitio: queda el archivo */ }
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(new Blob([json], { type: "application/json" }));
+  link.download = `yomipop-palabras-antes-de-limpiar-${today()}.json`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+}
+
+async function applyWordCleanup() {
+  const { plan } = wordCleanup;
+  $("cleanupApplyBtn").disabled = true;
+  try {
+    downloadWordBackup();
+    const now = Date.now();
+    // A dónde va cada clave: la nueva, o "" si se borra
+    const target = new Map([...plan.drops.map(({ id }) => [id, ""]), ...plan.moves.map(({ from, to }) => [from, to])]);
+    // Se guarda primero; solo después cambia lo que tiene la app en memoria
+    const gone = plan.remove.map((id) => ({ id, lemma: userWords.get(id)?.lemma || "", reading: userWords.get(id)?.reading || "",
+      deletedAt: now, updatedAt: now }));
+    await putRecords("userWords", [...gone, ...plan.save]);
+    for (const mark of gone) { userWords.delete(mark.id); deletedWords.set(mark.id, mark); }
+    for (const rec of plan.save) userWords.set(rec.id, rec);
+    await putRecords("words", plan.moves.map(({ from, to }) => lemmaEntry(savedWordFromId(to), words.get(from))).filter(Boolean));
+
+    // Lo que nombra las palabras por su clave: la lista importada, la hoja de ruta y las frases de la web
+    const rename = (ids) => [...new Set((ids || []).map((id) => target.has(id) ? target.get(id) : id).filter(Boolean))];
+    if (meta.queue?.ids) meta.queue.ids = rename(meta.queue.ids);
+    if (meta.roadmap?.words) meta.roadmap.words = rename(meta.roadmap.words);
+    await saveMeta();
+    const captured = [...userSentences.values()].filter((sentence) => sentence.source === "web" && target.get(sentence.word));
+    for (const sentence of captured) Object.assign(sentence, { word: target.get(sentence.word), updatedAt: now });
+    if (captured.length) { await putRecords("sentences", captured); forgetSentenceIndex(); }
+
+    prefs.wordCleanup = 1;
+    saveLocal("kanji-prefs", prefs);
+    $("cleanupMessage").textContent = t("Hecho: {gone} palabras borradas y {moved} pasadas a su forma de diccionario. La copia se ha descargado.",
+      { gone: plan.drops.length, moved: plan.moves.length });
+    $("cleanupApplyBtn").classList.add("hidden");
+    $("cleanupLaterBtn").textContent = t("Cerrar");
+    wordCleanup = null;
+    scheduleSync();
+    updateCounts();
+    renderAll();
+  } catch (error) {
+    console.error("No se pudo limpiar las palabras:", error);
+    $("cleanupMessage").textContent = t("No se pudo aplicar. Inténtalo otra vez; la copia descargada tiene tus palabras de antes.");
+    $("cleanupApplyBtn").disabled = false;
+  }
+}
+
+const savedWordFromId = (id) => { const [lemma, reading] = id.split("|"); return { id, lemma, reading }; };
+
+function bindWordCleanup() {
+  $("cleanupApplyBtn").addEventListener("click", applyWordCleanup);
+  $("cleanupLaterBtn").addEventListener("click", () => {
+    if (wordCleanup) { prefs.wordCleanupLater = today(); saveLocal("kanji-prefs", prefs); } // se vuelve a proponer mañana
+    wordCleanup = null;
+    $("cleanupDialog").close();
   });
 }

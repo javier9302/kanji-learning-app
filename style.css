@@ -3187,6 +3187,28 @@ body[data-view="dict"] .intro {
   margin: 4px 0;
 }
 
+/* Limpiar las palabras guardadas: la lista entera de lo que cambiaría */
+.cleanup-body h4 {
+  margin: 14px 0 6px;
+  font-size: 14px;
+}
+
+.cleanup-list {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.cleanup-list li {
+  margin: 4px 0;
+  line-height: 1.5;
+}
+
+.cleanup-why {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+}
+
 /* Resumen de una lectura: las palabras que contaron como repaso */
 .read-reviews {
   margin-top: 16px;

@@ -1576,4 +1576,72 @@ export default async function extra({ page, step, check }) {
       });
     }
   });
+
+  await step("palabras guardadas: un texto nuevo guarda el lema (来ました -> 来る) y no enlaza trozos (のは, 続|ける)", async () => {
+    const keys = await page.evaluate(async () => {
+      const raw = JSON.stringify({ title: "t", sentences: [{ ja: "友達|が|来ました|。|続|ける|のは|楽しい|。", en: "", es: "" }] });
+      const { text } = await validateText(raw);
+      return text.sentences[0].tokens.map((token) => [token.surface, token.key || ""]);
+    });
+    const key = (surface) => keys.find(([s]) => s === surface)?.[1];
+    check(key("来ました") === "来る|くる", JSON.stringify(keys));
+    check(key("続ける") === "続ける|つづける" && !keys.some(([s]) => s === "ける"), JSON.stringify(keys));
+    check(key("のは") === "", JSON.stringify(keys));
+  });
+
+  await step("limpieza de palabras: enseña la lista, descarga la copia y une en el lema con el repaso del que más repasó", async () => {
+    const result = await page.evaluate(async () => {
+      const rec = (lemma, reading, extra = {}) => ({ ...blankUserWord(lemma, reading), ...extra });
+      const seeded = [rec("来る", "くる", { status: "mastered", seen: 3 }), rec("来ました", "きました", { status: "learning", studied: true, repetitions: 5, seen: 2 }),
+        rec("のは", "のは", { status: "pre_known" }), rec("下手", "したて", { status: "learning", studied: true, repetitions: 1 })];
+      for (const word of seeded) userWords.set(word.id, word);
+      await putRecords("userWords", seeded);
+      prefs.wordCleanup = 0;
+      delete prefs.wordCleanupLater;
+      await offerWordCleanup();
+      const listed = $("cleanupDialog").open ? $("cleanupList").textContent : "";
+      await applyWordCleanup();
+      const merged = userWords.get("来る|くる");
+      await loadReadingData(); // al volver a abrir la app, lo borrado sigue fuera
+      const out = {
+        listed: ["来ました", "のは", "下手"].every((w) => listed.includes(w)),
+        merged: [merged.status, merged.repetitions, merged.studied, merged.seen],
+        gone: ["来ました|きました", "のは|のは", "下手|したて"].map((id) => !userWords.has(id) && deletedWords.has(id)),
+        backup: JSON.parse(localStorage.getItem("kanji-words-backup") || "{}").userWords?.some((w) => w.id === "来ました|きました"),
+        done: prefs.wordCleanup
+      };
+      $("cleanupDialog").close();
+      return out;
+    });
+    check(result.listed && result.backup && result.done === 1, JSON.stringify(result));
+    check(JSON.stringify(result.merged) === JSON.stringify(["mastered", 5, true, 5]), JSON.stringify(result));
+    check(result.gone.every(Boolean), JSON.stringify(result));
+  });
+
+  await step("limpieza de palabras: el borrado se sube con deleted_at y lo borrado en otro dispositivo se quita aquí", async () => {
+    const result = await page.evaluate(async () => {
+      const sent = [];
+      const real = { pushRows: window.pushRows, fetchChanged: window.fetchChanged };
+      const word = { ...blankUserWord("いました", "いました"), status: "pre_known" };
+      userWords.set(word.id, word);
+      window.pushRows = async (table, conflict, rows, marks, pushed) => {
+        if (table === "user_words") sent.push(...rows);
+        for (const [key, print] of marks) pushed[key] = print;
+      };
+      window.fetchChanged = async (table) => table !== "user_words" ? [] : [{ id: word.id, lemma: word.lemma, reading: word.reading,
+        status: "unknown", client_updated_at: word.updatedAt + 1000, deleted_at: new Date().toISOString() }];
+      try {
+        await pushWordDeletions("u1");
+        await pullReading("u1");
+      } finally {
+        Object.assign(window, real);
+      }
+      return {
+        marked: sent.filter((row) => row.deleted_at).map((row) => row.id).sort(),
+        removed: !userWords.has(word.id) && deletedWords.has(word.id)
+      };
+    });
+    check(result.marked.includes("のは|のは") && result.marked.includes("来ました|きました"), JSON.stringify(result));
+    check(result.removed, JSON.stringify(result));
+  });
 }

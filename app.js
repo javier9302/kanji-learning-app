@@ -120,7 +120,8 @@ const prefs = loadLocal("kanji-prefs", {
   kanjiBoxes: true,    // Repasar, «Palabra sola»: una casilla por kanji al escribir la lectura
   notifyMin: 10,       // Avisos de repaso: avisar cuando se junten tantas palabras (notify.js)
   theme: "auto",       // Apariencia: auto (la del dispositivo) | light | dark
-  romaji: true         // Rōmaji junto a cada lectura en kana: quien empieza aún no lee hiragana
+  romaji: true,        // Rōmaji junto a cada lectura en kana: quien empieza aún no lee hiragana
+  wordCleanup: 0       // Limpieza de las palabras guardadas al leer (reading.js, sección 13): 1 = hecha
 });
 // Presentación al escribir la lectura: word (palabra sola) | sentence (en una frase).
 // Sustituye al antiguo ajuste "Repasar con frases": quien lo tenía activado empieza en "sentence".
@@ -1261,6 +1262,7 @@ async function init() {
   bindDictionary();
   bindTranslate();
   bindReader();
+  bindWordCleanup();
   bindReadingStats();
   bindSync();
   bindCapture();
@@ -1277,7 +1279,10 @@ async function init() {
   // frases de ejemplo de los textos que ya había (solo la primera vez o si cambian las reglas)
   repairKanaMeanings().catch((error) => console.error("No se pudieron reparar los significados:", error))
     .then(() => rebuildSentencesIfNeeded())
-    .catch((error) => console.error("No se pudieron preparar las frases:", error));
+    .catch((error) => console.error("No se pudieron preparar las frases:", error))
+    // Y la limpieza de las palabras guardadas al leer: enseña la lista y pide permiso
+    .then(() => offerWordCleanup())
+    .catch((error) => console.error("No se pudo preparar la limpieza de palabras:", error));
 
   if ("serviceWorker" in navigator && location.protocol === "https:") {
     navigator.serviceWorker.register("sw.js").catch(() => {});

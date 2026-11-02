@@ -40,6 +40,7 @@ let texts = [];
 let deletedTexts = [];     // textos propios borrados: { id, owner, deletedAt } hasta avisar al servidor
 let words = new Map();     // id -> palabra del diccionario
 let userWords = new Map(); // id -> progreso del usuario
+let deletedWords = new Map(); // id -> { id, lemma, reading, deletedAt, updatedAt }: borradas, para avisar al servidor
 
 const wordKey = (lemma, reading) => `${normalizeText(lemma)}|${normalizeReading(reading)}`;
 const newId = () => crypto.randomUUID?.() ||
@@ -66,7 +67,11 @@ async function loadReadingData() {
   texts = all.filter((text) => !text.deletedAt);
   deletedTexts = all.filter((text) => text.deletedAt);
   words = new Map((await getAll("words")).map((w) => [w.id, w]));
-  userWords = new Map((await getAll("userWords")).map((w) => [w.id, w]));
+  // Una palabra borrada (la limpieza de palabras guardadas) se queda en el almacén como
+  // marca, para que el borrado llegue a Supabase y a los demás dispositivos
+  const progress = await getAll("userWords");
+  userWords = new Map(progress.filter((w) => !w.deletedAt).map((w) => [w.id, w]));
+  deletedWords = new Map(progress.filter((w) => w.deletedAt).map((w) => [w.id, w]));
 }
 
 /* Vacía todo lo de lectura (al cambiar de cuenta en el dispositivo) */
@@ -78,6 +83,7 @@ async function clearReadingData() {
   deletedTexts = [];
   words = new Map();
   userWords = new Map();
+  deletedWords = new Map();
   userKanji = new Map();
   userSentences = new Map();
   sentenceStats = new Map();
@@ -465,6 +471,20 @@ function segmentErrors(data) {
 
 /* El análisis de las unidades (unitOf, analyseUnits…) está en ja-core.js */
 
+/* Empieza por partícula o auxiliar, o por algo que no va solo y sigue (の de のは, ん de んだ) */
+const isFunctionStart = (pieces) => ["助詞", "助動詞"].includes(pieces[0]?.pos) ||
+  pieces.length > 1 && pieces[0].pos === "名詞" && pieces[0].pos_detail_1 === "非自立";
+/* Una forma conjugada: verbo o adjetivo con lo que se le pega al conjugarlo (来ました,
+   喜んで, 有名な), o un verbo o adjetivo suelto en otra forma (聞こえ, 速く). 一緒に o すぐに
+   no: に no es una terminación. Misma regla que savedWord (story-core.js, sección 6). */
+function isInflected(pieces) {
+  const [first, ...rest] = pieces;
+  const ending = (piece) => piece.pos === "助動詞" || piece.pos === "助詞" && piece.pos_detail_1 === "接続助詞";
+  if (!first || first.pos === "感動詞") return false; // ありがとうございます es un saludo
+  if (rest.length) return rest.every(ending);
+  return ["動詞", "形容詞"].includes(first.pos) && pieceBase(first) !== first.surface_form && !isKana(first.surface_form);
+}
+
 /* Convierte el formato segmentado en el que usa la app: a cada unidad le pone
    lema, lectura y tipo con kuromoji, sin IA. Resolución de cada unidad:
      1. la forma exacta está en el diccionario;
@@ -492,20 +512,37 @@ async function fromSegmented(data, repairs) {
   const extra = await lookupDictionary([...wanted]);
   const known = (form) => !!bankLookup(form, "") || extra.has(form);
   const token = (unit, lemma) => ({ surface: unit.surface, lemma, reading: unit.reading, pos: unit.pos, morph: unit.morph });
+  const merge = (unit, next) => {
+    const joined = unitOf([...unit.pieces, ...next.pieces]);
+    repairs.push(`units merged: ${unit.surface}|${next.surface}`);
+    return token(joined, joined.surface);
+  };
 
   const sentences = list.map((sentence, index) => {
     const units = analysed[index], tokens = [];
     for (let i = 0; i < units.length; i++) {
       const unit = units[i], next = units[i + 1];
       if (unit.punct || UNCOUNTED_POS.has(unit.pos)) { tokens.push(token(unit, unit.surface)); continue; }
+      // Sin nada con contenido y empezando por partícula o auxiliar (のは, んだ): no es una palabra
+      if (!unit.pieces.some(isContentPiece) && isFunctionStart(unit.pieces)) {
+        tokens.push({ ...token(unit, unit.surface), pos: unit.pieces[0].pos === "助詞" ? "particle" : "auxiliary" });
+        continue;
+      }
+      // La IA cortó una palabra del banco (続|ける): se une antes de buscar los trozos
+      if (next && !next.punct && !bankLookup(unit.surface, "") && bankLookup(unit.surface + next.surface, "")) {
+        tokens.push(merge(unit, next));
+        i++;
+        continue;
+      }
+      if (bankLookup(unit.surface, "")) { tokens.push(token(unit, unit.surface)); continue; }
+      // Conjugada (喜んで, 有名な, 聞こえ): se guarda su lema, aunque la forma tenga entrada propia
+      if (unit.basic !== unit.surface && isInflected(unit.pieces) && known(unit.basic)) { tokens.push(token(unit, unit.basic)); continue; }
       if (known(unit.surface)) { tokens.push(token(unit, unit.surface)); continue; }
       if (known(unit.basic)) { tokens.push(token(unit, unit.basic)); continue; }
 
       // 3a. Unida a la siguiente forma una palabra del diccionario (食事 + 中)
       if (next && !next.punct && known(unit.surface + next.surface)) {
-        const joined = unitOf([...unit.pieces, ...next.pieces]);
-        tokens.push(token(joined, joined.surface));
-        repairs.push(`units merged: ${unit.surface}|${next.surface}`);
+        tokens.push(merge(unit, next));
         i++;
         continue;
       }
@@ -648,6 +685,9 @@ async function validateText(raw) {
           source: from, sentence: original
         });
       }
+      // Sin entrada en ningún diccionario, o una kana suelta (い, あ): se lee, pero no es una
+      // palabra que se pueda guardar (se quedaba como palabra vacía del usuario)
+      if (source === "none" || [...token.lemma].length === 1 && isKana(token.lemma)) continue;
       token.key = wordKey(token.lemma, entry.reading);
       sentence.entries[token.key] = entry;
       sentence.dictionary[token.lemma] ??= entry;

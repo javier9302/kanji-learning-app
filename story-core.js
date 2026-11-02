@@ -181,7 +181,9 @@ function promptWord(item, tools = {}) {
     // こと o ため solas sí son palabras
     if (["助詞", "助動詞"].includes(first.pos) || rest.length && first.pos === "名詞" && first.detail === "非自立") return { drop: "trozo" };
     const base = first.base && first.base !== "*" ? first.base : first.surface;
-    if (rest.length && rest.every(scEnding)) {
+    if (first.pos === "感動詞") {
+      // Saludos hechos: ありがとうございます no es una forma de ありがとう
+    } else if (rest.length && rest.every(scEnding)) {
       // Conjugada: 来て -> 来る, いました -> いる, 有名な -> 有名
       [lemma, reading, changed] = [base, undefined, "conjugada"];
     } else if (!rest.length && ["動詞", "形容詞"].includes(first.pos) && base !== lemma && !scKanaOnly(lemma)) {
@@ -257,7 +259,215 @@ function overusedScenes(sessions, lemmasOf, config, skip = () => false) {
     .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, config.max).map(([writing]) => writing);
 }
 
+/* =========================================
+   6. PALABRAS GUARDADAS AL LEER
+   -----------------------------------------
+   Lo que se guarda como palabra del usuario al leer (consultarla, verla en
+   un texto) tiene que ser una palabra de diccionario: el lema que da
+   kuromoji (来ました -> 来る, 喜んで -> 喜ぶ), sin partículas ni auxiliares
+   (のは, んだ), sin kana sueltas (い) ni trozos sin entrada (ける de 続ける), y
+   en kana si casi siempre se escribe así (有る -> ある). savedWord decide la
+   forma de una palabra; planWordCleanup aplica la misma regla a todo lo ya
+   guardado (la migración de una sola vez, wordCleanup en reading.js, y
+   tools/word-cleanup.mjs, que la calcula sobre una copia de los datos).
+   ========================================= */
+
+const swHiragana = typeof module !== "undefined" ? require("./ja-core.js").toHiragana : toHiragana;
+const swId = (lemma, reading) => `${String(lemma).normalize("NFKC")}|${swHiragana(reading)}`;
+const swHasKanji = (text) => /\p{Script=Han}/u.test(text);
+/* Lecturas inventadas que quedaron guardadas (下手 se lee へた o じょうず, nunca したて) */
+const SW_BROKEN = new Set(["下手|したて"]);
+
+/* La forma en que se guarda una palabra, o por qué no se guarda.
+     item   { lemma, reading, studied, repetitions }
+     tools  (savedWordTools) { tokens, bankWord, known, readingOf, kanaWriting, uk, hasMeaning };
+            sin tokens (kuromoji sin cargar) solo se aplican las reglas que no lo necesitan
+   Devuelve { id, lemma, reading, why } (why: "" si no cambia, grafía, conjugada,
+   forma o kana) o { drop: motivo }. */
+function savedWord(item, tools = {}) {
+  let lemma = String(item.lemma || "").normalize("NFKC"), reading = swHiragana(item.reading || "");
+  if (!lemma) return { drop: "vacía" };
+  if (SW_BROKEN.has(swId(lemma, reading))) return { drop: "lectura inventada" };
+  if ([...lemma].length === 1 && scKanaOnly(lemma)) return { drop: "kana suelta" }; // い, あ
+  let why = "";
+
+  // Grafías antiguas (御飯 -> ご飯, 落す -> 落とす): la lectura no cambia
+  let spelled = lemma;
+  for (const [pattern, spelling] of SC_SPELLING) spelled = spelled.replace(pattern, spelling);
+  spelled = SC_MODERN[spelled] || spelled;
+  if (spelled !== lemma) [lemma, why] = [spelled, "grafía"];
+
+  // Una palabra del banco ya es forma de diccionario (嫌い, 曇り, 一緒に no se tocan)
+  const tokens = tools.tokens && !tools.bankWord?.(lemma, reading) ? tools.tokens(lemma) : null;
+  if (tokens) {
+    const [first, ...rest] = tokens;
+    if (!first) return { drop: "vacía" };
+    if (["助詞", "助動詞"].includes(first.pos) || rest.length && first.pos === "名詞" && first.detail === "非自立") {
+      return { drop: "partícula o auxiliar" }; // のは, んだ, ように
+    }
+    const base = first.base && first.base !== "*" ? first.base : first.surface;
+    if (first.pos === "感動詞") {
+      // Saludos hechos: ありがとうございます no es una forma de ありがとう
+    } else if (rest.length && rest.every(scEnding)) {
+      [lemma, reading, why] = [base, "", "conjugada"]; // いました -> いる, 有名な -> 有名
+    } else if (!rest.length && ["動詞", "形容詞"].includes(first.pos) && base !== lemma && !scKanaOnly(lemma)) {
+      [lemma, reading, why] = [base, "", "forma"]; // 聞こえ -> 聞こえる, 速く -> 速い
+    } else if (!rest.length && first.pos === "動詞" && scKanaOnly(lemma) && [...lemma].length <= 2 &&
+      !item.studied && !(item.repetitions > 0) && !tools.known?.(lemma, reading)) {
+      // Dos kana que suenan a verbo, sin entrada y que nunca repasó: un trozo (ける de 続ける,
+      // みる). いる, なる o する sí tienen entrada en el diccionario general.
+      return { drop: "trozo probable" };
+    }
+    if (why === "conjugada" || why === "forma") {
+      if ([...lemma].length === 1 && scKanaOnly(lemma)) return { drop: "kana suelta" };
+      reading = tools.readingOf ? tools.readingOf(lemma) : scKanaOnly(lemma) ? lemma : "";
+      if (!reading) return { drop: "sin lectura" };
+      // En kana, la escritura con la que ya la tiene (いきました -> 行く|いく si tiene 行く)
+      if (scKanaOnly(lemma) && tools.kanaWriting) lemma = tools.kanaWriting(lemma) || lemma;
+    }
+  }
+
+  // Casi siempre en kana: se guarda en kana (有る -> ある, 美味しい -> おいしい)
+  const word = tools.bankWord?.(lemma, reading);
+  if (swHasKanji(lemma) && reading && (word?.kana || !word && tools.uk?.(lemma, reading))) {
+    lemma = reading;
+    why ||= "kana";
+  }
+  if (tools.hasMeaning && !tools.hasMeaning(lemma, reading, item)) return { drop: "sin significado" };
+  return { id: swId(lemma, reading), lemma, reading, why };
+}
+
+/* Las búsquedas que necesita savedWord, sobre los datos que haya:
+     bank       el banco (BANK, ya cargado hasta N1)
+     jmdict     Map(escritura -> { reading, meanings, meanings_es, uk }) del diccionario general, o null
+     entries    Map(id -> ficha del diccionario propio { meanings, meaningsEs }) o null si no se sabe
+     records    Map(id -> palabra del usuario)
+     tokenizer  kuromoji, o null
+   Igual en el navegador (reading.js) y en Node (tools/word-cleanup.mjs). */
+function savedWordTools({ bank, jmdict = null, entries = null, records = new Map(), tokenizer = null }) {
+  let byReading = null;
+  const readingCandidates = (kana) => {
+    if (!byReading) {
+      byReading = new Map();
+      for (const w of bank.words.values()) {
+        const key = swHiragana(w.r);
+        if (!byReading.has(key)) byReading.set(key, []);
+        byReading.get(key).push(w);
+      }
+    }
+    return byReading.get(swHiragana(kana)) || [];
+  };
+  // La palabra del banco con esa escritura (y esa lectura, si se da); en kana, la que casi siempre va así
+  const bankWord = (lemma, reading) => {
+    const senses = bank.sensesOf(lemma) || [];
+    const found = senses.find((w) => !reading || swHiragana(w.r) === reading || (w.alt || []).some((r) => swHiragana(r) === reading));
+    if (found) return found;
+    if (!scKanaOnly(lemma) || reading && reading !== swHiragana(lemma)) return null;
+    return readingCandidates(lemma).find((w) => w.kana) || null;
+  };
+  const pieces = (text) => tokenizer.tokenize(text);
+  const jmdictRow = (lemma, reading) => {
+    const row = jmdict?.get(lemma);
+    return row && (!reading || swHiragana(row.reading) === reading) ? row : null;
+  };
+  return {
+    bankWord,
+    // Tiene entrada: en el banco o en el diccionario general
+    known: (lemma, reading) => !!(bankWord(lemma, reading) || jmdictRow(lemma, reading)),
+    tokens: tokenizer && ((text) => pieces(text).map((p) => ({ surface: p.surface_form, pos: p.pos, detail: p.pos_detail_1, base: p.basic_form }))),
+    // La lectura de un lema nuevo: la del banco si solo tiene una, si no la de kuromoji
+    readingOf: (lemma) => {
+      if (scKanaOnly(lemma)) return swHiragana(lemma);
+      const senses = bank.sensesOf(lemma) || [];
+      if (senses.length === 1) return swHiragana(senses[0].r);
+      const heard = tokenizer ? pieces(lemma).map((p) => p.reading && p.reading !== "*" ? p.reading : "").join("") : "";
+      const sense = senses.find((w) => swHiragana(w.r) === swHiragana(heard));
+      return sense ? swHiragana(sense.r) : swHiragana(heard) || (jmdict?.get(lemma)?.reading ?? "");
+    },
+    // Un verbo en kana que ya tiene con kanji (いく -> 行く): esa escritura
+    kanaWriting: (kana) => {
+      const mine = readingCandidates(kana).filter((w) => !w.kana && records.has(swId(w.w, kana)));
+      return mine.length === 1 ? mine[0].w : null;
+    },
+    uk: (lemma, reading) => !!jmdictRow(lemma, reading)?.uk,
+    // Sin significado solo si se sabe seguro: su ficha propia está vacía y ni el banco ni el
+    // diccionario general ni el usuario le dan uno, o la escritura es del banco y esa lectura no
+    // (下手|したて). Sin ficha en este dispositivo (llegó por sincronización) no se puede saber: se queda.
+    hasMeaning: (lemma, reading, item = {}) => {
+      const id = swId(lemma, reading);
+      if (bank.words.has(id) || bankWord(lemma, reading) || item.meaning || records.get(id)?.meaning) return true;
+      const row = jmdictRow(lemma, reading);
+      if (row && [...(row.meanings || []), ...(row.meanings_es || [])].length) return true;
+      if (bank.sensesOf(lemma)) return false; // del banco, pero no con esa lectura
+      const own = entries?.get(id);
+      return own ? [...(own.meanings || []), ...(own.meaningsEs || own.meanings_es || [])].length > 0 : true;
+    }
+  };
+}
+
+const SW_STATUS = ["unknown", "pre_known", "learning", "mastered"];
+/* Lo que es del repaso de una palabra: viaja entero con la que tiene más repeticiones */
+const SW_REVIEW = ["studied", "repetitions", "interval", "ease", "nextReview", "lastReviewed", "correctCount", "incorrectCount",
+  "streakDays", "lastCorrectDay", "fsrs", "meaningCorrect", "meaningWrong", "lastMeaningAt", "readStreak", "lastReadReview"];
+
+/* Une varias palabras del usuario en una (la del lema). El mejor estado; el
+   repaso entero (tarjeta FSRS y contadores) de la que tiene más repeticiones;
+   las veces vista y consultada, sumadas; lo que sabe (leer el kanji, el
+   significado, escribirla), si lo sabía en cualquiera. */
+function mergeWordRecords(target, records, now = Date.now()) {
+  const list = records.filter(Boolean);
+  const reps = (rec) => Number(rec.repetitions) || 0;
+  const lead = [...list].sort((a, b) => reps(b) - reps(a) || (b.id === target.id) - (a.id === target.id) ||
+    SW_STATUS.indexOf(b.status) - SW_STATUS.indexOf(a.status))[0];
+  const own = list.find((rec) => rec.id === target.id);
+  const sum = (field) => list.reduce((n, rec) => n + (Number(rec[field]) || 0), 0);
+  const times = (field) => list.map((rec) => rec[field]).filter(Number.isFinite);
+  const merged = { ...(own || lead) };
+  for (const field of SW_REVIEW) {
+    if (lead[field] === undefined) delete merged[field];
+    else merged[field] = lead[field];
+  }
+  Object.assign(merged, {
+    id: target.id, lemma: target.lemma, reading: target.reading,
+    status: SW_STATUS[Math.max(...list.map((rec) => SW_STATUS.indexOf(rec.status)))] || "unknown",
+    canReadKanji: list.some((rec) => rec.canReadKanji), knowsMeaning: list.some((rec) => rec.knowsMeaning),
+    canWrite: list.some((rec) => rec.canWrite),
+    seen: sum("seen"), lookups: sum("lookups"), evalCorrect: sum("evalCorrect"), evalWrong: sum("evalWrong"),
+    updatedAt: now
+  });
+  if (times("firstSeen").length) merged.firstSeen = Math.min(...times("firstSeen"));
+  if (times("lastSeen").length) merged.lastSeen = Math.max(...times("lastSeen"));
+  const meaning = (own || {}).meaning || list.map((rec) => rec.meaning).find(Boolean);
+  if (meaning) merged.meaning = meaning;
+  return merged;
+}
+
+/* El plan de la limpieza, sin aplicar nada: lo que se borra, lo que cambia de
+   escritura y lo que se une. records: las palabras del usuario.
+   Devuelve { drops: [{ id, reason, rec }], moves: [{ from, to, why, rec }],
+   save: [palabra resultante], remove: [ids que dejan de existir] } */
+function planWordCleanup(records, tools, now = Date.now()) {
+  const drops = [], moves = [], groups = new Map();
+  for (const rec of records) {
+    const result = savedWord(rec, tools);
+    if (result.drop) { drops.push({ id: rec.id, reason: result.drop, rec }); continue; }
+    if (result.id !== rec.id) moves.push({ from: rec.id, to: result.id, why: result.why, rec });
+    if (!groups.has(result.id)) groups.set(result.id, { target: result, list: [] });
+    groups.get(result.id).list.push(rec);
+  }
+  const save = [], remove = new Set(drops.map((drop) => drop.id));
+  for (const { target, list } of groups.values()) {
+    if (list.length === 1 && list[0].id === target.id) continue; // no cambia
+    save.push(mergeWordRecords(target, list, now));
+    for (const rec of list) if (rec.id !== target.id) remove.add(rec.id);
+  }
+  // Una palabra que se borra no puede ser a la vez el destino de otra: si lo es, se queda
+  for (const rec of save) remove.delete(rec.id);
+  return { drops: drops.filter((drop) => remove.has(drop.id)), moves, save, remove: [...remove] };
+}
+
 /* Para las pruebas (Node); en el navegador son globales */
 if (typeof module !== "undefined") {
-  module.exports = { storyTargets, targetsFound, nextVariety, textSimilarity, promptWord, cleanWordLists, overusedScenes, SC_MODERN };
+  module.exports = { storyTargets, targetsFound, nextVariety, textSimilarity, promptWord, cleanWordLists, overusedScenes, SC_MODERN,
+    savedWord, savedWordTools, mergeWordRecords, planWordCleanup };
 }

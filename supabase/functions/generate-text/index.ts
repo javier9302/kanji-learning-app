@@ -316,7 +316,9 @@ function promptWord(item, tools = {}) {
     // こと o ため solas sí son palabras
     if (["助詞", "助動詞"].includes(first.pos) || rest.length && first.pos === "名詞" && first.detail === "非自立") return { drop: "trozo" };
     const base = first.base && first.base !== "*" ? first.base : first.surface;
-    if (rest.length && rest.every(scEnding)) {
+    if (first.pos === "感動詞") {
+      // Saludos hechos: ありがとうございます no es una forma de ありがとう
+    } else if (rest.length && rest.every(scEnding)) {
       // Conjugada: 来て -> 来る, いました -> いる, 有名な -> 有名
       [lemma, reading, changed] = [base, undefined, "conjugada"];
     } else if (!rest.length && ["動詞", "形容詞"].includes(first.pos) && base !== lemma && !scKanaOnly(lemma)) {

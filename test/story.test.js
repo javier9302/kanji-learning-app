@@ -132,3 +132,86 @@ test("overusedScenes: lo que sale en 3 o más de los últimos textos, los descar
   // Solo los últimos: con 2 textos ya nada llega a 3
   assert.deepEqual(overusedScenes(sessions, (id) => lemmas[id], { recent: 2, minTexts: 3, max: 8 }, skip), []);
 });
+
+/* ---------- 6. Palabras guardadas al leer ---------- */
+
+const { loadTokenizer } = require("../tools/lib/tokenizer.js");
+const { loadBank } = require("../tools/lib/bank.js");
+
+/* Con el banco y kuromoji de verdad; el diccionario general, solo las filas que hacen falta */
+async function wordTools(records = [], entries = null) {
+  const jmdict = new Map([
+    ["いる", { reading: "いる", meanings: ["to be"], meanings_es: [], uk: true }],
+    ["喜んで", { reading: "よろこんで", meanings: ["with pleasure"], meanings_es: [], uk: false }]
+  ]);
+  return S.savedWordTools({ bank: loadBank(), jmdict, entries, records: new Map(records.map((rec) => [rec.id, rec])),
+    tokenizer: await loadTokenizer() });
+}
+const form = (result) => result.drop ? `drop: ${result.drop}` : result.id;
+
+test("savedWord: se guarda el lema de kuromoji (来ました -> 来る, 喜んで -> 喜ぶ, 有名な -> 有名)", async () => {
+  const tools = await wordTools();
+  assert.equal(form(S.savedWord({ lemma: "来ました", reading: "きました" }, tools)), "来る|くる");
+  assert.equal(form(S.savedWord({ lemma: "喜んで", reading: "よろこんで" }, tools)), "喜ぶ|よろこぶ");
+  assert.equal(form(S.savedWord({ lemma: "有名な", reading: "ゆうめいな" }, tools)), "有名|ゆうめい");
+  assert.equal(form(S.savedWord({ lemma: "聞こえ", reading: "きこえ" }, tools)), "聞こえる|きこえる");
+  assert.equal(form(S.savedWord({ lemma: "いました", reading: "いました" }, tools)), "いる|いる");
+  // Lo que ya es palabra no cambia: del banco (一緒に, 来 らい), saludos y partículas que forman adverbio
+  assert.equal(form(S.savedWord({ lemma: "来", reading: "らい" }, tools)), "来|らい");
+  assert.equal(form(S.savedWord({ lemma: "ありがとうございます", reading: "ありがとうございます" }, tools)), "ありがとうございます|ありがとうございます");
+  assert.equal(form(S.savedWord({ lemma: "すぐに", reading: "すぐに" }, tools)), "すぐに|すぐに");
+  assert.equal(form(S.savedWord({ lemma: "日本人", reading: "にほんじん" }, tools)), "日本人|にほんじん");
+});
+
+test("savedWord: partículas, kana sueltas, trozos y lecturas inventadas no se guardan", async () => {
+  const tools = await wordTools();
+  assert.equal(form(S.savedWord({ lemma: "のは", reading: "のは" }, tools)), "drop: partícula o auxiliar");
+  assert.equal(form(S.savedWord({ lemma: "んだ", reading: "んだ" }, tools)), "drop: partícula o auxiliar");
+  assert.equal(form(S.savedWord({ lemma: "い", reading: "い" }, tools)), "drop: kana suelta");
+  assert.equal(form(S.savedWord({ lemma: "ける", reading: "ける" }, tools)), "drop: trozo probable");
+  assert.equal(form(S.savedWord({ lemma: "下手", reading: "したて" }, tools)), "drop: lectura inventada");
+  // Dos kana con entrada (いる) o que ya repasa no son un trozo
+  assert.equal(form(S.savedWord({ lemma: "いる", reading: "いる" }, tools)), "いる|いる");
+  assert.equal(form(S.savedWord({ lemma: "みる", reading: "みる", studied: true, repetitions: 3 }, tools)), "みる|みる");
+});
+
+test("savedWord: en kana si casi siempre va así, grafías de hoy y significado vacío", async () => {
+  const tools = await wordTools([], new Map([["もうすぐ|もうすぐ", { meanings: [], meaningsEs: [] }]]));
+  assert.equal(form(S.savedWord({ lemma: "有る", reading: "ある" }, tools)), "ある|ある");
+  assert.equal(form(S.savedWord({ lemma: "朝御飯", reading: "あさごはん" }, tools)), "朝ご飯|あさごはん");
+  assert.equal(form(S.savedWord({ lemma: "落す", reading: "おとす" }, tools)), "落とす|おとす");
+  assert.equal(form(S.savedWord({ lemma: "もうすぐ", reading: "もうすぐ" }, tools)), "drop: sin significado");
+  // Sin ficha en este dispositivo (llegó por sincronización) no se sabe: se queda; con su significado, también
+  assert.equal(form(S.savedWord({ lemma: "どうする", reading: "どうする" }, tools)), "どうする|どうする");
+  assert.equal(form(S.savedWord({ lemma: "もうすぐ", reading: "もうすぐ", meaning: "soon" }, tools)), "もうすぐ|もうすぐ");
+});
+
+test("savedWord: un verbo en kana va con la escritura que ya tiene (いきました -> 行く)", async () => {
+  const tools = await wordTools([{ id: "行く|いく" }]);
+  assert.equal(form(S.savedWord({ lemma: "いきました", reading: "いきました" }, tools)), "行く|いく");
+  const none = await wordTools();
+  assert.equal(form(S.savedWord({ lemma: "いきました", reading: "いきました" }, none)), "いく|いく");
+});
+
+test("planWordCleanup: une en el lema con el mejor estado y el repaso del que más repasó", async () => {
+  const records = [
+    { id: "ある|ある", lemma: "ある", reading: "ある", status: "mastered", repetitions: 0, seen: 17, lookups: 0, firstSeen: 50, lastSeen: 90 },
+    { id: "有る|ある", lemma: "有る", reading: "ある", status: "learning", studied: true, repetitions: 4,
+      fsrs: { due: "x", reps: 4 }, correctCount: 3, incorrectCount: 1, seen: 9, lookups: 1, firstSeen: 10, lastSeen: 70 },
+    { id: "下手|したて", lemma: "下手", reading: "したて", status: "learning", repetitions: 1 },
+    { id: "会社|かいしゃ", lemma: "会社", reading: "かいしゃ", status: "learning" }
+  ];
+  const plan = S.planWordCleanup(records, await wordTools(records), 1000);
+  assert.deepEqual(plan.drops.map((drop) => drop.id), ["下手|したて"]);
+  assert.deepEqual(plan.moves.map(({ from, to }) => [from, to]), [["有る|ある", "ある|ある"]]);
+  assert.deepEqual(plan.remove.sort(), ["下手|したて", "有る|ある"]);
+  const [merged] = plan.save;
+  assert.deepEqual([merged.id, merged.status, merged.repetitions, merged.fsrs, merged.correctCount, merged.studied],
+    ["ある|ある", "mastered", 4, { due: "x", reps: 4 }, 3, true]);
+  assert.deepEqual([merged.seen, merged.lookups, merged.firstSeen, merged.lastSeen, merged.updatedAt], [26, 1, 10, 90, 1000]);
+  // Lo que no cambia no se vuelve a escribir, y aplicarla otra vez no hace nada
+  assert.equal(plan.save.length, 1);
+  const after = [merged, records[3]];
+  const again = S.planWordCleanup(after, await wordTools(after));
+  assert.deepEqual([again.drops.length, again.moves.length, again.save.length], [0, 0, 0]);
+});

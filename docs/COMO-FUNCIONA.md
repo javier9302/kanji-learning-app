@@ -90,7 +90,30 @@ leyendo, y a la IA se le piden en kana.
 Se guardan en el dispositivo (IndexedDB) y, con cuenta, se sincronizan con Supabase.
 
 - `userWords`: progreso por palabra (clave `escritura|lectura`). Estado: `unknown`,
-  `learning`, `pre_known` o `mastered`; además, la tarjeta FSRS, aciertos y fallos.
+  `learning`, `pre_known` o `mastered`; además, la tarjeta FSRS, aciertos y fallos. Una palabra
+  borrada se queda en el almacén como marca (`deletedAt`, en `deletedWords`) y se sube a
+  `user_words` con `deleted_at`: así el borrado llega a los demás dispositivos y no vuelve.
+- **Qué se guarda como palabra al leer** (`savedWord`, sección 6 de `story-core.js`): la forma de
+  diccionario que da kuromoji (来ました → 来る, 喜んで → 喜ぶ, 有名な → 有名, 聞こえ → 聞こえる; un verbo
+  en kana va con la escritura que ya tiene: いきました → 行く), en kana si casi siempre va así (marca
+  `kana` del banco o `uk` de JMdict: 有る → ある) y con la grafía de hoy (御飯 → ご飯, `SC_MODERN`). Las
+  palabras del banco no se tocan (一緒に, 来 らい) ni los saludos (ありがとうございます). No se guardan:
+  partículas o auxiliares (のは, んだ, ように), kana sueltas (い), verbos de dos kana sin entrada en
+  ningún diccionario que nunca repasó (ける, みる), lecturas inventadas (下手|したて) ni palabras sin
+  significado: ficha propia vacía y nada en el banco, JMdict o lo escrito por el usuario (sin ficha en
+  el dispositivo, porque llegó por sincronización, no se sabe y se queda). Los textos nuevos ya
+  llevan estas claves (`fromSegmented` / `validateText`: una unidad conjugada usa su lema aunque la
+  forma tenga entrada, una palabra del banco cortada en dos unidades, 続|ける, se une, y lo que no
+  tiene entrada queda como texto sin enlazar); en los guardados antes, `textKeyMap` (`reading.js`)
+  pasa cada clave a la buena al abrirlos.
+- **Limpieza de una vez** (`offerWordCleanup`, `reading.js`, sección 13; `prefs.wordCleanup`): la
+  misma regla sobre lo ya guardado (`planWordCleanup`). Con sesión, después de sincronizar. Enseña la
+  lista entera; al aceptar descarga una copia (`yomipop-palabras-antes-de-limpiar-<fecha>.json`,
+  también en localStorage) y aplica: lo que no vale se borra y cada forma se une en su lema con el
+  mejor estado, el repaso entero (tarjeta FSRS y contadores) de la que tiene más repeticiones, las
+  veces vista y consultada sumadas y lo que sabía de cualquiera. También cambia las claves en la
+  lista importada, la hoja de ruta y las frases de la web. «Ahora no» la vuelve a proponer al día
+  siguiente. `node tools/word-cleanup.mjs <copia.json>` calcula la misma lista sin tocar nada.
 - `userKanji`: progreso por kanji. Si conoce su significado, si sabe escribirlo, su tarjeta FSRS y
   lo acertado y fallado de cada lectura al escribirla (`readings`: una casilla por kanji y las
   lecturas acertadas en frases; las de «Lecturas de kanji practicadas» de antes se copiaron aquí

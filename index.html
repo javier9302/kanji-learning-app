@@ -19,7 +19,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icons/icon-180.png">
-  <link rel="stylesheet" href="style.css?v=b4bb451f">
+  <link rel="stylesheet" href="style.css?v=28c35fdc">
   <!-- El tema elegido (Ajustes → Apariencia) se aplica antes de pintar, sin parpadeo -->
   <script>
     try {
@@ -31,7 +31,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js" defer></script>
   <script src="darumi.js?v=2a0ddc64" defer></script>
   <script src="config.js?v=4a6e39a6" defer></script>
-  <script src="i18n.js?v=5abeb318" defer></script>
+  <script src="i18n.js?v=00b1f0fe" defer></script>
   <script src="vendor/ts-fsrs/index.umd.js?v=59b74441" defer></script>
   <script src="bank/bank.js?v=b10fa031" defer></script>
   <script src="bank/frequency.js?v=f59db017" defer></script>
@@ -45,12 +45,12 @@
   <script src="capture-core.js?v=089038cb" defer></script>
   <script src="kanji-core.js?v=dd2182fb" defer></script>
   <script src="ranking-core.js?v=482c1374" defer></script>
-  <script src="story-core.js?v=0196c753" defer></script>
+  <script src="story-core.js?v=a21670d3" defer></script>
   <script src="translate-core.js?v=93a0f951" defer></script>
-  <script src="texts.js?v=b80ec4b3" defer></script>
-  <script src="reading.js?v=de24d188" defer></script>
+  <script src="texts.js?v=19ea95f5" defer></script>
+  <script src="reading.js?v=8663fdae" defer></script>
   <script src="reading-stats.js?v=abe14f18" defer></script>
-  <script src="reading-sync.js?v=76e1c9d9" defer></script>
+  <script src="reading-sync.js?v=f24130b1" defer></script>
   <script src="study.js?v=3b052ec5" defer></script>
   <script src="sentences.js?v=d4993c58" defer></script>
   <script src="translate.js?v=c44c4f3d" defer></script>
@@ -61,7 +61,7 @@
   <script src="dictionary.js?v=57426cff" defer></script>
   <script src="capture.js?v=58523404" defer></script>
   <script src="notify.js?v=1d77fac7" defer></script>
-  <script src="app.js?v=0cc236cd" defer></script>
+  <script src="app.js?v=e7536a4a" defer></script>
 </head>
 <body>
   <header class="topbar">
@@ -919,6 +919,22 @@
       <button id="queueCloseBtn" class="button button-secondary" type="button">Cerrar</button>
       <span class="spacer"></span>
       <button id="queueImportBtn" class="button button-primary" type="button">Importar</button>
+    </div>
+  </dialog>
+
+  <dialog id="cleanupDialog" class="dialog queue-dialog" aria-labelledby="cleanupTitle">
+    <div class="dialog-head">
+      <div>
+        <h3 id="cleanupTitle">Limpiar tus palabras guardadas</h3>
+        <p class="helper">Al leer se guardaban a veces formas conjugadas, trozos o partículas como si fueran palabras. Esto es lo que cambiaría. Antes se descarga una copia de todas tus palabras. Lo que ya repasaste se conserva: al unir dos, se queda el mejor estado y el repaso de la que más repasaste.</p>
+      </div>
+    </div>
+    <div id="cleanupList" class="cleanup-body"></div>
+    <div id="cleanupMessage" class="message" role="status"></div>
+    <div class="dialog-actions">
+      <button id="cleanupLaterBtn" class="button button-secondary" type="button">Ahora no</button>
+      <span class="spacer"></span>
+      <button id="cleanupApplyBtn" class="button button-primary" type="button">Descargar la copia y limpiar</button>
     </div>
   </dialog>
 

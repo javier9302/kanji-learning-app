@@ -202,6 +202,11 @@ repaso (reglas en `docs/COMO-FUNCIONA.md`, números en `STUDY_CONFIG.readingRevi
 sincronizarlo, **vuelve a ejecutar `supabase/schema.sql`** (añade `read_streak` y `last_read_review`
 a `user_words` y `reviews` a `reading_sessions`); sin las columnas, se sincroniza el resto.
 
+**Palabras borradas**: la limpieza de las palabras guardadas al leer borra algunas palabras y une
+formas en su lema; el borrado se sincroniza con la columna `deleted_at` de `user_words` (**vuelve a
+ejecutar `supabase/schema.sql`**). Sin la columna, la app borra las filas: en otro dispositivo que
+ya las tuviera se quitan al pasar por la misma limpieza.
+
 **Una casilla por kanji**: al escribir la lectura de una palabra sola, cada kanji tiene su casilla y
 lo acertado o fallado se guarda por lectura en cada kanji. Para sincronizarlo, **vuelve a ejecutar
 `supabase/schema.sql`** (añade `kanji_readings` a `user_kanji`, de 4 KB como mucho); sin la
