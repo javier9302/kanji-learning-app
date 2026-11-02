@@ -102,8 +102,11 @@ después de `learning-core.js`)
   nuevos y `textKeyMap` en `reading.js` para los ya guardados; regla común `savedWord`, sección 6 de
   `story-core.js`; migración de una vez con lista previa y copia, `offerWordCleanup` en `reading.js`,
   `prefs.wordCleanup`; lo borrado se sube con `deleted_at` en `user_words`, `deletedWords`,
-  `pushWordDeletions`; `tools/word-cleanup.mjs` calcula la lista sobre una copia). Falta la 3 (texto
-  sin «|», segmentado por la app, con comprobación y un reintento).
+  `pushWordDeletions`; `tools/word-cleanup.mjs` calcula la lista sobre una copia) y la 3, hecha
+  y pendiente de que el usuario la confirme: frases normales (`renderPromptPlain`, formato 3) que
+  corta la app (`segmentPlain` en `texts.js`), comprobadas con `checkStoryText` (sección 7 de
+  `story-core.js`) y un solo reintento con `feedback` y `retryOf` (no cuenta para el límite);
+  `renderPromptSeg` queda de reserva en Ajustes (`prefs.textFormat`). Al confirmarla, quitar la reserva.
 - **Prompts con copia en una función**: la fuente de los textos es `reading.js`; la de las frases,
   `tools/lib/sentence-batches.js`, y la de la revisión de Tatoeba, `tools/lib/tatoeba.js`. Tras cambiar uno, `node tools/sync-prompt.mjs` (una prueba falla
   si las copias no coinciden).

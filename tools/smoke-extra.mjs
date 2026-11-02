@@ -1126,6 +1126,41 @@ export default async function extra({ page, step, check }) {
     check(result.types === 8 && result.variety.type && result.variety.topic, JSON.stringify(result.variety));
   });
 
+  await step("textos con IA (imitada): frases normales cortadas por la app, comprobadas y un solo reintento con lo que falló", async () => {
+    const result = await page.evaluate(async () => {
+      const real = window.requestText, sent = [];
+      // Frases en kana (se dan por conocidas): la primera respuesta no usa las que tocan; la segunda sí
+      const filler = ["それはとてもおいしいです。", "これもすこしたべました。", "みんなでいっしょにわらいました。",
+        "あしたもまたいきましょう。", "でも、まだちょっとねむいです。", "だから、はやくねました。"];
+      const answer = (lines) => ({ text: JSON.stringify({ title: "テスト", title_en: "Test", title_es: "Prueba",
+        sentences: lines.map((ja, i) => ({ p: 1 + (i >> 2), ja, en: "x", es: "x" })) }), model: "falso", promptVersion: PLAIN_VERSION, remaining: 3 });
+      window.requestText = async (params) => {
+        sent.push(JSON.parse(JSON.stringify(params)));
+        if (sent.length === 1) return answer(filler);
+        const used = params.targets.map((label) => `${label.replace(/\(.*\)$/, "")}があります。`);
+        return answer([...used, ...filler].slice(0, used.length + 2));
+      };
+      const format = prefs.textFormat;
+      prefs.textFormat = "plain";
+      try {
+        const record = await generateText({ type: "dialogue", topic: "food", length: 50 }, () => {});
+        const pipes = record.data.sentences.map((sentence) => sentence.tokens.map((token) => token.surface).join("|"));
+        await deleteText(record.id);
+        return { sent, checks: record.checks, found: record.targets.found, asked: record.targets.asked, version: record.promptVersion, pipes };
+      } finally {
+        window.requestText = real;
+        prefs.textFormat = format;
+      }
+    });
+    const [first, second] = result.sent;
+    check(result.sent.length === 2 && first.format === 3 && !first.feedback && !first.retryOf, `peticiones: ${result.sent.length}`);
+    check(second.retryOf === first.requestId && second.requestId !== first.requestId, "el reintento no dice a cuál sustituye");
+    check(second.feedback?.missing?.includes("学校") && !("sentences" in second.feedback), JSON.stringify(second.feedback));
+    check(result.checks.retried && !result.checks.problems.includes("targets") && result.found.length === result.asked.length, JSON.stringify(result.checks));
+    check(result.version === "2026-11-02.1-plain" || /plain/.test(result.version), result.version);
+    check(result.pipes.includes("それ|は|とても|おいしい|です|。"), result.pipes.join(" / "));
+  });
+
   await step("lectura: al recargar en mitad de un texto se vuelve a él, con lo consultado", async () => {
     const before = await page.evaluate(async () => {
       const text = texts.find((x) => !x.readAt && !x.hiddenAt && x.data.sentences.length) || texts[0];

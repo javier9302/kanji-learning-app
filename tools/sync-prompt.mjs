@@ -1,7 +1,8 @@
 /* Los prompts tienen una sola fuente y las Edge Functions llevan una copia,
    porque se despliegan solas desde el editor de Supabase. Este script las copia:
      node tools/sync-prompt.mjs
-   - Textos: reading.js (renderPromptSeg y SEGMENTED_VERSION) -> generate-text
+   - Textos: reading.js (renderPromptPlain y PLAIN_VERSION, y el de reserva
+     renderPromptSeg y SEGMENTED_VERSION) -> generate-text
    - Frases: tools/lib/sentence-batches.js (renderSentencePrompt y
      SENTENCE_PROMPT_VERSION) -> generate-sentences
    - Revisión de Tatoeba: tools/lib/tatoeba.js (renderReviewPrompt y
@@ -23,6 +24,11 @@ export const PROMPTS = {
     source: "reading.js", target: "supabase/functions/generate-text/index.ts",
     fn: "renderPromptSeg", version: "SEGMENTED_VERSION",
     untyped: "scenes = [] })", typed: "scenes = [] }: any)"
+  },
+  plain: {
+    source: "reading.js", target: "supabase/functions/generate-text/index.ts",
+    fn: "renderPromptPlain", version: "PLAIN_VERSION",
+    untyped: "feedback = null })", typed: "feedback = null }: any)"
   },
   sentences: {
     source: "tools/lib/sentence-batches.js", target: "supabase/functions/generate-sentences/index.ts",

@@ -453,6 +453,24 @@ const isSegmented = (data) => {
   return Array.isArray(list) && list.some((sentence) => typeof sentence?.ja === "string");
 };
 
+/* Frases normales (renderPromptPlain): ninguna oración trae "|". Un texto con
+   barras siempre tiene alguna (la puntuación es su propia unidad), así que no
+   se confunden. */
+const isPlainText = (data) => {
+  const list = Array.isArray(data) ? data : data?.sentences;
+  return isSegmented(data) && list.every((sentence) => typeof sentence?.ja !== "string" || !sentence.ja.includes("|"));
+};
+
+/* Corta cada oración en unidades con kuromoji (segmentSentence, ja-core.js): un
+   verbo o adjetivo con sus terminaciones en una unidad, y las partículas, です / だ
+   y la puntuación sueltas, como se le pedía a la IA en el formato con "|". A
+   partir de aquí es un texto segmentado más (fromSegmented). */
+async function segmentPlain(data) {
+  const tokenizer = await loadTokenizer();
+  const cut = (sentence) => ({ ...sentence, ja: segmentSentence(tokenizer, sentence.ja.replace(/\s+/g, "")) });
+  return Array.isArray(data) ? data.map(cut) : { ...data, sentences: data.sentences.map(cut) };
+}
+
 /* Lo que hace inservible un texto segmentado (la función generate-text lleva
    la misma comprobación, checkSegmented) */
 function segmentErrors(data) {
@@ -587,11 +605,12 @@ async function validateText(raw) {
   const repairs = []; // lo que la app tuvo que arreglar: sirve para mejorar el prompt
   // Un texto puede traer palabras de cualquier nivel: para reconocerlas hace falta el banco entero
   await BANK.loadUpTo("N1").catch(() => {});
-  const segmented = isSegmented(data);
+  const segmented = isSegmented(data), plain = isPlainText(data);
   if (segmented) {
     const broken = segmentErrors(data);
     if (broken.length) return { errors: broken, text: null, flagged: [], repairs };
     try {
+      if (plain) data = await segmentPlain(data);
       data = await fromSegmented(data, repairs);
     } catch (error) {
       console.error("No se pudo analizar el texto:", error);
@@ -703,7 +722,7 @@ async function validateText(raw) {
   for (const word of flagged.values()) if (word.source === "kana_fix") repairs.push(`kanji for a kana word: ${word.lemma}`);
   return {
     errors: [],
-    segmented,
+    segmented, plain,
     repairs,
     flagged: [...flagged.values()],
     text: {
@@ -719,12 +738,14 @@ async function validateText(raw) {
 }
 
 /* Comprueba, guarda y anota las palabras por revisar. Lanza la lista de
-   errores si el texto está roto. Lo usan las tres formas de agregar un texto. */
-async function addText(raw, source = "manual", origin = {}) {
-  const { errors, text, flagged, repairs, partial, segmented } = await validateText(raw);
+   errores si el texto está roto. Lo usan las tres formas de agregar un texto.
+   checked: lo que ya devolvió validateText para ese mismo texto (al generar con
+   la IA se comprueba antes de guardarlo), para no analizarlo dos veces. */
+async function addText(raw, source = "manual", origin = {}, checked = null) {
+  const { errors, text, flagged, repairs, partial, segmented, plain } = checked || await validateText(raw);
   if (errors.length) throw Object.assign(errors, { partial });
   // Pegado en el modo manual: la versión es la del prompt del formato que llegó
-  if (!origin.promptVersion) origin = { ...origin, promptVersion: segmented ? SEGMENTED_VERSION : PROMPT_VERSION };
+  if (!origin.promptVersion) origin = { ...origin, promptVersion: plain ? PLAIN_VERSION : segmented ? SEGMENTED_VERSION : PROMPT_VERSION };
   if (origin.topic) text.topic = origin.topic; // el formato nuevo no trae tema ni nivel: los pone la app
   if (origin.level) text.level = origin.level;
   const record = await saveText(text, source, origin);

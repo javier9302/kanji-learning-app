@@ -12,6 +12,9 @@
    4. Listas limpias: las palabras que se mandan a la IA, sin formas
       conjugadas, trozos ni grafías raras, y cada una en una sola lista.
    5. Escenas gastadas: lo que sale en muchos de los últimos textos.
+   6. Palabras guardadas al leer: el lema, nunca un trozo.
+   7. Comprobar un texto recién escrito: oraciones, palabras conocidas, las
+      que tocan y la gramática pedida; si falla, un reintento con lo que falló.
    Los números vienen de STUDY_CONFIG.stories.
    ========================================= */
 
@@ -466,8 +469,62 @@ function planWordCleanup(records, tools, now = Date.now()) {
   return { drops: drops.filter((drop) => remove.has(drop.id)), moves, save, remove: [...remove] };
 }
 
+/* =========================================
+   7. COMPROBAR UN TEXTO RECIÉN ESCRITO
+   -----------------------------------------
+   La IA no siempre hace lo que se le pide: se le olvida una palabra que toca,
+   mete demasiadas palabras nuevas o escribe la mitad de oraciones. Tras
+   analizar el texto (kuromoji), la app mira cuatro cosas y, si alguna falla,
+   lo pide otra vez UNA sola vez diciendo solo lo que falló ("missing: 盗む;
+   14 new words, max 5"). Los números: STUDY_CONFIG.stories.checks.
+   ========================================= */
+
+/* Lo que se le pide a la IA según la longitud (los mismos números que escribe
+   renderPromptPlain, que no puede usar esto porque va copiado en generate-text) */
+const storyShape = (length) => ({
+  minSentences: Math.ceil(length / 9), maxSentences: Math.ceil(length / 6.5), maxNew: Math.round(length * 0.1)
+});
+
+/* facts   lo que tiene el texto: { sentences: n, total: palabras con contenido,
+           known: cuántas de ellas conoce (o se le pidieron: repasar, aprendiendo),
+           unknown: [escrituras de las nuevas, sin repetir], found: [ids de las que
+           tocan que salieron], grammar: [ids de las estructuras que salieron] }
+   ask     lo pedido: { length, targets: [{ id, label }], grammar: [{ id, ja }] }
+   config  { coverage: % mínimo, sentences: { below, above }: cuántas oraciones de
+           menos o de más se toleran sobre lo pedido }
+   Devuelve { ok, problems: [códigos], coverage, feedback }: feedback lleva solo
+   lo que falló, en la forma que entiende renderPromptPlain y que deja pasar
+   generate-text (readParams). */
+function checkStoryText(facts, ask, config) {
+  const shape = storyShape(ask.length);
+  const problems = [], feedback = {};
+  const coverage = facts.total ? Math.round((facts.known / facts.total) * 100) : 100;
+  if (facts.sentences < shape.minSentences - config.sentences.below || facts.sentences > shape.maxSentences + config.sentences.above) {
+    problems.push("sentences");
+    feedback.sentences = facts.sentences;
+  }
+  if (coverage < config.coverage) {
+    problems.push("coverage");
+    feedback.newWords = facts.unknown.length;
+    feedback.unknown = facts.unknown.slice(0, 15);
+  }
+  const found = new Set(facts.found);
+  const missing = (ask.targets || []).filter((target) => !found.has(target.id)).map((target) => target.label);
+  if (missing.length) {
+    problems.push("targets");
+    feedback.missing = missing;
+  }
+  const seen = new Set(facts.grammar);
+  const absent = (ask.grammar || []).filter((point) => point.id && !seen.has(point.id)).map((point) => point.ja);
+  if (absent.length) {
+    problems.push("grammar");
+    feedback.grammar = absent;
+  }
+  return { ok: !problems.length, problems, coverage, feedback: problems.length ? feedback : null };
+}
+
 /* Para las pruebas (Node); en el navegador son globales */
 if (typeof module !== "undefined") {
   module.exports = { storyTargets, targetsFound, nextVariety, textSimilarity, promptWord, cleanWordLists, overusedScenes, SC_MODERN,
-    savedWord, savedWordTools, mergeWordRecords, planWordCleanup };
+    savedWord, savedWordTools, mergeWordRecords, planWordCleanup, storyShape, checkStoryText };
 }

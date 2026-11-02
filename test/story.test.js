@@ -215,3 +215,32 @@ test("planWordCleanup: une en el lema con el mejor estado y el repaso del que m�
   const again = S.planWordCleanup(after, await wordTools(after));
   assert.deepEqual([again.drops.length, again.moves.length, again.save.length], [0, 0, 0]);
 });
+
+test("checkStoryText: un texto que cumple todo no pide nada", () => {
+  const checks = { coverage: 90, sentences: { below: 1, above: 2 } };
+  const ask = { length: 50, targets: [{ id: "盗む|ぬすむ", label: "盗む" }], grammar: [{ id: "te-mo-ii", ja: "〜てもいい" }] };
+  const facts = { sentences: 7, total: 40, known: 38, unknown: ["犯人"], found: ["盗む|ぬすむ"], grammar: ["te-mo-ii", "masu"] };
+  assert.deepEqual(S.checkStoryText(facts, ask, checks), { ok: true, problems: [], coverage: 95, feedback: null });
+});
+
+test("checkStoryText: solo dice lo que falló (las que tocan, gramática, palabras nuevas y oraciones)", () => {
+  const checks = { coverage: 90, sentences: { below: 1, above: 2 } };
+  const ask = { length: 100, targets: [{ id: "盗む|ぬすむ", label: "盗む" }, { id: "試合|しあい", label: "試合" }, { id: "角|かど", label: "角(かど)" }],
+    grammar: [{ id: "te-mo-ii", ja: "〜てもいい" }, { id: undefined, ja: "〜desconocida" }] };
+  // 100 palabras: de 12 a 16 oraciones; 5 es demasiado poco aunque se toleren 1 de menos
+  const facts = { sentences: 5, total: 80, known: 66, unknown: ["犯人", "警察", "逃げる"], found: ["角|かど"], grammar: [] };
+  const result = S.checkStoryText(facts, ask, checks);
+  assert.equal(result.ok, false);
+  assert.deepEqual(result.problems, ["sentences", "coverage", "targets", "grammar"]);
+  assert.equal(result.coverage, 83);
+  // Una estructura sin id (no está en el catálogo) no se puede comprobar: no se pide
+  assert.deepEqual(result.feedback, { sentences: 5, newWords: 3, unknown: ["犯人", "警察", "逃げる"], missing: ["盗む", "試合"], grammar: ["〜てもいい"] });
+  // Dentro de lo tolerado (11 o 18 con below 1 / above 2) no cuenta como fallo
+  for (const sentences of [11, 18]) assert.ok(!S.checkStoryText({ ...facts, sentences, known: 80 }, { length: 100 }, checks).problems.includes("sentences"));
+  assert.ok(S.checkStoryText({ ...facts, sentences: 19, known: 80 }, { length: 100 }, checks).problems.includes("sentences"));
+});
+
+test("storyShape: los mismos números que pide el prompt de frases normales", () => {
+  assert.deepEqual(S.storyShape(50), { minSentences: 6, maxSentences: 8, maxNew: 5 });
+  assert.deepEqual(S.storyShape(150), { minSentences: 17, maxSentences: 24, maxNew: 15 });
+});

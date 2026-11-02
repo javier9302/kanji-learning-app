@@ -342,9 +342,32 @@ palabras que ya conoce o está aprendiendo. En «Palabras y kanjis» se alternan
   salen, y cada texto lleva 2 de los 8 personajes fijos del prompt (los menos usados últimamente;
   `nextVariety`). El prompt pide evitar las situaciones y frases gastadas (お腹が空きました,
   お弁当を食べました, 公園に行きました…).
+- **Frases normales** (`renderPromptPlain`, versión `PLAIN_VERSION`; formato 3 de `generate-text`):
+  la IA escribe cada oración tal cual, sin «|», con sus traducciones. La app la corta en unidades con
+  kuromoji (`segmentSentence` en `ja-core.js`, llamada desde `segmentPlain` en `texts.js`): un verbo o
+  adjetivo con sus terminaciones en una unidad (食べています, おいしくなかった), y las partículas,
+  です / だ y la puntuación sueltas; después sigue el mismo análisis que el formato con «|»
+  (`fromSegmented`). Única diferencia con lo que hacía la IA: 一緒に queda como 一緒|に (en el banco
+  la palabra es 一緒). Un texto pegado sin ninguna «|» se trata igual. El formato anterior
+  (`renderPromptSeg`, la IA separa con «|») sigue de reserva: Ajustes → Lectura → «Textos con IA:
+  formato anterior» (`prefs.textFormat = "seg"`); con él no hay comprobación (lo siguiente).
+- **Comprobación del texto** (`story-core.js`, sección 7, `checkStoryText`; números en
+  `STUDY_CONFIG.stories.checks`): tras analizarlo, y solo con frases normales, se mira:
+  - **oraciones**: las pedidas según la longitud (`storyShape`: 50 palabras → 6 a 8), con 1 de menos
+    o 2 de más de margen;
+  - **palabras conocidas**: al menos el **90 %** de las palabras con contenido; cuentan como conocidas
+    las que conoce (también las de solo kana) y las que se le pidieron (que tocan y aprendiendo);
+  - **las que tocan**: todas;
+  - **gramática**: cada estructura pedida de la hoja de ruta (premium), con `detectGrammar`.
+  Si algo falla (o el texto repite frases de los últimos, abajo) se pide otro **una sola vez**, con
+  `feedback`: solo lo que falló («missing: 盗む、試合», «14 new words, max 5 (犯人…)», «7 sentences»).
+  Se queda el que falla menos cosas (a igualdad, el segundo). Ese reintento lleva `retryOf` (la
+  petición a la que sustituye) y la función no lo cuenta para el límite diario, una vez por texto. El
+  texto guardado anota el resultado en `checks` (`problems`, `coverage`, `retried`).
 - **No repetir**: antes de guardarlo, cada frase del texto nuevo se compara con las de los 10 últimos
   (trigramas de caracteres; se repite si coincide en un 70 %). Si repite 3 frases o una cuarta parte,
-  se pide otro **una vez**, diciéndole a la IA qué frases no repetir (cuenta como otro texto del día).
+  se pide otro **una vez**, diciéndole a la IA qué frases no repetir (con frases normales es el mismo
+  reintento de la comprobación y no cuenta como otro texto; con el formato anterior, sí).
 - **Leer cuenta como repaso** (`learning-core.js`, `readingCredit`; números en
   `STUDY_CONFIG.readingReview`). Al terminar un texto, cada palabra suya que **tocaba repasar**
   (estudiada en Repasar y con la fecha de hoy o atrasada) cuenta como un repaso:
@@ -592,7 +615,9 @@ días de dominio, reglas de Escribir y de Traducir. Lo que no:
   hoja de ruta en el orden del repaso: `STUDY_CONFIG.weights.roadmap`.
 - Hoy: kanjis que escribir (4) y frases que traducir (3) al día: `STUDY_CONFIG.today`.
 - Textos con las palabras que tocan: cuántas (8), con cuántos días de adelanto (2), textos que se
-  miran para variar y no repetir (10) y cuándo un texto se repite: `STUDY_CONFIG.stories`.
+  miran para variar y no repetir (10) y cuándo un texto se repite: `STUDY_CONFIG.stories`. La
+  comprobación de un texto de la IA (90 % de palabras conocidas; margen de oraciones 1 de menos y 2
+  de más): `STUDY_CONFIG.stories.checks`.
 - Leer cuenta como repaso: valoración (Difícil), tope de crecimiento (×1,5), días mínimos (1) y
   tarjeta cada 2 lecturas: `STUDY_CONFIG.readingReview`.
 - Orden de las palabras nuevas: pesos de frecuencia, puente, abre vocabulario, lecturas que faltan

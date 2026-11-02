@@ -146,6 +146,8 @@ La app pone el lema, la lectura y el tipo de cada unidad con **kuromoji**, y los
 - El formato antiguo (con `tokens` y `dictionary`) se sigue aceptando al pegar, y los textos ya guardados no cambian.
 - La versión del prompt nuevo es `SEGMENTED_VERSION`, también en `reading.js` y en la función.
 
+Desde la versión `2026-11-02.1-plain` (formato 3), la IA escribe **frases normales**, sin `|`, y la app las corta con kuromoji. La app comprueba después el texto (oraciones, palabras conocidas, las que tocan y la gramática) y, si falla, lo pide una sola vez más con los campos `retryOf` y `feedback`; la función no cuenta ese reintento para el límite diario (una vez por texto entregado). **Hay que volver a desplegar `generate-text` antes de publicar la app**: la función antigua no conoce el formato 3 y lo trata como el formato 1 (el de `tokens`, mucho más largo); la app lo sigue leyendo, pero sin comprobación útil ni reintento gratuito. El formato anterior se puede elegir en Ajustes → Lectura mientras se prueba el nuevo.
+
 ## Registros de generación y reportes de error
 
 Cada intento de generar un texto queda en la tabla `generations` con la fecha, el modelo, la versión del prompt (`prompt_version`), los parámetros con que se pidió, la respuesta de la IA y el tipo de resultado (`result`): `ok`, `invalid_json`, `missing_fields`, `tokens_mismatch`, `too_short`, `truncated`, `empty`, `provider` o `quota`.
@@ -502,7 +504,7 @@ npm run smoke      # la app en Chrome sin ventana: un repaso, una lectura y el d
 GitHub Actions (`.github/workflows/test.yml`) ejecuta las dos cosas en cada `git push`; el resultado
 se ve en la pestaña **Actions** del repositorio. No necesita ningún secreto.
 
-Si cambias el prompt de los textos en `reading.js` (`renderPromptSeg`), cópialo a la función con
+Si cambias el prompt de los textos en `reading.js` (`renderPromptPlain` o `renderPromptSeg`), cópialo a la función con
 `node tools/sync-prompt.mjs` y vuelve a desplegar `generate-text`; una prueba avisa si no coinciden.
 
 Organización del código: los scripts se cargan en el orden de `index.html` y comparten nombres

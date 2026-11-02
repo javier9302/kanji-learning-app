@@ -117,3 +117,15 @@ test("kanaToRomaji: Hepburn para quien aún no lee kana", () => {
   };
   for (const [kana, romaji] of Object.entries(cases)) assert.equal(kanaToRomaji(kana), romaji, kana);
 });
+
+test("frases normales: la app las corta igual que el ejemplo del formato con «|»", async () => {
+  // Los ejemplos de renderPromptPlain y de renderPromptSeg (reading.js) son las mismas oraciones
+  const fs = require("node:fs");
+  const source = fs.readFileSync(require.resolve("../reading.js"), "utf8");
+  const examples = (fn) => [...source.slice(source.indexOf(`function ${fn}(`)).split("\n}\n")[0].matchAll(/\{"p":\d,"ja":"([^"]+)"/g)].map((m) => m[1]);
+  const tokenizer = await loadTokenizer();
+  const plain = examples("renderPromptPlain"), seg = examples("renderPromptSeg");
+  assert.equal(plain.length, 3);
+  // Una diferencia, a propósito: kuromoji corta 一緒|に, y en el banco la palabra es 一緒
+  assert.deepEqual(plain.map((ja) => segmentSentence(tokenizer, ja)), seg.map((ja) => ja.replace("一緒に", "一緒|に")));
+});

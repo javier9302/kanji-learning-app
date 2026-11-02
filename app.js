@@ -121,7 +121,8 @@ const prefs = loadLocal("kanji-prefs", {
   notifyMin: 10,       // Avisos de repaso: avisar cuando se junten tantas palabras (notify.js)
   theme: "auto",       // Apariencia: auto (la del dispositivo) | light | dark
   romaji: true,        // Rōmaji junto a cada lectura en kana: quien empieza aún no lee hiragana
-  wordCleanup: 0       // Limpieza de las palabras guardadas al leer (reading.js, sección 13): 1 = hecha
+  wordCleanup: 0,      // Limpieza de las palabras guardadas al leer (reading.js, sección 13): 1 = hecha
+  textFormat: "plain"  // Textos con IA: plain (frases normales, la app las corta) | seg (el anterior, con "|")
 });
 // Presentación al escribir la lectura: word (palabra sola) | sentence (en una frase).
 // Sustituye al antiguo ajuste "Repasar con frases": quien lo tenía activado empieza en "sentence".

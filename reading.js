@@ -511,8 +511,82 @@ SEGMENTATION RULES
 8. "p" is the paragraph number, starting at 1 (in a dialogue, one paragraph per speaker turn). "en" and "es" are natural translations of the whole sentence.`;
 }
 
-// La app pide siempre el formato nuevo; el antiguo se sigue aceptando al pegar
-const buildPrompt = async (options) => renderPromptSeg(await promptParams(options));
+/* Versión del prompt de frases normales: súbela al cambiar su texto. */
+const PLAIN_VERSION = "2026-11-02.1-plain";
+
+/* Prompt de frases normales: la IA escribe cada oración tal cual, sin "|", y la
+   app la corta en unidades con kuromoji (segmentSentence, ja-core.js), con las
+   mismas reglas que se le pedían a la IA. Así la IA no puede cortar mal una
+   palabra (続|ける) ni olvidarse de una barra, y escribe con más naturalidad.
+   feedback: lo que falló en el intento anterior (checkStoryText, story-core.js),
+   solo en el reintento. IMPORTANTE: la función generate-text lleva una copia
+   (node tools/sync-prompt.mjs). */
+function renderPromptPlain({ level, type, topic, length, known, assumedLevels, learning, prefer = [], targets = [], cast = [], avoid = [], grammar = [], scenes = [], feedback = null }) {
+  // Personajes que se repiten de un texto a otro, cada uno con su carácter; la app elige dos (story-core.js, nextVariety)
+  const CAST = [
+    "ゆき (Yuki), a cheerful university student who always wants to try something new",
+    "たなかさん (Mr Tanaka), a calm office worker who notices small details nobody else sees",
+    "はると (Haruto), a curious ten-year-old boy who asks too many questions",
+    "さとうさん (Mrs Sato), a retired neighbour who loves her garden and local gossip",
+    "けん (Ken), a clumsy but very kind cook at a small restaurant",
+    "エマ (Emma), an exchange student from abroad, often surprised by Japanese customs",
+    "もりせんせい (Dr Mori), a busy doctor with a dry sense of humour",
+    "あおい (Aoi), an ambitious high-school student in the music club"
+  ];
+  const characters = cast.map((i) => CAST[i]).filter(Boolean);
+  // Los mismos números que comprueba la app después (storyShape, story-core.js)
+  const fresh = Math.round(length * 0.1);
+  const minSentences = Math.ceil(length / 9), maxSentences = Math.ceil(length / 6.5);
+  const knownLine = assumedLevels.length
+    ? `Known words: all standard JLPT ${assumedLevels.join(", ")} vocabulary` +
+      (known.length ? `, plus: ${known.join("、")}` : ".")
+    : known.length
+      ? `Known words (the learner can read these): ${known.join("、")}`
+      : "Known words: none yet. Use only the most basic beginner vocabulary.";
+  // Solo lo que falló, para que la IA no rehaga lo que ya estaba bien
+  const fixes = [];
+  if (feedback?.missing?.length) fixes.push(`- These words due for review were missing: ${feedback.missing.join("、")}. Use each of them at least once.`);
+  if (feedback?.grammar?.length) fixes.push(`- This grammar was missing: ${feedback.grammar.join("; ")}. Use each point at least once.`);
+  if (Number.isInteger(feedback?.newWords)) {
+    fixes.push(`- It had ${feedback.newWords} new words, max ${fresh}${feedback.unknown?.length ? ` (${feedback.unknown.join("、")})` : ""}. Replace most of them with known words.`);
+  }
+  if (Number.isInteger(feedback?.sentences)) fixes.push(`- It had ${feedback.sentences} sentences; write between ${minSentences} and ${maxSentences}.`);
+
+  return `You are writing a graded Japanese reading text for a learner.
+
+LEARNER
+- Target level: JLPT ${level}.
+- ${knownLine}
+${targets.length ? `- Words due for review: use EACH of these at least once, naturally and with this exact meaning: ${targets.join("、")}\n` : ""}${learning.length ? `- Words the learner is still learning (reuse a few of them): ${learning.join("、")}\n` : ""}${prefer.length ? `- Common words written in kana, most frequent first. Prefer them when they fit naturally; they do not count as new words: ${prefer.join("、")}\n` : ""}${grammar.length ? `- Grammar the learner is practising: use each of these at least once, naturally: ${grammar.map((point) => `${point.ja} (${point.en})`).join("; ")}\n` : ""}- A word written with its reading in brackets, like 角(かど), has several readings: use it ONLY with that reading and its meaning (角(かど) is "corner", never つの "horn"). Never write the brackets in the text.
+
+TEXT
+- Type: ${type}. Topic: ${topic}.
+- LENGTH (strict): about ${length} words in ${minSentences}-${maxSentences} sentences (count each particle as a word, like 私 は 毎朝 コーヒー を 飲みます = 6 words). A text with fewer than ${minSentences} sentences is rejected. If you are short, continue the story with more sentences.
+- Natural Japanese with grammar no harder than JLPT ${level}.
+- Make it enjoyable to read: one concrete situation with a small story arc, a surprise or a touch of humour. Sentences must connect with each other; never a list of unrelated textbook sentences.
+${characters.length ? `- Characters (write their names exactly as given, in kana, and keep their personalities): ${characters.join("; ")}.\n` : ""}- Avoid overused textbook situations and phrases such as お腹が空きました, お弁当を食べました, 公園に行きました, 友達と遊びました, 天気がいいです, or ending with 楽しかったです. Find a fresher situation and vary how sentences begin.
+${avoid.length ? `- These sentences already appeared in the learner's recent texts: do not repeat them or close variants of them: ${avoid.join(" / ")}\n` : ""}${scenes.length ? `- Places, animals and objects the learner's recent texts keep coming back to: do not build this story around them: ${scenes.join("、")}\n` : ""}- About 90% of the content words must be known words. Introduce at most ${fresh} new words (about 10%), useful ones at level ${level}.
+- Write with the kanji a normal text of this level would use. Words that Japanese normally writes in kana must stay in kana (ある, いる, する, できる, ください, たくさん, かわいい, おいしい): never use rare kanji spellings such as 有る, 居る, 為る, 出来る, 下さい or 沢山.
+${fixes.length ? `\nA PREVIOUS ATTEMPT WAS REJECTED. Write a new text that follows every rule above and fixes this:\n${fixes.join("\n")}\n` : ""}
+OUTPUT
+Return ONLY one compact JSON object (no explanations, no markdown), with exactly these fields:
+
+{"title":"毎朝のコーヒー","title_en":"Morning coffee","title_es":"El café de cada mañana","sentences":[
+{"p":1,"ja":"私は毎朝コーヒーを飲みます。","en":"I drink coffee every morning.","es":"Bebo café todas las mañanas."},
+{"p":1,"ja":"今日は新しい店で買いましたが、あまりおいしくなかったです。","en":"Today I bought it at a new shop, but it was not very good.","es":"Hoy lo compré en una tienda nueva, pero no estaba muy bueno."},
+{"p":2,"ja":"「明日も一緒に行きませんか」と友達に聞かれました。","en":"\\"Won't you come with me tomorrow too?\\" my friend asked me.","es":"«¿No vienes conmigo mañana también?», me preguntó mi amigo."}]}
+
+RULES
+1. "ja" is ONE sentence written normally, with its punctuation: no spaces, no "|", no furigana and no readings in brackets.
+2. Do NOT give lemmas, readings, word translations or parts of speech. Only "p", "ja", "en" and "es".
+3. "p" is the paragraph number, starting at 1 (in a dialogue, one paragraph per speaker turn). "en" and "es" are natural translations of the whole sentence.`;
+}
+
+/* El formato que se le pide a la IA (Ajustes → Lectura, prefs.textFormat):
+   frases normales (plain, por defecto) o el anterior con "|" (seg), que queda
+   de reserva mientras se prueba el nuevo. Al pegar se aceptan los dos. */
+const plainTexts = () => prefs.textFormat !== "seg";
+const buildPrompt = async (options) => (plainTexts() ? renderPromptPlain : renderPromptSeg)(await promptParams(options));
 
 /* Sin cuenta, todo vive solo en este navegador, y algunos (Safari en iPhone,
    sobre todo) borran los datos de una web que no se usa durante semanas. Se
@@ -769,38 +843,7 @@ async function generateAndOpen(options) {
   say(t("La IA está escribiendo tu texto… puede tardar un minuto."));
 
   try {
-    let params = { ...(await promptParams(options)), requestId: newId(), format: 2 };
-    const ask = async () => {
-      while (true) {
-        try {
-          return await requestText(params);
-        } catch (error) {
-          if (!error.canRetry) throw error;
-          say(t("El primer intento no salió bien. Probando de nuevo…"));
-        }
-      }
-    };
-    let answer = await ask();
-    rememberAiQuota(answer);
-    // Si repite frases de los últimos textos se pide otro (una sola vez), diciéndole cuáles no repetir
-    const similar = textSimilarity(answerSentences(answer.text), recentSentences(), STUDY_CONFIG.stories.similarity);
-    if (similar.tooSimilar && answer.remaining !== 0) {
-      say(t("El texto se parecía demasiado a los últimos que has leído. Pidiendo otro…"));
-      params = { ...params, requestId: newId(), avoid: similar.repeated.slice(0, 10).map((sentence) => sentence.replace(/\|/g, "")) };
-      answer = await ask();
-      rememberAiQuota(answer);
-    }
-    say(t("Analizando el texto… la primera vez se descarga el analizador de japonés (18 MB)."));
-    const record = await addText(answer.text, "api", {
-      requestId: params.requestId, promptVersion: answer.promptVersion, model: answer.model,
-      topic: params.topic, level: params.level
-    });
-    // Qué se pidió: el tipo y los personajes (para variar el siguiente) y cuáles de las que tocan salieron
-    Object.assign(record, {
-      type: params.type, cast: params.cast,
-      targets: { asked: params.targetIds, found: targetsFound(params.targetIds.map((id) => ({ id })), record.lemmas) }
-    });
-    await putRecords("texts", [record]);
+    const record = await generateText(options, say);
     openText(record.id);
   } catch (error) {
     if (!message.isConnected) return;
@@ -812,6 +855,106 @@ async function generateAndOpen(options) {
   } finally {
     button.disabled = false;
   }
+}
+
+/* Pedir, comprobar y guardar el texto (sin la pantalla, para poder probarlo).
+   say(texto): cómo va. Devuelve el texto guardado; lanza los errores. */
+async function generateText(options, say) {
+  // format 3: frases normales (renderPromptPlain); 2: con "|" (renderPromptSeg, de reserva)
+  const plain = plainTexts();
+  let params = { ...(await promptParams(options)), requestId: newId(), format: plain ? 3 : 2 };
+  const ask = async () => {
+    while (true) {
+      try {
+        return await requestText(params);
+      } catch (error) {
+        if (!error.canRetry) throw error;
+        say(t("El primer intento no salió bien. Probando de nuevo…"));
+      }
+    }
+  };
+  /* Pide el texto, lo analiza y lo comprueba: si repite frases de los últimos
+     textos y, con frases normales, si cumple lo pedido (checkStoryText) */
+  const attempt = async () => {
+    const answer = await ask();
+    rememberAiQuota(answer);
+    const similar = textSimilarity(answerSentences(answer.text), recentSentences(), STUDY_CONFIG.stories.similarity);
+    say(t("Analizando el texto… la primera vez se descarga el analizador de japonés (18 MB)."));
+    const checked = await validateText(answer.text);
+    if (checked.errors.length) throw Object.assign(checked.errors, { partial: checked.partial });
+    const check = plain ? checkStoryText(await storyFacts(checked.text, params), storyAsk(params), STUDY_CONFIG.stories.checks)
+      : { ok: true, problems: [], feedback: null };
+    return { answer, similar, checked, check, requestId: params.requestId, score: check.problems.length + (similar.tooSimilar ? 1 : 0) };
+  };
+  let result = await attempt(), retried = false;
+  // Si algo falla se pide otro UNA sola vez, diciéndole solo lo que falló: las frases que no
+  // debe repetir y, con frases normales, lo que no cumplió. Con frases normales el reintento
+  // no cuenta para su límite (retryOf); con el formato anterior, solo si le quedan textos.
+  if (result.score && (plain || result.answer.remaining !== 0)) {
+    retried = true;
+    say(result.similar.tooSimilar
+      ? t("El texto se parecía demasiado a los últimos que has leído. Pidiendo otro…")
+      : t("Al texto le faltaba algo de lo pedido. Pidiendo otro…"));
+    params = {
+      ...params, requestId: newId(),
+      ...(plain ? { retryOf: params.requestId, feedback: result.check.feedback } : {}),
+      ...(result.similar.tooSimilar ? { avoid: result.similar.repeated.slice(0, 10).map((sentence) => sentence.replace(/\|/g, "")) } : {})
+    };
+    const second = await attempt().catch((error) => {
+      console.error("El reintento no salió bien; se queda el primer texto:", error);
+      return null;
+    });
+    // Se queda el que cumple más (a igualdad, el segundo, que ya sabía lo que falló)
+    if (second && second.score <= result.score) result = second;
+  }
+  const { answer, checked, check } = result;
+  const record = await addText(answer.text, "api", {
+    requestId: result.requestId, promptVersion: answer.promptVersion, model: answer.model,
+    topic: params.topic, level: params.level
+  }, checked);
+  // Qué se pidió: el tipo y los personajes (para variar el siguiente), cuáles de las que tocan
+  // salieron y qué falló de la comprobación (vacío si nada)
+  Object.assign(record, {
+    type: params.type, cast: params.cast,
+    targets: { asked: params.targetIds, found: targetsFound(params.targetIds.map((id) => ({ id })), record.lemmas) },
+    ...(plain ? { checks: { problems: check.problems, coverage: check.coverage, retried } } : {})
+  });
+  await putRecords("texts", [record]);
+  return record;
+}
+
+/* Lo pedido, para checkStoryText (story-core.js, sección 7): las que tocan con
+   cómo se le escribieron y las estructuras de su hoja de ruta con su id */
+const storyAsk = (params) => ({
+  length: params.length,
+  targets: params.targetIds.map((id, i) => ({ id, label: params.targets[i] })),
+  grammar: params.grammar.map((point) => ({ id: GRAMMAR.find((entry) => entry.ja === point.ja)?.id, ja: point.ja }))
+});
+
+/* Lo que tiene un texto recién analizado, para checkStoryText. Una palabra
+   cuenta como conocida si la conoce (isKnownKey: también las de solo kana) o
+   si se le pidió a la IA (las que tocan y las que está aprendiendo): esas no
+   son palabras nuevas del texto. */
+async function storyFacts(text, params) {
+  const { lemmas, total } = countLemmas(text);
+  const known = knownLemmas();
+  const askedIds = new Set(params.targetIds);
+  // 角(かど) -> 角; con eso se reconocen también las de «aprendiendo», que van sin id
+  const askedWritings = new Set([...params.targets, ...params.learning].map((label) => label.replace(/\(.*\)$/, "")));
+  let ok = 0;
+  const unknown = new Set();
+  for (const [key, count] of Object.entries(lemmas)) {
+    const writing = key.split("|")[0];
+    if (isKnownKey(key, known) || askedIds.has(key) || askedWritings.has(writing)) ok += count;
+    else unknown.add(writing);
+  }
+  // La gramática, sobre las piezas de kuromoji de cada oración entera (grammar-core.js)
+  const tokenizer = await loadTokenizer();
+  const grammar = new Set(text.sentences.flatMap((sentence) => detectGrammar(tokenizer.tokenize(sentence.jp))));
+  return {
+    sentences: text.sentences.length, total, known: ok, unknown: [...unknown],
+    found: targetsFound(params.targetIds.map((id) => ({ id })), lemmas), grammar: [...grammar]
+  };
 }
 
 /* Las frases de una respuesta de la IA (formato segmentado), sin las barras */
@@ -1521,6 +1664,12 @@ function bindReader() {
   $("furiganaSelect").value = prefs.furigana;
   $("furiganaSelect").addEventListener("change", () => {
     prefs.furigana = $("furiganaSelect").value;
+    saveLocal("kanji-prefs", prefs);
+  });
+  // Formato de los textos con IA: frases normales o, de reserva, el anterior con "|"
+  $("textFormatSelect").value = plainTexts() ? "plain" : "seg";
+  $("textFormatSelect").addEventListener("change", () => {
+    prefs.textFormat = $("textFormatSelect").value;
     saveLocal("kanji-prefs", prefs);
   });
   $("readLevelSelect").value = meta.reading.level || "N5";

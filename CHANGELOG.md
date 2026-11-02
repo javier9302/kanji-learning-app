@@ -6,6 +6,14 @@ Cómo funciona todo hoy: [docs/COMO-FUNCIONA.md](docs/COMO-FUNCIONA.md).
 
 ## 2026-11-02
 
+- **Textos de la IA más naturales y comprobados**: la IA ya escribe frases normales y la app las
+  corta en palabras con su analizador de japonés (antes la IA tenía que separarlas con «|» y a
+  veces partía una palabra). Al recibir el texto, la app comprueba que tenga las oraciones pedidas,
+  al menos un 90 % de palabras que conoces, todas las que te toca repasar y la gramática de tu hoja
+  de ruta; si algo falla, pide otro **una sola vez** diciéndole solo qué falló, y te quedas con el
+  mejor de los dos. Ese segundo intento no gasta otro texto de tu límite diario. Si algo va mal,
+  Ajustes → Lectura → «Textos con IA: formato anterior» vuelve al de antes.
+
 - **Palabras guardadas más limpias**: al leer, lo que consultas o ves en un texto se guarda en su
   forma de diccionario (来ました → 来る, 喜んで → 喜ぶ, 有名な → 有名), y en kana si casi siempre se
   escribe así (有る → ある). Ya no se guardan partículas ni trozos (のは, んだ, ける) ni kana sueltas.

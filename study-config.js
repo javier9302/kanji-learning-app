@@ -106,9 +106,12 @@ const STUDY_CONFIG = {
                     otra vez si repite maxRepeated frases o una parte maxShare de ellas
        scenes       escenas gastadas (overusedScenes): en los últimos `recent` textos leídos, lo que
                     sale en minTexts o más, como mucho `max`; no cuentan las palabras entre las
-                    commonRank más frecuentes */
+                    commonRank más frecuentes
+       checks       comprobar un texto de la IA (checkStoryText): % mínimo de palabras conocidas y
+                    cuántas oraciones de menos (below) o de más (above) se toleran sobre lo pedido */
   stories: { max: 8, soonDays: 2, recentTexts: 10, similarity: { sentenceMatch: 0.7, maxShare: 0.25, maxRepeated: 3 },
-    scenes: { recent: 10, minTexts: 3, max: 8, commonRank: 300 } },
+    scenes: { recent: 10, minTexts: 3, max: 8, commonRank: 300 },
+    checks: { coverage: 90, sentences: { below: 1, above: 2 } } },
 
   /* Leer cuenta como repaso (learning-core.js, sección 3): una palabra que toca
      repasar y sale en un texto terminado.

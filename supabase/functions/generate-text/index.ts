@@ -25,6 +25,9 @@
 // Los fallos de la IA o del sistema no cuentan. La app repite la petición con
 // el mismo "requestId" (como mucho 3 intentos) y aquí se guarda cada fallo con
 // la respuesta de la IA para poder revisarlo (tabla generations).
+// Si el texto llega bien pero no cumple lo pedido (frases normales: la app lo
+// comprueba con checkStoryText), la app pide otro una sola vez con "retryOf" y
+// "feedback"; ese segundo tampoco cuenta.
 // =========================================
 
 // Lo que depende de Deno (los secretos, el cliente de Supabase, Deno.serve) va
@@ -268,6 +271,34 @@ function checkSegmented(text: string, length: number, lastAttempt: boolean): Che
   return { code: "", problems: [] };
 }
 
+/* Frases normales (formato 3): cada oración con "ja", "en" y "es". Aquí no hay
+   kuromoji para contar palabras: un texto con menos del 70 % de las oraciones
+   pedidas se devuelve a la IA por corto. El resto lo comprueba la app tras
+   cortarlo en unidades (checkStoryText). */
+function checkPlain(text: string, length: number, lastAttempt: boolean): Check {
+  const start = text.search(/[{[]/), end = Math.max(text.lastIndexOf("}"), text.lastIndexOf("]"));
+  let data: any;
+  try {
+    data = JSON.parse(start >= 0 && end > start ? text.slice(start, end + 1) : text);
+  } catch (error) {
+    return { code: "invalid_json", problems: [`The answer is not valid JSON: ${(error as Error).message}`] };
+  }
+  const list = Array.isArray(data) ? data : data?.sentences;
+  if (!Array.isArray(list) || !list.length) return { code: "missing_fields", problems: ['"sentences" must be a non-empty list.'] };
+  const missing: string[] = [];
+  list.forEach((sentence: any, index: number) => {
+    for (const field of ["ja", "en", "es"]) {
+      if (!sentence || typeof sentence[field] !== "string" || !sentence[field].trim()) missing.push(`Sentence ${index + 1}: "${field}" is missing.`);
+    }
+  });
+  if (missing.length) return { code: "missing_fields", problems: missing };
+  const wanted = Math.ceil(length / 9);
+  if (!lastAttempt && list.length < wanted * 0.7) {
+    return { code: "too_short", problems: [`The text is too short: it has ${list.length} sentences and needs at least ${wanted}. Keep the story and add sentences that continue it.`] };
+  }
+  return { code: "", problems: [] };
+}
+
 // <listas-limpias>
 /* Grafías que el banco no marca pero que se escriben así (御飯 -> ご飯) */
 const SC_SPELLING = [[/御飯/g, "ご飯"], [/^綺麗$/, "きれい"]];
@@ -390,7 +421,8 @@ export function readParams(body: any) {
   const lists = cleanWordLists({ known: words(body.known, 1500), learning: words(body.learning, 60), targets: words(body.targets, 12) });
   return {
     level: body.level, type: body.type, topic, length: body.length,
-    format: body.format === 2 ? 2 : 1, // 2 = texto segmentado con "|" (las versiones antiguas de la app piden el 1)
+    // 3 = frases normales (renderPromptPlain), 2 = texto segmentado con "|"; las versiones antiguas de la app piden el 1
+    format: body.format === 3 ? 3 : body.format === 2 ? 2 : 1,
     known: lists.known,
     assumedLevels: Array.isArray(body.assumedLevels) ? LEVELS.filter((l) => body.assumedLevels.includes(l)) : [],
     learning: lists.learning,
@@ -403,7 +435,25 @@ export function readParams(body: any) {
     avoid: Array.isArray(body.avoid)
       ? body.avoid.filter((s: unknown) => typeof s === "string" && SENTENCE.test(s)).slice(0, 10) : [],
     grammar: grammarPoints(body.grammar),
+    // Reintento tras la comprobación de la app (checkStoryText): a qué petición sustituye y qué falló
+    retryOf: typeof body.retryOf === "string" && /^[\w-]{8,64}$/.test(body.retryOf) ? body.retryOf : "",
+    feedback: body.format === 3 ? readFeedback(body.feedback) : null,
   };
+}
+
+/* Lo que falló en el intento anterior, con forma fija: palabras japonesas,
+   estructuras y números. Así nadie puede colar instrucciones en el prompt. */
+// deno-lint-ignore no-explicit-any
+function readFeedback(value: any) {
+  if (!value || typeof value !== "object") return null;
+  const count = (n: unknown) => Number.isInteger(n) && (n as number) >= 0 && (n as number) <= 500 ? n as number : undefined;
+  const out = {
+    missing: words(value.missing, 12),
+    grammar: Array.isArray(value.grammar) ? value.grammar.filter((g: unknown) => typeof g === "string" && GRAMMAR_JA.test(g)).slice(0, 5) : [],
+    newWords: count(value.newWords), unknown: words(value.unknown, 15), sentences: count(value.sentences),
+  };
+  const empty = !out.missing.length && !out.grammar.length && out.newWords === undefined && out.sentences === undefined;
+  return empty ? null : out;
 }
 
 function fixPrompt(prompt: string, previous: string, problems: string) {
@@ -416,6 +466,71 @@ Previous answer:
 ${previous.slice(0, 60000)}
 
 Return the complete corrected JSON object, following every rule above.`;
+}
+
+// Copia de PLAIN_VERSION y renderPromptPlain de reading.js (node tools/sync-prompt.mjs).
+/* Versión del prompt de frases normales: súbela al cambiar su texto. */
+const PLAIN_VERSION = "2026-11-02.1-plain";
+
+function renderPromptPlain({ level, type, topic, length, known, assumedLevels, learning, prefer = [], targets = [], cast = [], avoid = [], grammar = [], scenes = [], feedback = null }: any) {
+  // Personajes que se repiten de un texto a otro, cada uno con su carácter; la app elige dos (story-core.js, nextVariety)
+  const CAST = [
+    "ゆき (Yuki), a cheerful university student who always wants to try something new",
+    "たなかさん (Mr Tanaka), a calm office worker who notices small details nobody else sees",
+    "はると (Haruto), a curious ten-year-old boy who asks too many questions",
+    "さとうさん (Mrs Sato), a retired neighbour who loves her garden and local gossip",
+    "けん (Ken), a clumsy but very kind cook at a small restaurant",
+    "エマ (Emma), an exchange student from abroad, often surprised by Japanese customs",
+    "もりせんせい (Dr Mori), a busy doctor with a dry sense of humour",
+    "あおい (Aoi), an ambitious high-school student in the music club"
+  ];
+  const characters = cast.map((i) => CAST[i]).filter(Boolean);
+  // Los mismos números que comprueba la app después (storyShape, story-core.js)
+  const fresh = Math.round(length * 0.1);
+  const minSentences = Math.ceil(length / 9), maxSentences = Math.ceil(length / 6.5);
+  const knownLine = assumedLevels.length
+    ? `Known words: all standard JLPT ${assumedLevels.join(", ")} vocabulary` +
+      (known.length ? `, plus: ${known.join("、")}` : ".")
+    : known.length
+      ? `Known words (the learner can read these): ${known.join("、")}`
+      : "Known words: none yet. Use only the most basic beginner vocabulary.";
+  // Solo lo que falló, para que la IA no rehaga lo que ya estaba bien
+  const fixes = [];
+  if (feedback?.missing?.length) fixes.push(`- These words due for review were missing: ${feedback.missing.join("、")}. Use each of them at least once.`);
+  if (feedback?.grammar?.length) fixes.push(`- This grammar was missing: ${feedback.grammar.join("; ")}. Use each point at least once.`);
+  if (Number.isInteger(feedback?.newWords)) {
+    fixes.push(`- It had ${feedback.newWords} new words, max ${fresh}${feedback.unknown?.length ? ` (${feedback.unknown.join("、")})` : ""}. Replace most of them with known words.`);
+  }
+  if (Number.isInteger(feedback?.sentences)) fixes.push(`- It had ${feedback.sentences} sentences; write between ${minSentences} and ${maxSentences}.`);
+
+  return `You are writing a graded Japanese reading text for a learner.
+
+LEARNER
+- Target level: JLPT ${level}.
+- ${knownLine}
+${targets.length ? `- Words due for review: use EACH of these at least once, naturally and with this exact meaning: ${targets.join("、")}\n` : ""}${learning.length ? `- Words the learner is still learning (reuse a few of them): ${learning.join("、")}\n` : ""}${prefer.length ? `- Common words written in kana, most frequent first. Prefer them when they fit naturally; they do not count as new words: ${prefer.join("、")}\n` : ""}${grammar.length ? `- Grammar the learner is practising: use each of these at least once, naturally: ${grammar.map((point) => `${point.ja} (${point.en})`).join("; ")}\n` : ""}- A word written with its reading in brackets, like 角(かど), has several readings: use it ONLY with that reading and its meaning (角(かど) is "corner", never つの "horn"). Never write the brackets in the text.
+
+TEXT
+- Type: ${type}. Topic: ${topic}.
+- LENGTH (strict): about ${length} words in ${minSentences}-${maxSentences} sentences (count each particle as a word, like 私 は 毎朝 コーヒー を 飲みます = 6 words). A text with fewer than ${minSentences} sentences is rejected. If you are short, continue the story with more sentences.
+- Natural Japanese with grammar no harder than JLPT ${level}.
+- Make it enjoyable to read: one concrete situation with a small story arc, a surprise or a touch of humour. Sentences must connect with each other; never a list of unrelated textbook sentences.
+${characters.length ? `- Characters (write their names exactly as given, in kana, and keep their personalities): ${characters.join("; ")}.\n` : ""}- Avoid overused textbook situations and phrases such as お腹が空きました, お弁当を食べました, 公園に行きました, 友達と遊びました, 天気がいいです, or ending with 楽しかったです. Find a fresher situation and vary how sentences begin.
+${avoid.length ? `- These sentences already appeared in the learner's recent texts: do not repeat them or close variants of them: ${avoid.join(" / ")}\n` : ""}${scenes.length ? `- Places, animals and objects the learner's recent texts keep coming back to: do not build this story around them: ${scenes.join("、")}\n` : ""}- About 90% of the content words must be known words. Introduce at most ${fresh} new words (about 10%), useful ones at level ${level}.
+- Write with the kanji a normal text of this level would use. Words that Japanese normally writes in kana must stay in kana (ある, いる, する, できる, ください, たくさん, かわいい, おいしい): never use rare kanji spellings such as 有る, 居る, 為る, 出来る, 下さい or 沢山.
+${fixes.length ? `\nA PREVIOUS ATTEMPT WAS REJECTED. Write a new text that follows every rule above and fixes this:\n${fixes.join("\n")}\n` : ""}
+OUTPUT
+Return ONLY one compact JSON object (no explanations, no markdown), with exactly these fields:
+
+{"title":"毎朝のコーヒー","title_en":"Morning coffee","title_es":"El café de cada mañana","sentences":[
+{"p":1,"ja":"私は毎朝コーヒーを飲みます。","en":"I drink coffee every morning.","es":"Bebo café todas las mañanas."},
+{"p":1,"ja":"今日は新しい店で買いましたが、あまりおいしくなかったです。","en":"Today I bought it at a new shop, but it was not very good.","es":"Hoy lo compré en una tienda nueva, pero no estaba muy bueno."},
+{"p":2,"ja":"「明日も一緒に行きませんか」と友達に聞かれました。","en":"\\"Won't you come with me tomorrow too?\\" my friend asked me.","es":"«¿No vienes conmigo mañana también?», me preguntó mi amigo."}]}
+
+RULES
+1. "ja" is ONE sentence written normally, with its punctuation: no spaces, no "|", no furigana and no readings in brackets.
+2. Do NOT give lemmas, readings, word translations or parts of speech. Only "p", "ja", "en" and "es".
+3. "p" is the paragraph number, starting at 1 (in a dialogue, one paragraph per speaker turn). "en" and "es" are natural translations of the whole sentence.`;
 }
 
 /* Lo único que hace ilegible un texto: que no sea JSON o que los tokens no
@@ -516,22 +631,29 @@ async function handler(req: Request) {
   const today = new Date();
   today.setUTCHours(0, 0, 0, 0);
   const { data: rows, error: countError } = await admin.from("generations")
-    .select("id, request_id, ok").eq("user_id", user.id).gte("created_at", today.toISOString());
+    .select("id, request_id, ok, params").eq("user_id", user.id).gte("created_at", today.toISOString());
   if (countError) return reply(500, { error: "not_configured", detail: countError.message });
 
   const mine = rows.filter((row) => row.request_id === requestId);
   const attempt = mine.length + 1;
+  // El reintento que pide la app cuando el texto no cumplía lo pedido (checkStoryText) no
+  // cuenta para el límite: el estudiante solo se queda uno de los dos. Vale una vez por
+  // texto entregado hoy; si no, cuenta como uno nuevo.
+  const free = !!params.retryOf && params.retryOf !== requestId &&
+    rows.some((row) => row.ok && row.request_id === params.retryOf) &&
+    !rows.some((row) => row.params?.retryOf === params.retryOf && row.request_id !== requestId);
+  if (!free) params.retryOf = "";
   // Textos entregados hoy: es lo único que cuenta para el límite del estudiante
-  const delivered = new Set(rows.filter((row) => row.ok).map((row) => row.request_id || row.id)).size;
+  const delivered = new Set(rows.filter((row) => row.ok && !row.params?.retryOf).map((row) => row.request_id || row.id)).size;
   if (mine.some((row) => row.ok)) return reply(400, { error: "bad_request" });
   if (attempt > MAX_ATTEMPTS) return reply(429, { error: "invalid", canRetry: false });
-  if (attempt === 1 && delivered >= limits.texts) return reply(429, { error: "limit", limit: limits.texts, plan: limits.plan });
+  if (attempt === 1 && !free && delivered >= limits.texts) return reply(429, { error: "limit", limit: limits.texts, plan: limits.plan });
   if (rows.length >= limits.hardCap) return reply(429, { error: "busy" });
 
   // En un reintento se le devuelve a la IA su respuesta anterior con el motivo del rechazo
-  const segmented = params.format === 2;
-  const version = segmented ? SEGMENTED_VERSION : PROMPT_VERSION;
-  let prompt = segmented ? renderPromptSeg(params) : renderPrompt(params);
+  const segmented = params.format === 2, plain = params.format === 3;
+  const version = plain ? PLAIN_VERSION : segmented ? SEGMENTED_VERSION : PROMPT_VERSION;
+  let prompt = plain ? renderPromptPlain(params) : segmented ? renderPromptSeg(params) : renderPrompt(params);
   if (attempt > 1) {
     const { data: previous } = await admin.from("generations").select("raw, error")
       .eq("user_id", user.id).eq("request_id", requestId).not("raw", "is", null)
@@ -569,7 +691,7 @@ async function handler(req: Request) {
   // Tipo de resultado que queda en el registro: ok, o qué falló exactamente
   let outcome = failure || "ok";
   if (!failure) {
-    const check = (segmented ? checkSegmented : checkStructure)(text, params.length, attempt >= MAX_ATTEMPTS);
+    const check = (plain ? checkPlain : segmented ? checkSegmented : checkStructure)(text, params.length, attempt >= MAX_ATTEMPTS);
     if (check.code) { failure = "invalid"; outcome = check.code; detail = check.problems.slice(0, 12).join("\n"); }
   }
 
@@ -581,6 +703,7 @@ async function handler(req: Request) {
       level: params.level, type: params.type, topic: params.topic, length: params.length, format: params.format,
       known: params.known.length, learning: params.learning.length, assumedLevels: params.assumedLevels,
       targets: params.targets.length, cast: params.cast, avoid: params.avoid.length,
+      ...(params.retryOf ? { retryOf: params.retryOf } : {}), ...(params.feedback ? { feedback: params.feedback } : {}),
     },
     model, key_label: label, attempts: attempts.join(" ") || null,
     level: params.level, length: params.length, is_fix: attempt > 1,
@@ -599,7 +722,7 @@ async function handler(req: Request) {
   }
   return reply(200, {
     text, model, requestId, promptVersion: version,
-    remaining: limits.texts - delivered - 1, limit: limits.texts, plan: limits.plan,
+    remaining: limits.texts - delivered - (params.retryOf ? 0 : 1), limit: limits.texts, plan: limits.plan,
   });
 }
 
