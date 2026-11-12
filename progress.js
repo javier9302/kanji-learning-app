@@ -353,7 +353,7 @@ function grammarListHTML(states) {
         <summary><i class="sw ${cls}"></i>${t(label)} (${points.length})</summary>
         <ul class="grammar-list">${points.map((point) => `
           <li title="${escapeHTML(point.example)}"><strong lang="ja">${escapeHTML(point.ja)}</strong>
-            <span>${escapeHTML(name(point))}</span>
+            <span>${escapeHTML(name(point))} <small class="grammar-level">${point.level}</small></span>
             <span class="grammar-example" lang="ja">${escapeHTML(point.example)}</span></li>`).join("")}</ul>
       </details>`;
   }).join("");

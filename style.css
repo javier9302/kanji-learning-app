@@ -3877,6 +3877,9 @@ button.kana-cell { cursor: pointer; }
 .kana-chart { display: grid; gap: 4px; }
 .kana-chart-row { display: flex; flex-wrap: wrap; gap: 4px; }
 
+/* Análisis → gramática: el nivel de cada estructura (N5, N4) */
+.grammar-level { color: var(--muted); font-size: 12px; margin-left: 4px; }
+
 /* Ajustes → Repaso: voz y velocidad en una fila (en el móvil se apilan) */
 .voice-settings {
   display: flex;

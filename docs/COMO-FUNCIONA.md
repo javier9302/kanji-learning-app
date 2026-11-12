@@ -71,7 +71,7 @@ La vista previa del enlace (título, descripción e icono) sale de las etiquetas
 | `vendor/jmdict/common-<fecha>.json` | Diccionario general: palabras comunes que no están en el banco | `tools/build-dictionary.mjs` desde JMdict | No |
 | `bank/sentences/<nivel>.json` | Frases comunes de ejemplo, con traducción: de Tatoeba (aprobadas por la IA, con su autor) y de IA | `tools/import-tatoeba.mjs` (Tatoeba, CC BY 2.0 FR) y `tools/generate-sentences.mjs` (IA por tandas) | No |
 | Tabla `shared_sentences` (Supabase) | Frases compartidas por todos: las propias de un administrador, las de historias que se usaron y las que escribió la IA para palabras sin frase | La app: Ajustes → Frases propias y al repasar «En una frase» | Se borran en admin.html → Frases |
-| `grammar-core.js` (`GRAMMAR`) | Catálogo de gramática: 56 estructuras de N5 (partículas, です/ます y sus formas, forma て, 〜たい, 〜から…), cada una con su regla de detección y un ejemplo | Escrito a mano sobre el análisis de kuromoji | Sí: cada estructura nueva lleva su ejemplo en `test/grammar.test.js` |
+| `grammar-core.js` (`GRAMMAR`) | Catálogo de gramática: 56 estructuras de N5 (partículas, です/ます y sus formas, forma て, 〜たい, 〜から…) y 47 de N4 (pasiva, causativa, volitiva, condicionales たら/ば/と/なら, 〜てしまう/みる/おく, 〜そう, 〜ようだ, 〜はず, 〜ながら…), cada una con su regla de detección y un ejemplo | Escrito a mano sobre el análisis de kuromoji | Sí: cada estructura nueva lleva su ejemplo en `test/grammar.test.js` |
 | `kanji-data.js` | Modelo antiguo; ya no se carga, solo sirve para migrar datos viejos | — | No |
 
 Tamaño del banco:
@@ -492,8 +492,9 @@ esta semana); un resumen de la semana escrito por la IA, y la vista del profesor
   - *dominada*: la tradujo bien en 2 días distintos;
   - si su última traducción fue mala (también «No lo sé») no cuenta como dominada ni, por las
     traducciones, como entendida.
-  El nivel estimado de gramática cuenta dominadas y entendidas, con el mismo umbral del 80 %. Solo
-  hay catálogo de N5 por ahora. El análisis descarga el analizador de japonés si hace falta (unos
+  El nivel estimado de gramática cuenta dominadas y entendidas, con el mismo umbral del 80 %. Hay
+  catálogo de N5 y N4: el de N4 cuenta cuando el de N5 está completo, como en vocabulario; la hoja de
+  ruta propone las de N4 después y la lista de Análisis dice el nivel de cada una. El análisis descarga el analizador de japonés si hace falta (unos
   18 MB la primera vez); al sincronizar no se descarga, y la foto conserva la gramática de esa semana.
 - **Lectura**: textos leídos (en total y en 30 días), qué % conoce hoy de sus 5 últimos textos y
   cuántas palabras consulta por cada 100 que lee. **Constancia**: días activos y aciertos en los

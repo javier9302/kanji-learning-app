@@ -6,6 +6,12 @@ Cómo funciona todo hoy: [docs/COMO-FUNCIONA.md](docs/COMO-FUNCIONA.md).
 
 ## 2026-11-12
 
+- **Gramática de N4** (Análisis, premium): 47 estructuras nuevas (pasiva y causativa, forma
+  volitiva, たら / ば / と / なら, 〜てしまう, 〜てみる, 〜ておく, 〜そう, 〜ようだ, 〜はず, 〜ながら,
+  〜すぎる, あげる / くれる / もらう…), detectadas en lo que lees, repasas y traduces. Cuentan para el
+  nivel estimado de gramática y la hoja de ruta las propone cuando terminas N5; en la lista, cada una
+  dice su nivel. Además, 〜てもいい y 〜てはいけない ya no se confunden con 〜なくてもいい y
+  〜なくてはいけない.
 - **Audio mejor** (`50d0569`): al escuchar una palabra se lee su **lectura**, no su escritura (antes 日 podía
   sonar «nichi» aunque la tarjeta enseñara ひ). Se elige la mejor voz japonesa del dispositivo y, en
   **Ajustes → Repaso**, puedes cambiar la voz y la velocidad (lenta, normal, natural) y probarla. Si

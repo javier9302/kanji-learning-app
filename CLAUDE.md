@@ -51,7 +51,8 @@ después de `learning-core.js`)
   como Bien, `retentionFromLog`). Después, el registro y las kanas se sincronizan (tablas
   `review_log` y `kana_cards`, `syncLearningLog` en `reading-sync.js`). Orden acordado para lo que
   falta: audio (hecho el de la voz del dispositivo, `speak` / `rankJapaneseVoices`; falta el audio
-  grabado de Tatoeba, que pide comprobar la licencia de cada grabación), gramática N4; pagos y premium en el servidor, más adelante; ajustar los pesos de
+  grabado de Tatoeba, que pide comprobar la licencia de cada grabación), gramática N4 (hecha: 47
+  estructuras en `GRAMMAR`); pagos y premium en el servidor, más adelante; ajustar los pesos de
   FSRS cuando el registro tenga semanas de datos.
 - **`dictionary.js`**: búsqueda por escritura, kana, rōmaji o significado.
 - **`capture.js` / `capture-core.js`**: palabras desde la web (`?add=…`, marcador «+ Kanji»,
@@ -92,7 +93,7 @@ después de `learning-core.js`)
   `docs/COMO-FUNCIONA.md`).
   Orden acordado de las demás: 3 (añadir palabras desde la web), 2 (lo que falta de pegar textos),
   4.1, 5, 6, 7, 8.
-- **`grammar-core.js`**: catálogo de gramática (`GRAMMAR`, hoy solo N5), detector sobre las piezas
+- **`grammar-core.js`**: catálogo de gramática (`GRAMMAR`: N5 y N4), detector sobre las piezas
   de kuromoji de la frase entera (`detectGrammar`) y medición (`grammarStates`). Una estructura
   nueva lleva su regla, su ejemplo y, si se parece a otra, un caso en «no confunde» de
   `test/grammar.test.js`. Los ids se guardan en las fotos: no se cambian.

@@ -13,7 +13,7 @@
    otra (〜ませんでした también es una negación cortés): se anotan todas.
 
    Para añadir una estructura: una entrada en GRAMMAR con su regla y una
-   frase de ejemplo en test/grammar.test.js que la detecte.
+   frase de ejemplo en test/grammar.test.js que la detecte. Niveles: N5 y N4.
    ========================================= */
 
 /* Pieza de kuromoji en forma corta: s superficie, p categoría, d subcategoría,
@@ -127,10 +127,11 @@ const GRAMMAR = [
     match: gcSeq(TE, { b: "くださる" }) },
   { id: "naide-kudasai", level: "N5", ja: "〜ないでください", es: "petición: por favor, no…", en: "please don't…", example: "見ないでください。",
     match: gcSeq(NAI, { s: "で" }, { b: "くださる" }) },
+  // なくてもいい y なくてはいけない son otra cosa (N4: no hace falta / tener que)
   { id: "te-mo-ii", level: "N5", ja: "〜てもいい", es: "permiso: se puede…", en: "may, it's okay to…", example: "見てもいいです。",
-    match: gcSeq(TE, { s: "も" }, { b: ["いい", "よい", "良い"] }) },
+    match: (pieces, i) => gcSeq(TE, { s: "も" }, { b: ["いい", "よい", "良い"] })(pieces, i) && !gcIs(pieces[i - 1], NAI) },
   { id: "te-wa-ikenai", level: "N5", ja: "〜てはいけない", es: "prohibición: no se debe…", en: "must not…", example: "見てはいけません。",
-    match: gcSeq(TE, { s: "は" }, { b: "いける" }) },
+    match: (pieces, i) => gcSeq(TE, { s: "は" }, { b: "いける" })(pieces, i) && !gcIs(pieces[i - 1], NAI) },
   { id: "te-kara", level: "N5", ja: "〜てから", es: "después de hacer…", en: "after doing…", example: "食べてから寝ます。",
     match: gcSeq(TE, { s: "から", p: "助詞" }) },
   { id: "tai", level: "N5", ja: "〜たい", es: "querer hacer…", en: "want to…", example: "水が飲みたい。",
@@ -177,7 +178,122 @@ const GRAMMAR = [
   { id: "ga-but", level: "N5", ja: "〜が", es: "pero", en: "but", example: "高いですが、おいしいです。",
     match: gcSeq({ s: "が", p: "助詞", d: "接続助詞" }) },
   { id: "kedo", level: "N5", ja: "〜けど", es: "pero (coloquial)", en: "but (casual)", example: "高いけど買います。",
-    match: gcSeq({ s: ["けど", "けれど", "けれども"], p: "助詞" }) }
+    match: gcSeq({ s: ["けど", "けれど", "けれども"], p: "助詞" }) },
+  // ===== N4 =====
+  // Formas del verbo
+  { id: "rareru", level: "N4", ja: "〜られる・〜れる", es: "pasiva, potencial o respeto", en: "passive, potential or honorific", example: "先生に褒められました。",
+    match: (pieces, i) => gcIs(pieces[i], { p: "動詞", d: "接尾", b: ["られる", "れる"] }) && !gcIs(pieces[i - 1], { d: "接尾", b: ["させる", "せる"] }) },
+  { id: "saseru", level: "N4", ja: "〜させる・〜せる", es: "causativa: hacer / dejar que…", en: "causative: make / let someone…", example: "母に野菜を食べさせました。",
+    match: (pieces, i) => gcIs(pieces[i], { p: "動詞", d: "接尾", b: ["させる", "せる"] }) && !gcIs(pieces[i + 1], { d: "接尾", b: ["られる", "れる"] }) },
+  { id: "saserareru", level: "N4", ja: "〜させられる", es: "causativa pasiva: obligar a…", en: "causative passive: be made to…", example: "野菜を食べさせられた。",
+    match: gcSeq({ p: "動詞", d: "接尾", b: ["させる", "せる"] }, { p: "動詞", d: "接尾", b: ["られる", "れる"] }) },
+  { id: "volitional", level: "N4", ja: "〜よう・〜おう", es: "forma volitiva: vamos a…, voy a…", en: "volitional: let's…, I'll…", example: "行こう。",
+    match: gcSeq({ p: "動詞", f: "未然ウ接続" }, { b: ["う", "よう"], p: "助動詞" }) },
+  { id: "you-to-omou", level: "N4", ja: "〜ようと思う", es: "pensar hacer…", en: "to intend / think of doing…", example: "毎日運動しようと思います。",
+    match: gcSeq({ p: "動詞", f: "未然ウ接続" }, { b: ["う", "よう"], p: "助動詞" }, { s: "と" }, { b: "思う" }) },
+  { id: "nasai", level: "N4", ja: "〜なさい", es: "orden: haz…", en: "command: do…", example: "早く食べなさい。",
+    match: (pieces, i) => gcIs(pieces[i], { b: "なさる", d: "非自立" }) && gcIs(pieces[i - 1], { ...VERB, f: "連用形" }) },
+
+  // Condicionales
+  { id: "tara", level: "N4", ja: "〜たら", es: "si…, cuando…", en: "if…, when…", example: "雨が降ったら、行きません。",
+    match: gcSeq({ ...TA, f: "仮定形" }) },
+  { id: "ba", level: "N4", ja: "〜ば", es: "si… (condicional)", en: "if… (conditional)", example: "安ければ買います。",
+    match: (pieces, i) => gcIs(pieces[i], { s: "ば", p: "助詞", d: "接続助詞" }) && gcIs(pieces[i - 1], { f: "仮定形" }) && !gcIs(pieces[i - 1], NAI) },
+  { id: "to-cond", level: "N4", ja: "〜と", es: "condicional: siempre que…, al…", en: "whenever…, when…", example: "春になると暖かくなります。",
+    match: (pieces, i) => gcIs(pieces[i], { s: "と", p: "助詞", d: "接続助詞" }) && gcIs(pieces[i - 1], { f: "基本形" }) },
+  { id: "nara", level: "N4", ja: "〜なら", es: "si es así…, en cuanto a…", en: "if (it's the case that)…", example: "雨なら行きません。",
+    match: gcSeq({ s: "なら", b: "だ", f: "仮定形" }) },
+  { id: "temo", level: "N4", ja: "〜ても", es: "aunque…", en: "even if…", example: "寒くても行きます。",
+    match: (pieces, i) => gcSeq(TE, { s: "も" })(pieces, i) && !gcIs(pieces[i + 2], { b: ["いい", "よい", "良い", "かまう", "構う"] }) },
+
+  // Con la forma て
+  { id: "te-shimau", level: "N4", ja: "〜てしまう・〜ちゃう", es: "acabar de hacer del todo, sin querer", en: "to finish completely, by accident", example: "宿題をしてしまいました。",
+    match: (pieces, i) => gcSeq(TE, { b: "しまう", d: "非自立" })(pieces, i) || gcIs(pieces[i], { b: ["ちゃう", "じゃう"], d: "非自立" }) },
+  { id: "te-miru", level: "N4", ja: "〜てみる", es: "probar a hacer…", en: "to try doing…", example: "ケーキを作ってみます。",
+    match: gcSeq(TE, { b: "みる", d: "非自立" }) },
+  { id: "te-oku", level: "N4", ja: "〜ておく", es: "hacer algo de antemano", en: "to do in advance", example: "切符を買っておきます。",
+    match: (pieces, i) => gcSeq(TE, { b: "おく", d: "非自立" })(pieces, i) || gcIs(pieces[i], { b: ["とく", "どく"], d: "非自立" }) },
+  { id: "te-aru", level: "N4", ja: "〜てある", es: "estado resultante (alguien lo hizo)", en: "resulting state (someone did it)", example: "窓が開けてあります。",
+    match: gcSeq(TE, { b: "ある", d: "非自立" }) },
+  { id: "te-morau", level: "N4", ja: "〜てあげる・〜てくれる・〜てもらう", es: "hacer un favor / recibirlo", en: "doing / receiving a favour", example: "教えてもらいました。",
+    match: gcSeq(TE, { b: ["あげる", "くれる", "もらう", "いただく", "差し上げる", "やる"], d: "非自立" }) },
+  { id: "te-hoshii", level: "N4", ja: "〜てほしい", es: "querer que alguien haga…", en: "to want someone to…", example: "明日来てほしい。",
+    match: gcSeq(TE, { b: ["ほしい", "欲しい"] }) },
+  { id: "nakute-mo-ii", level: "N4", ja: "〜なくてもいい", es: "no hace falta…", en: "don't have to…", example: "行かなくてもいいです。",
+    match: gcSeq({ ...NAI, f: "連用テ接続" }, TE, { s: "も" }, { b: ["いい", "よい", "良い", "かまう", "構う"] }) },
+  { id: "nakereba", level: "N4", ja: "〜なければならない・〜なくてはいけない", es: "tener que…", en: "must, have to…", example: "勉強しなければなりません。",
+    match: (pieces, i) => gcSeq({ ...NAI, f: "仮定形" }, { s: "ば" }, { b: ["なる", "いける"] })(pieces, i) ||
+      gcSeq({ ...NAI, f: "連用テ接続" }, TE, { s: "は" }, { b: ["なる", "いける"] })(pieces, i) },
+  { id: "naide", level: "N4", ja: "〜ないで・〜ずに", es: "sin hacer…", en: "without doing…", example: "名前を書かずに出した。",
+    match: (pieces, i) => gcSeq({ ...NAI, f: "連用デ接続" }, { s: "で" })(pieces, i) && !gcIs(pieces[i + 2], { b: "くださる" }) ||
+      gcSeq({ b: "ぬ", f: "連用ニ接続" }, { s: "に" })(pieces, i) },
+
+  // Experiencia, decisiones, cambios
+  { id: "ta-koto-ga-aru", level: "N4", ja: "〜たことがある", es: "haber hecho alguna vez", en: "to have done before", example: "日本に行ったことがあります。",
+    match: gcSeq(TA, { b: "こと", d: "非自立" }, { s: ["が", "は", "も"] }, { b: "ある" }) },
+  { id: "koto-ga-dekiru", level: "N4", ja: "〜ことができる", es: "poder hacer…", en: "to be able to…", example: "漢字を書くことができます。",
+    match: gcSeq({ b: "こと", d: "非自立" }, { s: ["が", "も", "は"] }, { b: "できる" }) },
+  { id: "koto-ni-suru", level: "N4", ja: "〜ことにする", es: "decidir hacer…", en: "to decide to…", example: "毎朝走ることにしました。",
+    match: gcSeq({ b: "こと", d: "非自立" }, { s: "に" }, { b: "する", p: "動詞" }) },
+  { id: "koto-ni-naru", level: "N4", ja: "〜ことになる", es: "quedar decidido que…", en: "it has been decided that…", example: "来月結婚することになりました。",
+    match: gcSeq({ b: "こと", d: "非自立" }, { s: "に" }, { b: "なる", p: "動詞" }) },
+  { id: "you-ni-naru", level: "N4", ja: "〜ようになる", es: "llegar a (poder) hacer…", en: "to come to (be able to)…", example: "日本語が話せるようになりました。",
+    match: gcSeq({ b: "よう", d: "非自立" }, { s: "に" }, { b: "なる" }) },
+  { id: "you-ni", level: "N4", ja: "〜ように", es: "para que…", en: "so that…", example: "忘れないようにメモします。",
+    match: (pieces, i) => gcSeq({ b: "よう", d: "非自立" }, { s: "に" })(pieces, i) && !gcIs(pieces[i + 2], { b: "なる" }) &&
+      (gcIs(pieces[i - 1], { ...VERB, f: "基本形" }) || gcIs(pieces[i - 1], NAI)) },
+  { id: "tame-ni", level: "N4", ja: "〜ために", es: "para…, por…", en: "in order to…, for…", example: "日本へ行くために、お金をためます。",
+    match: (pieces, i) => gcSeq({ b: ["ため", "為"], p: "名詞" }, { s: "に" })(pieces, i) &&
+      (gcIs(pieces[i - 1], { ...VERB, f: "基本形" }) || gcIs(pieces[i - 1], { s: "の", d: "連体化" })) },
+
+  // Suposiciones y lo que se oye
+  { id: "sou-looks", level: "N4", ja: "〜そう", es: "por su aspecto: parece que va a…, tiene pinta de…", en: "looks like…", example: "雨が降りそうです。",
+    match: gcSeq({ b: "そう", p: "名詞", d: "接尾" }) },
+  { id: "sou-hearsay", level: "N4", ja: "〜そうだ", es: "lo que se oye: dicen que…, he oído que…", en: "I hear that…", example: "明日は雨だそうです。",
+    match: (pieces, i) => gcIs(pieces[i], { b: "そう", d: "特殊" }) && gcIs(pieces[i - 1], { f: "基本形" }) },
+  { id: "you-da", level: "N4", ja: "〜ようだ・〜みたい", es: "parece, como…", en: "seems, like…", example: "風邪をひいたようです。",
+    match: (pieces, i) => gcIs(pieces[i], { b: "みたい" }) ||
+      gcIs(pieces[i], { b: "よう", d: "非自立" }) && (gcIs(pieces[i + 1], { b: ["だ", "です"] }) || gcIs(pieces[i + 1], { s: "な", f: "体言接続" })) },
+  { id: "rashii", level: "N4", ja: "〜らしい", es: "parece ser, por lo visto", en: "apparently, it seems", example: "彼は学生らしい。",
+    match: gcSeq({ b: "らしい", p: "助動詞" }) },
+  { id: "kamoshirenai", level: "N4", ja: "〜かもしれない", es: "quizá, puede que…", en: "maybe, might…", example: "雨が降るかもしれません。",
+    match: gcSeq({ s: "かも", p: "助詞" }, { b: "しれる" }) },
+  { id: "hazu", level: "N4", ja: "〜はず", es: "debería, se supone que…", en: "should, is expected to…", example: "彼は来るはずです。",
+    match: gcSeq({ b: "はず", d: "非自立" }) },
+  { id: "tsumori", level: "N4", ja: "〜つもり", es: "tener intención de…", en: "to intend to…", example: "行くつもりです。",
+    match: gcSeq({ b: "つもり", d: "非自立" }) },
+  { id: "hou-ga-ii", level: "N4", ja: "〜たほうがいい", es: "es mejor que…, deberías…", en: "you had better…", example: "もう寝たほうがいい。",
+    match: (pieces, i) => gcSeq({ b: ["ほう", "方"], d: "非自立" }, { s: "が" }, { b: ["いい", "よい", "良い"] })(pieces, i) &&
+      (gcIs(pieces[i - 1], TA) || gcIs(pieces[i - 1], NAI) || gcIs(pieces[i - 1], { s: "だ", p: "助動詞" }) && gcIs(pieces[i - 2], { ...VERB, f: "連用タ接続" })) },
+
+  // Unir y matizar
+  { id: "nagara", level: "N4", ja: "〜ながら", es: "mientras…", en: "while…", example: "音楽を聞きながら勉強します。",
+    match: gcSeq({ s: "ながら", p: "助詞" }) },
+  { id: "noni", level: "N4", ja: "〜のに", es: "aunque…; para…", en: "even though…; in order to…", example: "雨が降っているのに出かけた。",
+    match: (pieces, i) => gcIs(pieces[i], { s: "のに", p: "助詞" }) ||
+      // 起きているのには慣れた: の + には es «el hecho de», no のに
+      gcSeq({ s: "の", p: "名詞", d: "非自立" }, { s: "に" })(pieces, i) && gcIs(pieces[i - 1], { f: "基本形" }) && !gcIs(pieces[i + 2], { s: ["は", "も"] }) },
+  { id: "shi", level: "N4", ja: "〜し", es: "y además (dar razones)", en: "and also (listing reasons)", example: "高いし、遠いし、行きません。",
+    match: gcSeq({ s: "し", p: "助詞", d: "接続助詞" }) },
+  { id: "ka-dou-ka", level: "N4", ja: "〜かどうか", es: "si… o no", en: "whether or not…", example: "行くかどうか分かりません。",
+    match: gcSeq({ s: "か", p: "助詞" }, { s: "どうか" }) },
+  { id: "sugiru", level: "N4", ja: "〜すぎる", es: "demasiado…", en: "too much…", example: "このケーキは甘すぎます。",
+    match: gcSeq({ b: ["すぎる", "過ぎる"], d: "非自立" }) },
+  { id: "yasui-nikui", level: "N4", ja: "〜やすい・〜にくい", es: "fácil / difícil de…", en: "easy / hard to…", example: "この本は読みやすい。",
+    match: (pieces, i) => gcIs(pieces[i], { b: ["やすい", "にくい", "易い", "難い"], p: "形容詞", d: "非自立" }) && gcIs(pieces[i - 1], { ...VERB, f: "連用形" }) },
+  { id: "hajimeru", level: "N4", ja: "〜始める・〜終わる・〜続ける", es: "empezar / terminar / seguir de…", en: "start / finish / keep doing…", example: "書き始めました。",
+    match: (pieces, i) => gcIs(pieces[i], { b: ["始める", "はじめる", "終わる", "終える", "続ける", "出す"], p: "動詞", d: "非自立" }) && gcIs(pieces[i - 1], { ...VERB, f: "連用形" }) },
+  { id: "bakari", level: "N4", ja: "〜たばかり", es: "acabar de…", en: "to have just…", example: "見たばかりです。",
+    match: gcSeq(TA, { s: "ばかり" }) },
+  { id: "shika-nai", level: "N4", ja: "〜しか〜ない", es: "solo… (con negación)", en: "only… (with a negative)", example: "百円しかない。",
+    match: (pieces, i) => gcIs(pieces[i], { s: "しか", p: "助詞" }) && pieces.slice(i + 1).some((piece) => gcIs(piece, { b: "ない" }) || gcIs(piece, N_)) },
+  { id: "to-iu", level: "N4", ja: "〜という", es: "llamado…, que se llama…", en: "called…, named…", example: "これは何という花ですか。",
+    match: (pieces, i) => gcIs(pieces[i], { s: "という", p: "助詞" }) || gcSeq({ s: "と", p: "助詞" }, { b: "いう" })(pieces, i) && gcIs(pieces[i + 2], { p: "名詞" }) },
+  { id: "to-omou", level: "N4", ja: "〜と思う・〜と言う", es: "creer que…, decir que…", en: "to think that…, to say that…", example: "暑いと思います。",
+    match: (pieces, i) => gcSeq({ s: "と", p: "助詞", d: "格助詞" }, { b: ["思う", "言う", "考える"], p: "動詞" })(pieces, i) &&
+      !gcIs(pieces[i - 1], { b: ["う", "よう"], p: "助動詞" }) && !gcIs(pieces[i - 1], { p: "名詞", d: ["一般", "固有名詞", "代名詞"] }) },
+  { id: "ageru-kureru", level: "N4", ja: "あげる・くれる・もらう", es: "dar y recibir", en: "giving and receiving", example: "友達が本をくれました。",
+    match: gcSeq({ b: ["あげる", "くれる", "もらう", "くださる", "差し上げる"], p: "動詞", d: "自立" }) }
 ];
 
 const GRAMMAR_BY_ID = new Map(GRAMMAR.map((point) => [point.id, point]));
