@@ -120,6 +120,9 @@ const prefs = loadLocal("kanji-prefs", {
   kanjiGroup: "jlpt",  // Mis palabras → Kanjis: jlpt | grade | frequency
   kanjiBoxes: true,    // Repasar, «Palabra sola»: una casilla por kanji al escribir la lectura
   meaningCheck: true,  // Repasar: al acertar la lectura, a veces se pregunta también el significado
+  autoSpeak: true,     // Leer en voz alta la palabra al enseñar la respuesta (y cada kana)
+  speechRate: 0.9,     // Velocidad de la voz: 0.7 lenta, 0.9 normal, 1 natural
+  voice: "",           // voiceURI de la voz japonesa elegida ("" = la mejor del dispositivo)
   notifyMin: 10,       // Avisos de repaso: avisar cuando se junten tantas palabras (notify.js)
   theme: "auto",       // Apariencia: auto (la del dispositivo) | light | dark
   romaji: true,        // Rōmaji junto a cada lectura en kana: quien empieza aún no lee hiragana
@@ -283,7 +286,7 @@ function switchView(name) {
   if (name === "analysis") renderAnalysis();
   if (name === "kanji") renderKanjiTable();
   if (name === "add") renderAddWord();
-  if (name === "data") renderDataView();
+  if (name === "data") { renderDataView(); renderVoiceSettings(); }
   if (name === "dict") renderDictionary();
 }
 
@@ -1241,6 +1244,7 @@ function bindSettings() {
     prefs.kanjiBoxes = $("kanjiBoxesInput").checked;
     saveLocal("kanji-prefs", prefs);
   });
+  bindVoiceSettings();
   $("meaningCheckInput").checked = prefs.meaningCheck !== false;
   $("meaningCheckInput").addEventListener("change", () => {
     prefs.meaningCheck = $("meaningCheckInput").checked;

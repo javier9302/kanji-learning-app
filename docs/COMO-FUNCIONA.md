@@ -284,6 +284,15 @@ palabras que ya conoce o está aprendiendo. En «Palabras y kanjis» se alternan
   visto» pasa dos tarjetas más atrás (o enseguida, si es la única) y entonces se pregunta. No cuenta
   como respuesta. Con **«Ya la sé»** no se pregunta: queda dominada y entra en el repaso a los
   **30 días** (`checkedIntervalDays.known`) para comprobarlo.
+- **Audio** (`speak`, `study.js`): la voz japonesa del dispositivo (gratis, sin conexión). Se usa
+  la que se eligió en Ajustes → Repaso (`prefs.voice`) o la mejor que haya (`rankJapaneseVoices`,
+  `ja-core.js`: primero las neuronales —Online (Natural), Premium, Mejorada—, luego las de Google,
+  luego las de cada sistema; nunca las de juguete), a la velocidad elegida (`prefs.speechRate`:
+  0,7 / 0,9 / 1). De una palabra se lee **su lectura en kana**, no la escritura (con 日 la voz
+  elegiría sola entre ひ, にち y か); de una frase, la frase. Con «Leer en voz alta la palabra al
+  enseñar la respuesta» (`prefs.autoSpeak`, activado) suena sola al enseñar una palabra nueva, al
+  ver la respuesta y al responder cada kana. Sin voz japonesa se avisa una vez y Ajustes explica
+  cómo instalarla. En el lector, 🔊 junto a la lectura de la palabra tocada.
 - **Rōmaji**: junto a cada lectura en kana (respuestas, prueba de nivel, Demostrar, lector y
   diccionario), con `kanaToRomaji` (`ja-core.js`, Hepburn: がっこう gakkou, まっちゃ matcha). Se quita en
   Ajustes → Repaso. Al escribir la lectura se puede teclear en rōmaji (WanaKana la convierte), y la

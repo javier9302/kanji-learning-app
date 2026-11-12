@@ -6,6 +6,13 @@ Cómo funciona todo hoy: [docs/COMO-FUNCIONA.md](docs/COMO-FUNCIONA.md).
 
 ## 2026-11-12
 
+- **Audio mejor**: al escuchar una palabra se lee su **lectura**, no su escritura (antes 日 podía
+  sonar «nichi» aunque la tarjeta enseñara ひ). Se elige la mejor voz japonesa del dispositivo y, en
+  **Ajustes → Repaso**, puedes cambiar la voz y la velocidad (lenta, normal, natural) y probarla. Si
+  el dispositivo no tiene voz japonesa, te dice cómo instalarla en Android, iPhone, Windows y Mac.
+  La palabra se oye sola al enseñártela y al ver la respuesta, y cada kana al responderla (se quita
+  en Ajustes). En el lector, 🔊 junto a la lectura de la palabra tocada. Si el navegador falla al
+  leer, la tarjeta sigue.
 - **El registro de repasos y las kanas se sincronizan** con tu cuenta (`97ccc1c`): la retención de
   Estadísticas cuenta lo repasado en todos tus dispositivos, y el hiragana y katakana siguen donde
   los dejaste en otro. Hay que volver a ejecutar `supabase/schema.sql` (crea `review_log` y

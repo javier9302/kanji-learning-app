@@ -691,15 +691,79 @@ async function startSession() {
 
 const GROUP_LABEL = () => ({ due: t("Repaso"), new: t("Nuevo"), extra: t("Práctica extra") });
 
-function speak(text) {
+/* ---------- Audio: la voz japonesa del dispositivo ----------
+   Gratis y sin conexión, pero cada dispositivo trae las suyas. Se elige la mejor
+   (rankJapaneseVoices, ja-core.js) o la que el estudiante eligió en Ajustes
+   (prefs.voice), a su velocidad (prefs.speechRate). De una palabra se lee su
+   LECTURA, no su escritura: con 日 la voz elige sola entre ひ, にち y か, y no
+   siempre la que se está enseñando. De una frase, la frase: el contexto le basta. */
+let japaneseVoices = [];
+let voicesKnown = false; // Chrome da la lista vacía hasta que avisa con voiceschanged
+let noVoiceWarned = false;
+
+function loadVoices() {
   if (!("speechSynthesis" in window)) return;
-  const utterance = new SpeechSynthesisUtterance(text);
-  utterance.lang = "ja-JP";
-  utterance.rate = 0.9;
-  const voice = speechSynthesis.getVoices().find((v) => v.lang.startsWith("ja"));
-  if (voice) utterance.voice = voice;
-  speechSynthesis.cancel();
-  speechSynthesis.speak(utterance);
+  const all = speechSynthesis.getVoices();
+  japaneseVoices = rankJapaneseVoices(all);
+  voicesKnown = all.length > 0;
+  if (document.body.dataset.view === "data") renderVoiceSettings();
+}
+if ("speechSynthesis" in window) {
+  loadVoices();
+  speechSynthesis.addEventListener?.("voiceschanged", loadVoices);
+}
+
+const currentVoice = () => japaneseVoices.find((voice) => voice.voiceURI === prefs.voice) || japaneseVoices[0] || null;
+
+function speak(text, { rate } = {}) {
+  if (!("speechSynthesis" in window) || !text) return;
+  if (!voicesKnown) loadVoices();
+  const voice = currentVoice();
+  // Sin voz japonesa, el navegador lee con otra (o no lee): se dice una vez cómo instalarla
+  if (!voice && voicesKnown && !noVoiceWarned) {
+    noVoiceWarned = true;
+    showToast(t("Este dispositivo no tiene voz japonesa: en Ajustes → Repaso → Voz te decimos cómo añadirla."));
+  }
+  // El audio es un extra: si el navegador falla al leer, la tarjeta sigue
+  try {
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = "ja-JP";
+    utterance.rate = rate || Number(prefs.speechRate) || 0.9;
+    if (voice) utterance.voice = voice;
+    speechSynthesis.cancel();
+    speechSynthesis.speak(utterance);
+  } catch (error) {
+    console.warn("No se pudo leer en voz alta:", error);
+  }
+}
+
+/* Al enseñar la respuesta, si está activado (prefs.autoSpeak): la lectura de la palabra */
+const autoSpeak = (text) => { if (prefs.autoSpeak !== false) speak(text); };
+
+/* Ajustes → Repaso: la voz, la velocidad y, sin voz japonesa, cómo conseguirla */
+function renderVoiceSettings() {
+  const select = $("voiceSelect");
+  if (!select) return;
+  const supported = "speechSynthesis" in window;
+  select.innerHTML = japaneseVoices.length
+    ? japaneseVoices.map((voice, i) => `<option value="${escapeHTML(voice.voiceURI)}">${escapeHTML(voice.name)}${i === 0 ? ` · ${t("recomendada")}` : ""}</option>`).join("")
+    : `<option value="">${t("Sin voz japonesa")}</option>`;
+  select.value = currentVoice()?.voiceURI || "";
+  select.disabled = !japaneseVoices.length;
+  $("speechRateSelect").value = String(prefs.speechRate || 0.9);
+  $("voiceHelp").textContent = !supported ? t("Este navegador no puede leer en voz alta.")
+    : japaneseVoices.length || !voicesKnown ? ""
+    : t("No hay ninguna voz japonesa en este dispositivo. En Android: Ajustes → Idioma → Texto a voz → instala el japonés. En iPhone: Ajustes → Accesibilidad → Contenido leído → Voces → Japonés. En Windows: Configuración → Hora e idioma → Voz → Agregar voces → Japonés. En Mac: Ajustes del Sistema → Accesibilidad → Contenido leído → Voz del sistema → Gestionar voces. Microsoft Edge ya trae voces japonesas.");
+}
+
+function bindVoiceSettings() {
+  if (!$("voiceSelect")) return;
+  $("voiceSelect").addEventListener("change", () => { prefs.voice = $("voiceSelect").value; saveLocal("kanji-prefs", prefs); speak("こんにちは"); });
+  $("speechRateSelect").addEventListener("change", () => { prefs.speechRate = Number($("speechRateSelect").value); saveLocal("kanji-prefs", prefs); speak("こんにちは"); });
+  $("voiceTestBtn").addEventListener("click", () => speak("はじめまして。よろしくおねがいします。"));
+  $("autoSpeakInput").checked = prefs.autoSpeak !== false;
+  $("autoSpeakInput").addEventListener("change", () => { prefs.autoSpeak = $("autoSpeakInput").checked; saveLocal("kanji-prefs", prefs); });
+  renderVoiceSettings();
 }
 
 const gloss = (entry, max = 3) => meaningOf(entry).slice(0, max).join(", ");
@@ -811,7 +875,8 @@ function showNewWord(card) {
     </div>
     ${sessionExitHTML()}`;
   bindSessionExit();
-  if ($("speakBtn")) $("speakBtn").onclick = () => speak(entry.w);
+  if ($("speakBtn")) $("speakBtn").onclick = () => speak(entry.r);
+  autoSpeak(entry.r); // una palabra nueva se oye al enseñarla
   $("learnedBtn").onclick = () => {
     card.taught = true;
     // Unas tarjetas después, para que recordarla cueste un poco (si no hay más, ahora)
@@ -980,7 +1045,10 @@ function showCard() {
         : ratings.length > 1 ? `<p class="helper rating-help">${ratings.some(([rating]) => rating === "again")
         ? t("Otra vez: no la sabías, vuelve a salir en esta sesión. Difícil: te costó. Bien: la recordaste. Fácil: la sabías al instante. Debajo de cada botón ves cuándo volverá a salir.")
         : t("Difícil: te costó. Bien: la recordaste. Fácil: la sabías al instante. Debajo de cada botón ves cuándo volverá a salir.")}</p>` : ""}`;
-    if ($("speakBtn")) $("speakBtn").onclick = () => speak(entry.w);
+    // La lectura, no la escritura (con 日 la voz elegiría sola entre ひ, にち y か)
+    const sound = card.kind === "word" ? entry.r : null;
+    if ($("speakBtn")) $("speakBtn").onclick = () => speak(sound || entry.w);
+    if (sound) autoSpeak(sound);
     if ($("sentSpeakBtn")) $("sentSpeakBtn").onclick = () => speak(pick.sentence.tokens.map((token) => token.surface).join(""));
     answer.querySelectorAll("[data-rate]").forEach((button) => {
       button.onclick = async () => {

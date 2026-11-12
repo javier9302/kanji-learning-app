@@ -1026,7 +1026,8 @@ function panelHTML() {
   const current = reader.clicks.get(tokenKey(token));
   return `${close}
     <div class="pop-word" lang="ja">${escapeHTML(token.surface)}</div>
-    <div class="pop-reading"><span lang="ja">${escapeHTML(token.reading)}</span>${romajiHTML(token.reading)}</div>
+    <div class="pop-reading"><span lang="ja">${escapeHTML(token.reading)}</span>${romajiHTML(token.reading)}${"speechSynthesis" in window
+      ? ` <button class="link-btn" type="button" data-panel-speak="${escapeHTML(token.reading)}" title="${t("Escuchar")}" aria-label="${t("Escuchar")}">🔊</button>` : ""}</div>
     ${token.lemma !== token.surface ? `<p class="pop-lemma">${t("Forma de diccionario")}:
       <span lang="ja">${escapeHTML(token.lemma)}（${escapeHTML(entry.reading)}）</span></p>` : ""}
     <p class="meaning">${escapeHTML(meanings.join(", "))}</p>
@@ -1508,6 +1509,7 @@ function bindReader() {
       return showPanel(same ? null : { kind: "sentence", s });
     }
     if (pick("[data-panel-close]")) return showPanel(null);
+    if (pick("[data-panel-speak]")) return speak(pick("[data-panel-speak]").dataset.panelSpeak);
     if (pick("[data-class]")) return classifyWord(pick("[data-class]").dataset.class);
     if (pick("[data-furigana]")) {
       prefs.furigana = $("furiganaSelect").value = pick("[data-furigana]").dataset.furigana;

@@ -54,6 +54,32 @@ function kanaToRomaji(text) {
   return out;
 }
 
+/* Las voces japonesas del dispositivo, de mejor a peor (speechSynthesis.getVoices()).
+   La que el navegador pone por defecto no siempre es la mejor, y en Chrome la
+   lista llega vacía la primera vez. Suenan mejor las «neuronales» (Microsoft
+   … Online (Natural), las Premium o Mejorada de Apple) y las de Google; después
+   las de siempre de cada sistema (Kyoko, Haruka…). A igualdad, la del idioma
+   exacto ja-JP y la que está en el dispositivo (funciona sin conexión).
+     voices  [{ name, lang, voiceURI, localService }]
+   Devuelve solo las japonesas, ordenadas. */
+function rankJapaneseVoices(voices) {
+  const score = (voice) => {
+    const name = String(voice.name || "");
+    let points = 0;
+    if (/natural|neural|online|premium|enhanced|mejorada|拡張/i.test(name)) points += 8;
+    if (/google/i.test(name)) points += 5;
+    if (/kyoko|o-ren|otoya|hattori|haruka|nanami|keita|ayumi|ichiro|sayaka/i.test(name)) points += 2;
+    if (/compact|eloquence|novelty/i.test(name)) points -= 4; // las voces de juguete de Apple
+    if (/^ja[-_]JP$/i.test(voice.lang)) points += 1;
+    if (voice.localService) points += 0.5;
+    return points;
+  };
+  return (voices || []).filter((voice) => /^ja(\b|[-_])/i.test(voice.lang || ""))
+    .map((voice, index) => ({ voice, index, points: score(voice) }))
+    .sort((a, b) => b.points - a.points || a.index - b.index)
+    .map((item) => item.voice);
+}
+
 /* Tipos de unidad que no son vocabulario: no cuentan para la cobertura, no
    hace falta conocerlos ni resolverlos y no se preguntan. La ÚNICA lista: la
    usan la app (texts.js, sentences-core.js, translate-core.js) y las herramientas. */
@@ -239,7 +265,7 @@ const segmentSentence = (tokenizer, text) =>
 /* Para tools/ y las pruebas (Node); en el navegador son globales */
 if (typeof module !== "undefined") {
   module.exports = {
-    isKana, toHiragana, kanaToRomaji, UNCOUNTED_POS, PUNCTUATION, KUROMOJI_POS, PARTICLES, piecePos, isContentPiece, pieceBase, pieceReading,
+    isKana, toHiragana, kanaToRomaji, rankJapaneseVoices, UNCOUNTED_POS, PUNCTUATION, KUROMOJI_POS, PARTICLES, piecePos, isContentPiece, pieceBase, pieceReading,
     unitOf, analyseUnits, fixReadings, potentialBase, splitSentences, groupPieces, segmentSentence, kanaFormWord, onlyHomophone
   };
 }

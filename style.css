@@ -3876,3 +3876,14 @@ button.kana-cell { cursor: pointer; }
 .kana-table h4 { margin: 14px 0 6px; }
 .kana-chart { display: grid; gap: 4px; }
 .kana-chart-row { display: flex; flex-wrap: wrap; gap: 4px; }
+
+/* Ajustes → Repaso: voz y velocidad en una fila (en el móvil se apilan) */
+.voice-settings {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px;
+  margin-top: 10px;
+}
+.voice-settings .field { flex: 1 1 160px; }
+.voice-settings select { width: 100%; }

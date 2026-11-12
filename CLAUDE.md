@@ -50,7 +50,8 @@ después de `learning-core.js`)
   `ensureKanaEntries`; `pickDistractors`), la 3 (kana) y parte de la 4 (`enable_fuzz`, leer cuenta
   como Bien, `retentionFromLog`). Después, el registro y las kanas se sincronizan (tablas
   `review_log` y `kana_cards`, `syncLearningLog` en `reading-sync.js`). Orden acordado para lo que
-  falta: audio, gramática N4; pagos y premium en el servidor, más adelante; ajustar los pesos de
+  falta: audio (hecho el de la voz del dispositivo, `speak` / `rankJapaneseVoices`; falta el audio
+  grabado de Tatoeba, que pide comprobar la licencia de cada grabación), gramática N4; pagos y premium en el servidor, más adelante; ajustar los pesos de
   FSRS cuando el registro tenga semanas de datos.
 - **`dictionary.js`**: búsqueda por escritura, kana, rōmaji o significado.
 - **`capture.js` / `capture-core.js`**: palabras desde la web (`?add=…`, marcador «+ Kanji»,

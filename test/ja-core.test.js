@@ -117,3 +117,21 @@ test("kanaToRomaji: Hepburn para quien aún no lee kana", () => {
   };
   for (const [kana, romaji] of Object.entries(cases)) assert.equal(kanaToRomaji(kana), romaji, kana);
 });
+
+test("rankJapaneseVoices: solo las japonesas, las neuronales y de Google primero, sin las de juguete", () => {
+  const { rankJapaneseVoices } = require("../ja-core.js");
+  const voices = [
+    { name: "Samantha", lang: "en-US", localService: true },
+    { name: "Kyoko", lang: "ja-JP", localService: true },
+    { name: "Eddy (日本語（日本）)", lang: "ja-JP", localService: true },
+    { name: "Google 日本語", lang: "ja-JP", localService: false },
+    { name: "Microsoft Nanami Online (Natural) - Japanese (Japan)", lang: "ja-JP", localService: false },
+    { name: "Kyoko (Compact)", lang: "ja_JP", localService: true },
+    { name: "Japonés raro", lang: "jam", localService: true }
+  ];
+  assert.deepEqual(rankJapaneseVoices(voices).map((voice) => voice.name), [
+    "Microsoft Nanami Online (Natural) - Japanese (Japan)", "Google 日本語", "Kyoko", "Eddy (日本語（日本）)", "Kyoko (Compact)"]);
+  assert.deepEqual(rankJapaneseVoices([]), []);
+  assert.deepEqual(rankJapaneseVoices(undefined), []);
+  assert.deepEqual(rankJapaneseVoices([{ name: "x", lang: "ja" }]).length, 1);
+});

@@ -127,6 +127,7 @@ function showKanaQuestion() {
       ${"speechSynthesis" in window ? `<button id="kanaSpeakBtn" class="button button-quiet speak-btn" type="button">🔊 ${t("Escuchar")}</button>` : ""}
       <div class="card-actions"><button id="kanaNextBtn" class="button button-primary" type="button">${t("Siguiente")}</button></div>`;
     if ($("kanaSpeakBtn")) $("kanaSpeakBtn").onclick = () => speakKana(card.id);
+    if (prefs.autoSpeak !== false) speakKana(card.id);
     await gradeKana(card, correct);
     $("kanaNextBtn").onclick = () => {
       kanaRun.queue.shift();

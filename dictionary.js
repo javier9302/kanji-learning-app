@@ -247,7 +247,7 @@ function dictCardHTML(entry) {
             <span class="helper">${entry.rank ? t("frecuencia n.º {rank}", { rank: entry.rank }) : t("sin puesto de frecuencia")}</span>
             ${entry.kana ? `<span class="helper">${t("suele escribirse en kana")}</span>` : ""}
             ${"speechSynthesis" in window
-              ? `<button class="link-btn" type="button" data-dict-speak="${escapeHTML(entry.w)}">🔊 ${t("Escuchar")}</button>` : ""}
+              ? `<button class="link-btn" type="button" data-dict-speak="${escapeHTML(entry.r)}">🔊 ${t("Escuchar")}</button>` : ""}
           </div>
         </div>
       </div>
