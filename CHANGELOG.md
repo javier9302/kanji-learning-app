@@ -24,6 +24,16 @@ Primera etapa del plan de la revisión del 2026-11-11 («datos de fiar», `1c12c
   meta) y, con la respuesta a la vista, desaparecen «Comprobar» y «No lo sé»: la valoración queda
   más arriba. Antes de la prueba de nivel, la portada va en pequeño para que «Empieza aquí» se vea
   sin desplazarse.
+- **También el significado** (etapa 2): al acertar la lectura de una palabra en un repaso de días,
+  si aún no has demostrado qué significa (o hace un mes que no), se pregunta entre cuatro. Si lo
+  fallas, la palabra cuenta como fallada, y sin el significado demostrado no pasa a «dominada»
+  (antes bastaba con escribir がっこう sin saber que es «escuela»). Se quita en Ajustes → Repaso.
+- **Las palabras en kana ya se repasan** (これ, する, テレビ…): de cada 3 palabras nuevas, una va
+  solo en kana y se pregunta su significado entre cuatro. Primero las que agregaste o buscaste y
+  después las más frecuentes. Las acertadas en «Comprobar palabras» también entran en el repaso.
+- **«Ya la sé»** al enseñarte una palabra nueva: no se pregunta ahora y vuelve en 30 días para comprobarlo.
+- **Respuestas falsas mejores** en «Comprobar palabras» y en las preguntas de significado: se
+  parecen a la buena (un kanji en común, mismo nivel) en vez de salir al azar.
 - Interno: se guarda un registro de cada repaso en el dispositivo (para ajustar más adelante el
   repaso a cada estudiante) y se corrige un número de `docs/COMO-FUNCIONA.md`.
 

@@ -83,8 +83,8 @@ Tamaño del banco:
 | N2 | 1.347 | 428 |
 | N1 | 2.461 | 1.053 |
 
-Las palabras marcadas «casi siempre en kana» (有る → ある) no se repasan como tarjeta: se aprenden
-leyendo, y a la IA se le piden en kana.
+Las palabras marcadas «casi siempre en kana» (有る → ある) no se repasan por su lectura (a la IA se le
+piden en kana): se repasan **por su significado**, como las demás palabras en kana (apartado 4).
 
 ### Datos del usuario
 
@@ -179,7 +179,7 @@ es reciente (**30 días** desde que se vio por primera vez) o ha salido en **3 t
 consultarla nunca. Si no, deja de contar hasta que se confirme: en «Comprobar palabras» (al terminar
 un texto, 8 palabras), en Repasar (sale como palabra nueva «vista en una lectura») o en Traducir. Su
 estado no cambia. Una palabra acertada en «Comprobar palabras» pasa a dominada **y entra en el
-repaso** con una tarjeta a **7 días** (`checkedIntervalDays.evaluation`). Cualquier palabra dominada
+repaso** con una tarjeta a **7 días** (`checkedIntervalDays.evaluation`; también las de kana con significado). Cualquier palabra dominada
 con kanji que no tenga tarjeta la recibe al abrir la app, repartidas entre 2 y 21 días
 (`backfillCheckedCards`, `study.js`).
 
@@ -241,6 +241,22 @@ palabras que ya conoce o está aprendiendo. En «Palabras y kanjis» se alternan
 ### 4. Cómo se pregunta en Repasar
 
 - **Tarjetas**: palabra o kanji; el usuario ve la respuesta y se puntúa (Otra vez / Difícil / Bien / Fácil).
+- **El significado** (`needsMeaningCheck`, `learning-core.js`, sección 7; `STUDY_CONFIG.meaningCheck`): al
+  acertar la lectura de una palabra en un repaso de días (no en los pasos cortos ni en la práctica
+  extra), si aún no ha demostrado su significado o hace **30 días** que no lo demuestra (aquí o en
+  Traducir), se pregunta «¿Y qué significa?» entre cuatro. Fallarlo cuenta como Otra vez. En una
+  frase no se pregunta si tiene la traducción abierta. En «Tarjetas» el significado está a la vista
+  al valorarse, así que la propia valoración cuenta. **Sin el significado demostrado una palabra no
+  pasa a dominada.** Se desactiva en Ajustes → Repaso (`prefs.meaningCheck`).
+- **Palabras en kana** (`ensureKanaEntries`, `newKanaCandidates`, `study.js`; `STUDY_CONFIG.kanaCards`):
+  no tienen lectura que escribir, así que se pregunta su significado entre cuatro (en «Tarjetas»,
+  como cualquier tarjeta). Son las del banco marcadas «casi siempre en kana» de su nivel y las **40**
+  más frecuentes de `BANK.kanaByFrequency` que aún no repasa, con el significado del diccionario
+  general (las que no lo tienen no salen). De cada **3** palabras nuevas, una es en kana: primero las
+  agregadas a mano, las buscadas en el diccionario y las marcadas al leer; después por frecuencia.
+- **Respuestas falsas** (`pickDistractors`): las tres que más se parecen a la buena (un kanji en
+  común, mismo nivel, mismo largo), pero como mucho una que comparta kanji y ninguna cuyo
+  significado comparta una palabra con el bueno. Igual en «Comprobar palabras» al terminar un texto.
 - Debajo de cada botón de valoración va su tecla (1 a 4) y cuándo volvería a salir con esa
   respuesta («3 · 57 d»); en la práctica extra, «sin cambios» si esa respuesta no la aleja.
 - **Escribir la lectura + Palabra sola**: la palabra; se escribe su lectura en hiragana. Solo palabras.
@@ -263,7 +279,8 @@ palabras que ya conoce o está aprendiendo. En «Palabras y kanjis» se alternan
 - **Palabra nueva**: la primera vez que sale en una sesión se **enseña antes de preguntarla**
   (escritura, lectura con rōmaji, significado, sus kanjis y «También sale en»). Con «Ya la he
   visto» pasa dos tarjetas más atrás (o enseguida, si es la única) y entonces se pregunta. No cuenta
-  como respuesta.
+  como respuesta. Con **«Ya la sé»** no se pregunta: queda dominada y entra en el repaso a los
+  **30 días** (`checkedIntervalDays.known`) para comprobarlo.
 - **Rōmaji**: junto a cada lectura en kana (respuestas, prueba de nivel, Demostrar, lector y
   diccionario), con `kanaToRomaji` (`ja-core.js`, Hepburn: がっこう gakkou, まっちゃ matcha). Se quita en
   Ajustes → Repaso. Al escribir la lectura se puede teclear en rōmaji (WanaKana la convierte), y la
@@ -284,7 +301,8 @@ palabras que ya conoce o está aprendiendo. En «Palabras y kanjis» se alternan
 - **Deshacer**: tras valorar una tarjeta, durante 8 segundos sale «Deshacer» encima de la siguiente.
   Vuelve la palabra (o el kanji) a como estaba, la sesión al punto anterior y la respuesta del día
   se descuenta. Lo anotado en las casillas de cada kanji no se deshace.
-- Una palabra se da por **dominada** con 3 aciertos seguidos en días distintos o un intervalo de 21 días o más.
+- Una palabra se da por **dominada** con 3 aciertos seguidos en días distintos o un intervalo de 21 días o más,
+  y con su significado demostrado (arriba).
 
 ### 5. Frases de ejemplo (`sentences.js` + `sentences-core.js`)
 
@@ -609,8 +627,10 @@ Casi todo lo ajustable está en `study-config.js`: palabras nuevas por sesión, 
 días de dominio, reglas de Escribir y de Traducir. Lo que no:
 
 - 90 % de cobertura de los textos: `COVERAGE_TARGET` en `reading.js`.
-- Tarjeta de lo acertado una sola vez (prueba de nivel 14 días, «Comprobar palabras» 7, las que ya
-  había entre 2 y 21) y cuándo cuenta una palabra «por confirmar» (30 días o 3 textos):
+- Cada cuánto se vuelve a preguntar el significado (30 días) y las palabras en kana (una de cada 3
+  nuevas, 40 preparadas): `STUDY_CONFIG.meaningCheck` y `STUDY_CONFIG.kanaCards`.
+- Tarjeta de lo acertado una sola vez (prueba de nivel 14 días, «Comprobar palabras» 7, «Ya la sé» 30,
+  las que ya había entre 2 y 21) y cuándo cuenta una palabra «por confirmar» (30 días o 3 textos):
   `STUDY_CONFIG.checkedIntervalDays` y `STUDY_CONFIG.preKnown`.
 - Escribir: kanjis nuevos al día (10), cada cuántos nuevos uno sin ver (0 = nunca) y los fallos que
   perdona la valoración (1) o con los que cuenta como Otra vez (3 de más): `STUDY_CONFIG.writing`.

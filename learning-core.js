@@ -11,6 +11,7 @@
    5. La sesión de Repasar: nextReadyCard (lo que está en sus pasos cortos espera su hora),
       pickDue (con atraso, lo más atrasado primero) y reviewEntry (el registro de cada repaso).
    6. Lo dado por sabido sin comprobar: preKnownCounts, knownRecord y backfillDays.
+   7. El significado: needsMeaningCheck, pickDistractors y interleaveEvery (palabras en kana).
    Los números (repaso cada cuántos kanjis, tamaño de la prueba…) vienen de
    STUDY_CONFIG.
    ========================================= */
@@ -352,11 +353,82 @@ function backfillDays(index, { min, max }) {
   return min + (index % (max - min + 1));
 }
 
+/* =========================================
+   7. EL SIGNIFICADO
+   -----------------------------------------
+   Escribir la lectura no prueba que se sepa qué significa: se podía «dominar»
+   学校 → がっこう sin saber que es una escuela. Por eso, en un repaso de días
+   acertado, de vez en cuando se pregunta también el significado entre cuatro.
+   Y las palabras que van solo en kana (これ, する, テレビ), que no tienen lectura
+   que escribir, se repasan por su significado.
+   ========================================= */
+
+/* ¿Toca preguntar el significado de esta palabra? Si aún no lo ha demostrado, o
+   si hace config.everyDays días que no lo demuestra (en Repasar o en Traducir). */
+function needsMeaningCheck(rec, now, config) {
+  if (!rec) return false;
+  if (!rec.knowsMeaning) return true;
+  return now - (rec.lastMeaningAt || 0) >= config.everyDays * LC_DAY_MS;
+}
+
+/* Las respuestas falsas de una pregunta entre varias. Al azar del todo se
+   descartaban solas (para 学生, «gato» y «rápido»); salen primero las que se
+   parecen: comparten un kanji (学校), son del mismo nivel o del mismo largo.
+   Pero sin pasarse: como mucho UNA que comparta kanji, y ninguna cuya etiqueta
+   comparta una palabra con la buena («estudiante» y «estudiante universitario»
+   para 学生 serían dos respuestas casi iguales, y fallar no diría nada).
+     target   { id, w, kanji, level }
+     pool     [{ id, w, kanji, level }]
+     label(entry)  lo que se enseña como opción ("" = no sirve)
+     random   para que las pruebas sean repetibles
+   Devuelve hasta count entradas, sin repetir etiqueta ni la del target. */
+function pickDistractors(target, pool, { count = 3, label, random = Math.random }) {
+  const mine = new Set(target.kanji || []), used = new Set([label(target)]);
+  const scored = [];
+  for (const entry of pool) {
+    if (entry.id === target.id || !label(entry)) continue;
+    const shared = (entry.kanji || []).filter((c) => mine.has(c)).length;
+    scored.push({ entry, score: shared * 2 + (entry.level && entry.level === target.level ? 1 : 0) +
+      ([...(entry.w || "")].length === [...(target.w || "")].length ? 0.5 : 0) + random() });
+  }
+  scored.sort((a, b) => b.score - a.score);
+  const terms = (text) => String(text).toLowerCase().split(/[\s,;()\/]+/).filter((term) => term.length >= 4);
+  const taken = new Set(terms(label(target)));
+  const picked = [];
+  let sharing = 0;
+  for (const { entry } of scored) {
+    if (picked.length === count) break;
+    const text = label(entry), shares = (entry.kanji || []).some((c) => mine.has(c));
+    if (used.has(text) || terms(text).some((term) => taken.has(term)) || shares && sharing >= 1) continue;
+    used.add(text);
+    if (shares) sharing++;
+    picked.push(entry);
+  }
+  return picked;
+}
+
+/* Mezcla dos listas en orden: cada `every` elementos, uno de la segunda
+   (con 3: a, a, b, a, a, b…). Cuando una se acaba, sigue la otra. Con every
+   menor que 1, solo la primera. Para las palabras nuevas en kana. */
+function interleaveEvery(main, other, every) {
+  if (!(every >= 1)) return [...main];
+  const out = [];
+  let i = 0, j = 0;
+  while (i < main.length || j < other.length) {
+    const turn = out.length % every === every - 1;
+    if ((turn || i >= main.length) && j < other.length) out.push(other[j++]);
+    else if (i < main.length) out.push(main[i++]);
+    else break;
+  }
+  return out;
+}
+
 /* Para las pruebas (Node); en el navegador son globales */
 if (typeof module !== "undefined") {
   module.exports = {
     kanjiGate, writingLevel, nextWritingKanji, writingRating, writingTestResult, writingTestKanji,
     readingCredit, readingInterval, planToday, nextReadyCard, recordDue,
-    dueTime, pickDue, reviewEntry, preKnownCounts, knownRecord, backfillDays
+    dueTime, pickDue, reviewEntry, preKnownCounts, knownRecord, backfillDays,
+    needsMeaningCheck, pickDistractors, interleaveEvery
   };
 }

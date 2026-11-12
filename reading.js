@@ -1376,17 +1376,12 @@ function renderEvaluation() {
   const kind = steps[step];
   const label = kind === "reading" ? (e) => e.reading : entryGloss;
 
-  // Respuestas falsas: otras palabras del diccionario con respuesta distinta
-  const seenLabels = new Set([label(entry)]);
-  const wrong = [];
-  for (const other of shuffle([...words.values()])) {
-    if (wrong.length === 3) break;
-    if (kind === "reading" && !/\p{Script=Han}/u.test(other.lemma)) continue;
-    const text = label(other);
-    if (!text || seenLabels.has(text)) continue;
-    seenLabels.add(text);
-    wrong.push(other);
-  }
+  // Respuestas falsas: otras palabras del diccionario con respuesta distinta, primero las
+  // que se parecen (comparten un kanji, mismo nivel o largo: pickDistractors, learning-core.js).
+  // Al azar del todo se descartaban solas y acertar no decía nada.
+  const shape = (own) => ({ id: own.id, w: own.lemma, kanji: kanjiOf(own.lemma), level: BANK.words.get(own.id)?.level || null, own });
+  const pool = [...words.values()].filter((other) => kind !== "reading" || /\p{Script=Han}/u.test(other.lemma)).map(shape);
+  const wrong = pickDistractors(shape(entry), pool, { count: 3, label: (item) => label(item.own) }).map((item) => item.own);
   const options = shuffle([entry, ...wrong]);
 
   $("readArea").innerHTML = `
@@ -1450,7 +1445,7 @@ async function finishEvaluation() {
       mastered++;
       // Acaba de leerla: acertarla ahora no dice si la sabrá la semana que viene. Con
       // tarjeta vuelve a salir; sin ella quedaba «dominada» y no se repasaba nunca.
-      giveCheckedCard(word, STUDY_CONFIG.checkedIntervalDays.evaluation);
+      giveCheckedCard(word, STUDY_CONFIG.checkedIntervalDays.evaluation, new Date(), { kana: true });
     } else word.evalWrong++;
     word.updatedAt = Date.now();
   }

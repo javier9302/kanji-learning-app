@@ -146,8 +146,10 @@ function masteredCard(days, now = new Date()) {
 /* Una palabra acertada una sola vez (prueba de nivel, «Comprobar palabras») entra
    en el repaso con una tarjeta a `days` días. Solo las que se repasan (con kanji)
    y aún no tienen tarjeta. Devuelve si se la dio. */
-function giveCheckedCard(rec, days, now = new Date()) {
-  if (rec.studied || !hasKanjiChar(rec.lemma)) return false;
+function giveCheckedCard(rec, days, now = new Date(), { kana = false } = {}) {
+  // En kana, solo si se pidió (kana) y hay significado que preguntar
+  const reviewable = hasKanjiChar(rec.lemma) || kana && hasMeaning(words.get(rec.id));
+  if (rec.studied || !reviewable) return false;
   applyCard(withSRS(rec), masteredCard(days, now));
   return true;
 }
@@ -272,6 +274,112 @@ const kanjiGateContext = (known) => ({
   level: userLevel(), known, kanjiLevel: (c) => BANK.kanjiLevel(c),
   knownNeeded: STUDY_CONFIG.newWordKanji.knownNeeded
 });
+
+/* ---------- Palabras en kana ----------
+   これ, する o テレビ no tienen lectura que escribir, pero sí significado que
+   saber: se repasan preguntándolo entre cuatro (learning-core.js, sección 7).
+   Salen de dos sitios: las del banco marcadas «casi siempre en kana» (有る →
+   ある), con su significado, y las más frecuentes de BANK.kanaByFrequency, cuyo
+   significado se busca en el diccionario general. Cada una se guarda como
+   entrada del diccionario propio (words), que es de donde las lee wordEntry. */
+
+const hasMeaning = (entry) => !!(entry && (entry.meanings?.length || entry.meaningsEs?.length));
+let kanaIds = new Set(); // las que se pueden proponer como nuevas (ensureKanaEntries)
+
+async function ensureKanaEntries() {
+  const { every, pool } = STUDY_CONFIG.kanaCards;
+  if (!(every >= 1)) return;
+  const ids = new Set(), fresh = [];
+  const add = (lemma, en, es) => {
+    const id = wordKey(lemma, lemma);
+    ids.add(id);
+    if (hasMeaning(words.get(id))) return;
+    const entry = { ...(words.get(id) || {}), id, lemma: normalizeText(lemma), reading: normalizeReading(lemma),
+      meanings: en || [], meaningsEs: es || [], pos: words.get(id)?.pos || "", source: "jmdict", updatedAt: Date.now() };
+    words.set(id, entry);
+    fresh.push(entry);
+  };
+  for (const word of BANK.words.values()) if (word.kana && withinLevel(word.level)) add(word.r, word.en, word.es);
+
+  // Las `pool` más frecuentes que aún no repasa. Las que no tienen significado en el
+  // diccionario se apuntan (por dispositivo) para no volver a descargarlo por ellas.
+  const skip = new Set(loadLocal("kanji-kana-skip", { list: [] }).list); // loadLocal guarda objetos
+  const wanted = [];
+  for (const lemma of BANK.kanaByFrequency) {
+    if (wanted.length >= pool) break;
+    const rec = userWords.get(wordKey(lemma, lemma));
+    if (!skip.has(lemma) && !rec?.studied && rec?.status !== "mastered") wanted.push(lemma);
+  }
+  const missing = wanted.filter((lemma) => !hasMeaning(words.get(wordKey(lemma, lemma))));
+  if (missing.length) {
+    const local = await loadLocalDictionary();
+    for (const lemma of missing) {
+      const found = kanaMeaning(lemma, local);
+      if (found && (found.meanings?.length || found.meanings_es?.length)) add(lemma, found.meanings, found.meanings_es);
+      else skip.add(lemma);
+    }
+    saveLocal("kanji-kana-skip", { list: [...skip] });
+  }
+  for (const lemma of wanted) if (hasMeaning(words.get(wordKey(lemma, lemma)))) ids.add(wordKey(lemma, lemma));
+  kanaIds = ids;
+  if (fresh.length) await putRecords("words", fresh);
+}
+
+/* Palabras nuevas en kana, en su orden: primero las que pidió el estudiante (a
+   mano, buscadas en el diccionario, marcadas al leer) y después por frecuencia */
+function newKanaCandidates() {
+  if (!(STUDY_CONFIG.kanaCards.every >= 1)) return [];
+  const order = new Map(BANK.kanaByFrequency.map((lemma, i) => [lemma, i]));
+  const ids = new Set(kanaIds);
+  for (const rec of userWords.values()) {
+    if (!hasKanjiChar(rec.lemma || "") && (["manual", "diccionario"].includes(rec.origin) || rec.status === "learning")) ids.add(rec.id);
+  }
+  const list = [];
+  for (const id of ids) {
+    const rec = userWords.get(id) || null;
+    if (rec?.studied || rec?.status === "mastered") continue;
+    const entry = wordEntry(id);
+    if (!entry || hasKanjiChar(entry.w) || !meaningOf(entry).length) continue;
+    const intent = rec?.origin === "manual" ? 3 : rec?.origin === "diccionario" ? 2 : rec?.status === "learning" ? 1 : 0;
+    list.push({ kind: "word", id, entry, rec, group: "new", info: null, intent, rank: order.get(entry.w) ?? Infinity });
+  }
+  return list.sort((a, b) => b.intent - a.intent || a.rank - b.rank);
+}
+
+/* Las opciones de «¿Qué significa?»: el significado de la palabra y tres falsos
+   parecidos (pickDistractors). Devuelve [{ entry, text }] barajadas, o [] si no
+   hay bastantes para preguntar. */
+function meaningOptions(entry) {
+  const kana = !hasKanjiChar(entry.w);
+  const pool = kana
+    ? [...words.values()].filter((own) => !hasKanjiChar(own.lemma) && hasMeaning(own)).map((own) => wordEntry(own.id)).filter(Boolean)
+    : [...BANK.words.values()].filter((word) => !word.kana);
+  const wrong = pickDistractors(entry, pool, { count: 3, label: (word) => gloss(word, 2) });
+  if (wrong.length < 3) return [];
+  return shuffle([entry, ...wrong]).map((word) => ({ entry: word, text: gloss(word, 2) }));
+}
+
+const meaningChoicesHTML = (options) => `
+  <div class="choices meaning-choices">
+    ${options.map((option, i) => `<button class="button button-outline choice" type="button" data-meaning="${i}">${escapeHTML(option.text)}</button>`).join("")}
+    <button class="button button-quiet choice" type="button" data-meaning="-1">${t("No lo sé")}</button>
+  </div>`;
+
+/* Al elegir: marca la buena (y la fallada) y llama a done(acertó) */
+function bindMeaningChoices(root, options, entry, done) {
+  root.querySelector("[data-meaning]")?.focus();
+  root.querySelectorAll("[data-meaning]").forEach((button) => {
+    button.onclick = () => {
+      const correct = options[Number(button.dataset.meaning)]?.entry === entry;
+      root.querySelectorAll("[data-meaning]").forEach((other) => {
+        other.disabled = true;
+        if (options[Number(other.dataset.meaning)]?.entry === entry) other.classList.add("choice-right");
+      });
+      if (!correct) button.classList.add("choice-wrong");
+      done(correct);
+    };
+  });
+}
 
 /* Puntuación de una palabra nueva (pesos en study-config.js) y su porqué.
    blocked: kanjis por encima del nivel del usuario que impiden proponerla (ver kanjiGate).
@@ -419,11 +527,13 @@ function studyCards() {
   if (type !== "kanji") {
     for (const rec of userWords.values()) {
       const entry = rec.studied && wordEntry(rec.id);
-      if (!entry || !hasKanjiChar(entry.w)) continue;
+      // En kana se repasa el significado: sin significado no hay nada que preguntar
+      if (!entry || !hasKanjiChar(entry.w) && !meaningOf(entry).length) continue;
       (isDue(rec) ? due : extra).push(card("word", entry, rec, isDue(rec) ? "due" : "extra"));
     }
     const candidates = newWordCandidates();
-    fresh.push(...candidates.list);
+    // De cada tantas nuevas, una en kana (STUDY_CONFIG.kanaCards.every)
+    fresh.push(...interleaveEvery(candidates.list, newKanaCandidates(), STUDY_CONFIG.kanaCards.every));
     excluded = candidates.excluded;
   }
 
@@ -458,7 +568,9 @@ function studyCards() {
 /* Todo el banco: una palabra de N3 hecha con kanjis de N5 también vale para quien está en N5 */
 const ensureStudyBank = () => Promise.all([BANK.loadUpTo("N1"),
   // Para una casilla por kanji; sin ellas se pregunta con una sola casilla
-  BANK.loadReadings().catch(() => {}), BANK.loadKanjiInfo().then(migratePracticedReadings).catch(() => {})]);
+  BANK.loadReadings().catch(() => {}), BANK.loadKanjiInfo().then(migratePracticedReadings).catch(() => {})])
+  // Las palabras en kana, con su significado (sin él no salen; el resto sigue igual)
+  .then(() => ensureKanaEntries().catch((error) => console.warn("No se pudieron preparar las palabras en kana:", error)));
 
 /* Vista de depuración (Ajustes): por qué sale cada palabra nueva, con cada
    componente del orden (ranking-core.js) para poder ajustar los pesos */
@@ -475,7 +587,7 @@ function debugHTML(fresh, excluded) {
       <td>${escapeHTML([info.lookup ? t("consulta reciente × {value}", { value: info.lookup.toFixed(2) }) : "", whyText(info),
         info.blocked.length ? t("kanji por encima de tu nivel: {kanji}", { kanji: info.blocked.join("、") }) : ""].filter(Boolean).join(" · "))}</td>
     </tr>`;
-  const words = fresh.filter((card) => card.kind === "word");
+  const words = fresh.filter((card) => card.kind === "word" && card.info); // las de kana van por frecuencia, sin puntuación
   const head = `<thead><tr><th>#</th><th>${t("Palabra")}</th><th>${t("Puntos")}</th><th>${t("Frec.")}</th><th>${t("Puente")}</th>
     <th>${t("Abre")}</th><th>${t("Lecturas")}</th><th>${t("Tema")}</th><th>MMR</th><th>${t("Por qué")}</th></tr></thead>`;
   return `
@@ -561,7 +673,7 @@ async function startSession() {
     ]).catch(() => {});
     if (session !== current) return;
     // Lo que no tiene ninguna frase se pide ya a la IA, para que llegue durante la sesión
-    requestSentences(queue.filter((card) => !findSentence(card).pick));
+    requestSentences(queue.filter((card) => !(card.kind === "word" && !hasKanjiChar(card.entry.w)) && !findSentence(card).pick)); // las de kana no van en frase
   }
   document.body.classList.add("studying");
   showCard();
@@ -687,8 +799,10 @@ function showNewWord(card) {
       </div>
       <div class="card-symbol ${[...entry.w].length > 1 ? "word" : ""}" lang="ja">${escapeHTML(entry.w)}</div>
       ${answerHTML(card)}
-      <p class="helper">${t("Fíjate en cómo se lee: en unas tarjetas te la preguntaremos.")}</p>
+      <p class="helper">${hasKanjiChar(entry.w) ? t("Fíjate en cómo se lee: en unas tarjetas te la preguntaremos.")
+        : t("Fíjate en lo que significa: en unas tarjetas te lo preguntaremos.")}</p>
       <button id="learnedBtn" class="button button-primary" type="button">${t("Ya la he visto")}</button>
+      <button id="knownBtn" class="button button-quiet" type="button">${t("Ya la sé")}</button>
     </div>
     ${sessionExitHTML()}`;
   bindSessionExit();
@@ -698,6 +812,19 @@ function showNewWord(card) {
     // Unas tarjetas después, para que recordarla cueste un poco (si no hay más, ahora)
     session.queue.splice(session.queue.indexOf(card), 1);
     session.queue.splice(Math.min(2, session.queue.length), 0, card);
+    showNextReady();
+  };
+  // «Ya la sé»: no se pregunta ahora, pero entra en el repaso para comprobarlo más adelante
+  $("knownBtn").onclick = async () => {
+    $("knownBtn").disabled = $("learnedBtn").disabled = true;
+    const rec = withSRS(userWords.get(card.id) || blankUserWord(entry.w, entry.r));
+    rec.origin ??= originOf(rec);
+    applyCard(rec, masteredCard(STUDY_CONFIG.checkedIntervalDays.known));
+    Object.assign(rec, { status: "mastered", canReadKanji: true, knowsMeaning: true, lastSeen: Date.now() });
+    await saveUserWord(rec);
+    session.queue.splice(session.queue.indexOf(card), 1);
+    session.total = Math.max(1, session.total - 1);
+    updateCounts();
     showNextReady();
   };
   $("learnedBtn").focus();
@@ -762,9 +889,13 @@ function showCard() {
   const { entry } = card;
   const area = $("studyArea");
   // Con "En una frase": dentro de una frase si hay alguna que valga
-  const pick = session.mode === "type" && session.sentences ? sentenceForCard(card) : null;
+  // Una palabra en kana no tiene lectura que escribir: se pregunta su significado entre cuatro
+  const kana = card.kind === "word" && !hasKanjiChar(entry.w);
+  const pick = !kana && session.mode === "type" && session.sentences ? sentenceForCard(card) : null;
+  const options = kana && session.mode === "type" ? meaningOptions(entry) : [];
   // La lectura se escribe en palabras y, dentro de una frase, en kanjis; si no, el kanji es tarjeta que se voltea
-  const form = session.mode === "type" && (card.kind === "word" || pick) ? "type" : "flash";
+  const form = card.form = options.length ? "meaning"
+    : !kana && session.mode === "type" && (card.kind === "word" || pick) ? "type" : "flash";
   // Un kanji que ahora se pregunta por cómo suena: no dice nada de si sabe su significado
   card.byReading = card.kind === "kanji" && !!pick;
   // Una palabra sola se escribe con una casilla por kanji (si se puede repartir)
@@ -793,11 +924,14 @@ function showCard() {
         <button id="checkBtn" class="button button-primary" type="submit">${t("Comprobar")}</button>
         <button id="unknownBtn" class="button button-secondary" type="button">${t("No lo sé")}</button>
         ${prefs.romaji !== false ? `<p class="helper romaji-hint">${t("¿Aún no escribes en japonés? Escribe en rōmaji y se convierte solo: gakkou → がっこう.")}</p>` : ""}
-      </form>` : `
+      </form>` : form === "meaning" ? `
+      <p class="helper">${t("¿Qué significa?")}</p>
+      <div id="readingForm">${meaningChoicesHTML(options)}</div>` : `
       <div id="readingForm">
         <button id="revealBtn" class="button button-primary" type="button">${t("Mostrar respuesta")}</button>
       </div>`}
       <p id="feedback" class="message" role="status"></p>
+      <div id="meaningAsk"></div>
       <div id="answer"></div>
       ${prefs.debugStudy && card.info ? `<p class="helper debug-line">${t("Puntos")}: ${card.info.score.toFixed(2)}</p>` : ""}
     </div>
@@ -870,6 +1004,11 @@ function showCard() {
     reveal(NEXT, "next");
   }
 
+  if (form === "meaning") {
+    bindMeaningChoices(area, options, entry, (correct) => finish(correct, correct ? t("¡Correcto!") : t("No es correcto.")));
+    return;
+  }
+
   if (form === "flash") {
     $("revealBtn").onclick = () => {
       $("revealBtn").remove();
@@ -907,6 +1046,27 @@ function showCard() {
     inputs[i + 1].focus();
   }));
 
+  /* La lectura está bien. En un repaso de días, a veces se pregunta también el
+     significado (needsMeaningCheck): si falla, la palabra cuenta como fallada. Con la
+     traducción de la frase a la vista no se pregunta: estaría dada. */
+  const passReading = (message) => {
+    const day = card.group === "due" && !card.attempts && card.rec?.fsrs?.scheduled_days !== 0;
+    const shown = pick && $("sentTranslation") && !$("sentTranslation").classList.contains("hidden");
+    const ask = card.kind === "word" && day && !shown && prefs.meaningCheck !== false &&
+      needsMeaningCheck(card.rec, Date.now(), STUDY_CONFIG.meaningCheck) ? meaningOptions(entry) : [];
+    if (!ask.length) return finish(true, message);
+    area.querySelector(".card").classList.add("answered");
+    area.querySelector("[data-sent-translate]")?.remove(); // ya no vale mirarla
+    feedback.textContent = t("Lectura correcta. ¿Y qué significa?");
+    feedback.className = "message";
+    $("meaningAsk").innerHTML = meaningChoicesHTML(ask);
+    bindMeaningChoices($("meaningAsk"), ask, entry, (correct) => {
+      card.meaning = correct;
+      $("meaningAsk").innerHTML = "";
+      finish(correct, correct ? t("¡Correcto!") : t("La lectura está bien, pero ese no es su significado."));
+    });
+  };
+
   const lock = () => {
     answered = true;
     for (const box of inputs) box.disabled = true;
@@ -939,8 +1099,8 @@ function showCard() {
       const graded = gradeBoxes(boxes, inputs.map((box) => normalizeReading(box.value)), normalizeReading);
       lock();
       markBoxes(boxes, inputs, graded.ok, card);
-      return finish(graded.correct, graded.correct ? t("¡Correcto!")
-        : t("No es correcto: debajo de cada casilla fallada tienes su lectura."));
+      if (graded.correct) return passReading(t("¡Correcto!"));
+      return finish(false, t("No es correcto: debajo de cada casilla fallada tienes su lectura."));
     }
     const typed = normalizeReading(input.value);
     if (!typed) {
@@ -973,8 +1133,8 @@ function showCard() {
     const other = !correct && (BANK.byWriting.get(entry.w) || [])
       .find((word) => word !== entry && normalizeReading(word.r) === typed);
     lock();
-    finish(correct, correct ? t("¡Correcto!")
-      : other ? t("Esa es la lectura de otro significado ({meaning}).", { meaning: gloss(other, 2) })
+    if (correct) return passReading(t("¡Correcto!"));
+    finish(false, other ? t("Esa es la lectura de otro significado ({meaning}).", { meaning: gloss(other, 2) })
       : t("No es correcto."));
   });
 }
@@ -1292,9 +1452,20 @@ async function gradeCard(card, rating) {
   if (card.kind === "word") rec.readStreak = 0; // una tarjeta de verdad: vuelven a valer las lecturas
 
   // Dominada: tres aciertos seguidos en días distintos o un intervalo largo. Un fallo la devuelve a "learning".
-  if (card.kind === "word") rec.canReadKanji = correct; else if (!card.byReading) rec.knowsMeaning = correct;
+  if (card.kind === "word") {
+    rec.canReadKanji = correct;
+    // El significado: se preguntó (card.meaning), era lo único que preguntar (en kana) o
+    // estaba a la vista al valorarse (tarjetas). Solo escribir la lectura no dice nada de él.
+    if (card.meaning !== undefined || card.form === "meaning" || card.form === "flash") {
+      rec.knowsMeaning = card.meaning ?? correct;
+      rec.lastMeaningAt = Date.now();
+    }
+    card.meaning = undefined;
+  } else if (!card.byReading) rec.knowsMeaning = correct;
+  // Una palabra no pasa a dominada sin haber demostrado su significado (salvo con la pregunta desactivada)
+  const meaningOk = card.kind !== "word" || rec.knowsMeaning || prefs.meaningCheck === false;
   if (!correct) rec.status = "learning";
-  else if (rec.streakDays >= MASTER_STREAK || rec.interval >= STUDY_CONFIG.masteredAtDays) rec.status = "mastered";
+  else if ((rec.streakDays >= MASTER_STREAK || rec.interval >= STUDY_CONFIG.masteredAtDays) && meaningOk) rec.status = "mastered";
   else if (rec.status !== "mastered") rec.status = "learning";
 
   if (card.kind === "word") await saveUserWord(rec); else await saveUserKanji(rec);
@@ -1789,7 +1960,7 @@ async function addWord(mode) {
   say([mode === "mastered"
     ? t("{word} guardada como dominada.", { word: rec.lemma })
     : rec.studied ? t("{word} ya está en tus repasos.", { word: rec.lemma })
-    : kana ? t("{word} guardada. Al ir solo en kana no se repasa, pero se usará en tus textos.", { word: rec.lemma })
+    : kana ? t("{word} guardada. Al ir solo en kana se repasa por su significado, y se usará en tus textos.", { word: rec.lemma })
     : t("{word} agregada: será de las primeras palabras nuevas del repaso.", { word: rec.lemma }), sentenceNote]
     .filter(Boolean).join(" "), "correct");
   renderAddWord();

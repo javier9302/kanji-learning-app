@@ -118,6 +118,7 @@ const prefs = loadLocal("kanji-prefs", {
   furigana: "unknown", // furigana al leer: unknown | all | none
   kanjiGroup: "jlpt",  // Mis palabras → Kanjis: jlpt | grade | frequency
   kanjiBoxes: true,    // Repasar, «Palabra sola»: una casilla por kanji al escribir la lectura
+  meaningCheck: true,  // Repasar: al acertar la lectura, a veces se pregunta también el significado
   notifyMin: 10,       // Avisos de repaso: avisar cuando se junten tantas palabras (notify.js)
   theme: "auto",       // Apariencia: auto (la del dispositivo) | light | dark
   romaji: true,        // Rōmaji junto a cada lectura en kana: quien empieza aún no lee hiragana
@@ -1227,6 +1228,11 @@ function bindSettings() {
   $("kanjiBoxesInput").checked = prefs.kanjiBoxes !== false;
   $("kanjiBoxesInput").addEventListener("change", () => {
     prefs.kanjiBoxes = $("kanjiBoxesInput").checked;
+    saveLocal("kanji-prefs", prefs);
+  });
+  $("meaningCheckInput").checked = prefs.meaningCheck !== false;
+  $("meaningCheckInput").addEventListener("change", () => {
+    prefs.meaningCheck = $("meaningCheckInput").checked;
     saveLocal("kanji-prefs", prefs);
   });
   $("debugStudyInput").checked = !!prefs.debugStudy;

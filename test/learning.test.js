@@ -292,3 +292,41 @@ test("backfillDays: las dominadas sin tarjeta se reparten, no vencen todas el mi
   const perDay = Math.max(...Object.values(Object.groupBy(days, (d) => d)).map((list) => list.length));
   assert.ok(perDay <= Math.ceil(100 / (range.max - range.min + 1)));
 });
+
+/* ---------- El significado y las palabras en kana ---------- */
+
+test("needsMeaningCheck: si no lo ha demostrado, o hace tiempo que no", () => {
+  const M = CONFIG.meaningCheck, DAY = 86400000, now = Date.parse("2026-11-12T10:00:00Z");
+  assert.equal(core.needsMeaningCheck({ knowsMeaning: false }, now, M), true);
+  assert.equal(core.needsMeaningCheck({ knowsMeaning: true, lastMeaningAt: now - DAY }, now, M), false);
+  assert.equal(core.needsMeaningCheck({ knowsMeaning: true, lastMeaningAt: now - (M.everyDays + 1) * DAY }, now, M), true);
+  assert.equal(core.needsMeaningCheck({ knowsMeaning: true }, now, M), true, "lo sabía, pero nunca se le preguntó aquí");
+  assert.equal(core.needsMeaningCheck(null, now, M), false, "una palabra nueva: aún no hay nada que comprobar");
+});
+
+test("pickDistractors: primero las que se parecen, sin repetir significado", () => {
+  const entry = (id) => BANK.words.get(id);
+  const target = entry("学生|がくせい");
+  const label = (word) => word.es.slice(0, 2).join(", ");
+  const pool = [...BANK.words.values()].filter((word) => !word.kana);
+  const wrong = core.pickDistractors(target, pool, { count: 3, label, random: () => 0 });
+  assert.equal(wrong.length, 3);
+  const sharing = wrong.filter((word) => word.kanji.some((c) => target.kanji.includes(c)));
+  assert.equal(sharing.length, 1, `una sola comparte 学 o 生: ${wrong.map((w) => w.w)}`);
+  assert.equal(wrong[0], sharing[0], "y es la primera: la que más se parece");
+  assert.ok(wrong.every((word) => !/estudiante|alumno/.test(label(word))), `ninguna casi igual a la buena: ${wrong.map(label)}`);
+  const labels = [label(target), ...wrong.map(label)];
+  assert.equal(new Set(labels).size, 4);
+  assert.ok(!wrong.includes(target));
+  // Sin bastantes, las que haya; las que no tienen etiqueta no sirven
+  assert.equal(core.pickDistractors(target, pool.slice(0, 2), { label }).length <= 2, true);
+  assert.deepEqual(core.pickDistractors(target, pool, { label: (word) => word === target ? "x" : "" }), []);
+});
+
+test("interleaveEvery: de cada tantas palabras nuevas, una en kana", () => {
+  assert.deepEqual(core.interleaveEvery(["a", "b", "c", "d", "e"], ["x", "y"], 3), ["a", "b", "x", "c", "d", "y", "e"]);
+  assert.deepEqual(core.interleaveEvery(["a"], ["x", "y", "z"], 3), ["a", "x", "y", "z"], "si se acaban las de kanji, siguen las de kana");
+  assert.deepEqual(core.interleaveEvery([], ["x"], 3), ["x"]);
+  assert.deepEqual(core.interleaveEvery(["a", "b"], ["x"], 0), ["a", "b"], "0 = ninguna en kana");
+  assert.deepEqual(core.interleaveEvery(["a", "b"], ["x", "y"], 1), ["x", "y", "a", "b"]);
+});

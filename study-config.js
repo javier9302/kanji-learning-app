@@ -126,8 +126,21 @@ const STUDY_CONFIG = {
      «dominada» sin tarjeta y no volvía a salir).
        evaluation  «Comprobar palabras», al terminar un texto (acaba de leerla)
        placement   acertada en la prueba de nivel
-       backfill    las que ya estaban así: repartidas entre min y max días */
-  checkedIntervalDays: { evaluation: 7, placement: 14, backfill: { min: 2, max: 21 } },
+       backfill    las que ya estaban así: repartidas entre min y max días
+       known       «Ya la sé», al enseñarle una palabra nueva en Repasar */
+  checkedIntervalDays: { evaluation: 7, placement: 14, known: 30, backfill: { min: 2, max: 21 } },
+
+  /* El significado en Repasar (learning-core.js, sección 7). Al acertar la lectura
+     en un repaso de días se pregunta también qué significa, entre 4, si aún no lo
+     ha demostrado o hace everyDays que no lo demuestra. Sin el significado
+     demostrado una palabra no pasa a dominada. Se desactiva en Ajustes. */
+  meaningCheck: { everyDays: 30 },
+
+  /* Palabras solo en kana (これ, する, テレビ): se repasan por su significado.
+       every  de cada tantas palabras nuevas, una en kana (0 = ninguna)
+       pool   cuántas de las más frecuentes se preparan cada vez (su significado
+              sale del diccionario general) */
+  kanaCards: { every: 3, pool: 40 },
 
   /* «Por confirmar» (salió en un texto y no se tocó): cuenta como sabida mientras
      sea reciente (days desde que se vio por primera vez) o haya salido en
