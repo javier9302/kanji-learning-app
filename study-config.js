@@ -121,6 +121,19 @@ const STUDY_CONFIG = {
   /* "Ya la domino": días hasta el primer repaso de una palabra agregada así */
   masteredIntervalDays: 60,
 
+  /* Acertada una vez sin haberla repasado nunca: entra en el repaso con una
+     tarjeta a estos días, para comprobar que de verdad se sabe (antes quedaba
+     «dominada» sin tarjeta y no volvía a salir).
+       evaluation  «Comprobar palabras», al terminar un texto (acaba de leerla)
+       placement   acertada en la prueba de nivel
+       backfill    las que ya estaban así: repartidas entre min y max días */
+  checkedIntervalDays: { evaluation: 7, placement: 14, backfill: { min: 2, max: 21 } },
+
+  /* «Por confirmar» (salió en un texto y no se tocó): cuenta como sabida mientras
+     sea reciente (days desde que se vio por primera vez) o haya salido en
+     minSeen textos sin consultarla nunca (learning-core.js, sección 6) */
+  preKnown: { days: 30, minSeen: 3 },
+
   /* A partir de este intervalo (días) una palabra se da por dominada */
   masteredAtDays: 21,
 

@@ -3,7 +3,7 @@
    ========================================= */
 
 const DB_NAME = "kanji-learning-app";
-const DB_VERSION = 7; // 5: almacenes sentences y sentenceStats (frases de ejemplo); 6: translations (Traducir); 7: sharedSentences
+const DB_VERSION = 8; // 5: almacenes sentences y sentenceStats (frases de ejemplo); 6: translations (Traducir); 7: sharedSentences; 8: reviews (registro de repasos)
 const LEVELS = ["N5", "N4", "N3", "N2", "N1"];
 
 let db;
@@ -1275,6 +1275,8 @@ async function init() {
   // Sin conexión en la primera visita puede fallar: la app sigue y lo reintenta al usarlo.
   await BANK.loadUpTo(meta.reading.level || "N5").catch(() => {});
   await migrateOldItems().catch((error) => console.error("Error al migrar el progreso:", error));
+  // Las «dominadas» sin tarjeta (acertadas una vez y nunca repasadas) entran en el repaso
+  await backfillCheckedCards().catch((error) => console.error("Error al dar tarjeta a las palabras dominadas:", error));
 
   emptyStudyHTML = $("studyArea").innerHTML;
   bindNavigation();

@@ -4,6 +4,29 @@ Lo que cambia para quien usa la app, el más reciente primero. Cada cambio añad
 el mismo commit. El detalle técnico está en el mensaje de cada commit (`git show <commit>`).
 Cómo funciona todo hoy: [docs/COMO-FUNCIONA.md](docs/COMO-FUNCIONA.md).
 
+## 2026-11-12
+
+Primera etapa del plan de la revisión del 2026-11-11 («datos de fiar»).
+
+- **Lo que aciertas una vez ya se repasa**: una palabra acertada en la prueba de nivel o en
+  «Comprobar palabras» quedaba «dominada» sin tarjeta y no volvía a salir nunca. Ahora entra en el
+  repaso (a los 14 y a los 7 días) para comprobar que de verdad la sabes. Las que ya tenías así
+  reciben su tarjeta al abrir la app, repartidas entre 2 y 21 días para que no venzan todas juntas.
+- **«Por confirmar» ya no es para siempre**: una palabra que salió en un texto y no tocaste cuenta
+  como sabida mientras sea reciente (30 días) o haya salido en 3 textos sin consultarla. Si no, deja
+  de contar (para elegir textos y para lo que se le dice a la IA) hasta que la confirmes. Puede que
+  algún texto te salga ahora como algo más difícil: es más fiel a lo que sabes.
+- **Con repasos atrasados, primero los más atrasados**: si tienes más pendientes que preguntas por
+  sesión, entran los que llevan más tiempo esperando (antes, cualquiera al azar).
+- **Hoy no da Repasar por hecho** mientras queden palabras recién aprendidas o falladas que vuelven
+  en unos minutos, y lo dice.
+- **Repasar en el móvil**: durante la sesión solo se ve la tarjeta (sin el título, la racha ni la
+  meta) y, con la respuesta a la vista, desaparecen «Comprobar» y «No lo sé»: la valoración queda
+  más arriba. Antes de la prueba de nivel, la portada va en pequeño para que «Empieza aquí» se vea
+  sin desplazarse.
+- Interno: se guarda un registro de cada repaso en el dispositivo (para ajustar más adelante el
+  repaso a cada estudiante) y se corrige un número de `docs/COMO-FUNCIONA.md`.
+
 ## 2026-11-02
 
 - **Primera pregunta de una palabra nueva**: justo después de enseñártela ya no hay que elegir

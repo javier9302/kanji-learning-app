@@ -8,7 +8,9 @@
    2. Escribir: writingLevel, nextWritingKanji, writingRating y writingTestResult.
    3. Leer cuenta como repaso: readingCredit y readingInterval.
    4. Hoy: planToday, la sesión del día.
-   5. La sesión de Repasar: nextReadyCard (lo que está en sus pasos cortos espera su hora).
+   5. La sesión de Repasar: nextReadyCard (lo que está en sus pasos cortos espera su hora),
+      pickDue (con atraso, lo más atrasado primero) y reviewEntry (el registro de cada repaso).
+   6. Lo dado por sabido sin comprobar: preKnownCounts, knownRecord y backfillDays.
    Los números (repaso cada cuántos kanjis, tamaño de la prueba…) vienen de
    STUDY_CONFIG.
    ========================================= */
@@ -217,6 +219,7 @@ function readingInterval(previousDays, fsrsDays, config) {
                    puede crear uno; due, cuántas palabras que tocan salen en él
      s.read        ha terminado algún texto hoy
      s.due         tarjetas de Repasar que tocan ahora;  s.fresh  nuevas que saldrían
+     s.waiting     las que están en sus pasos cortos y vuelven en unos minutos
      s.answered    respuestas de hoy en Repasar;  s.goal  la meta diaria
      s.writing     { available, done }: si hay kanji que escribir y cuántos ha escrito hoy
      s.sentences   { available, done }: si hay frases que traducir y cuántas ha traducido hoy
@@ -227,8 +230,11 @@ function planToday(s, config) {
   if (!s.placed) return { steps: [{ kind: "placement", count: 1, done: false, progress: 0 }], next: "placement" };
   const steps = [];
   if (s.story.kind !== "none" || s.read) steps.push({ kind: "story", count: 1, done: !!s.read, progress: s.read ? 1 : 0, due: s.story.due || 0 });
-  // Repasar está hecho cuando no queda nada que toque y ya ha respondido algo hoy
-  steps.push({ kind: "reviews", count: s.due + s.fresh, done: s.due === 0 && s.answered > 0, progress: s.answered, due: s.due, fresh: s.fresh });
+  // Repasar está hecho cuando no queda nada que toque (tampoco lo que vuelve en unos
+  // minutos: una palabra recién fallada no está repasada) y ya ha respondido algo hoy
+  const waiting = s.waiting || 0;
+  steps.push({ kind: "reviews", count: s.due + s.fresh, done: s.due === 0 && waiting === 0 && s.answered > 0,
+    progress: s.answered, due: s.due, fresh: s.fresh, waiting });
   if (s.writing.available || s.writing.done) {
     steps.push({ kind: "writing", count: config.writing, done: s.writing.done >= config.writing || !s.writing.available, progress: Math.min(s.writing.done, config.writing) });
   }
@@ -270,10 +276,87 @@ function recordDue(record, now, today) {
   return !!record.nextReview && record.nextReview <= today;
 }
 
+const LC_DAY_MS = 86400000;
+
+/* Cuándo venció un registro (ms): su hora si está en los pasos cortos; si no, el
+   principio de su día de repaso. Sin fecha (versión antigua o importado), lo primero. */
+function dueTime(record) {
+  const card = record?.fsrs;
+  if (card?.due && card.scheduled_days === 0) return Date.parse(card.due);
+  return record?.nextReview ? Date.parse(`${record.nextReview}T00:00:00`) : 0;
+}
+
+/* Los repasos pendientes de una sesión. Con más pendientes que sitio (unos días
+   sin estudiar), entran los MÁS ATRASADOS: son los que más cerca están de
+   olvidarse. Antes se barajaban todos y entraba cualquiera. Los elegidos sí se
+   barajan, para que la sesión no salga siempre en el mismo orden.
+     cards  [{ rec }];  count  sitio en la sesión (Infinity = todos)
+     shuffle(lista) -> lista barajada */
+function pickDue(cards, count, shuffle = (list) => list) {
+  const oldest = [...cards].sort((a, b) => dueTime(a.rec) - dueTime(b.rec)).slice(0, Math.max(0, count));
+  return shuffle(oldest);
+}
+
+/* Una línea del registro de repasos: lo mínimo para ajustar FSRS a cada
+   estudiante y medir cuánto recuerda de verdad (con lo que se guardaba, solo la
+   tarjeta final, no se puede).
+     kind    "word" | "kanji" | "write" (Escribir) | "read" (repaso al leer)
+     rating  1 Otra vez … 4 Fácil
+     before  la tarjeta FSRS antes de responder;  after  la que quedó
+   Devuelve { id, at, kind, item, rating, state, elapsed, s, d, ivl }: state, el
+   estado de la tarjeta antes (0 nueva, 1 aprendiendo, 2 repaso, 3 reaprendiendo);
+   elapsed, días desde su repaso anterior; s y d, estabilidad y dificultad de
+   antes; ivl, los días a los que queda. */
+function reviewEntry({ kind, item, rating, before, after, at }) {
+  const last = before?.last_review ? Date.parse(before.last_review) : 0;
+  const round = (value) => Math.round((Number(value) || 0) * 100) / 100;
+  return {
+    id: `${at}|${kind}|${item}`, at, kind, item, rating,
+    state: before?.state || 0, elapsed: last ? round((at - last) / LC_DAY_MS) : 0,
+    s: round(before?.stability), d: round(before?.difficulty), ivl: after?.scheduled_days || 0
+  };
+}
+
+/* =========================================
+   6. LO DADO POR SABIDO SIN COMPROBAR
+   -----------------------------------------
+   Una palabra que salió en un texto y no se tocó queda «por confirmar»
+   (pre_known): seguramente la sabía. Pero no tocarla no lo demuestra, y darla
+   por sabida para siempre hace que los textos se crean más fáciles de lo que
+   son. Cuenta como sabida solo mientras haya algo que lo apoye:
+     - es reciente (config.days desde que se vio por primera vez), o
+     - ha salido en config.minSeen textos terminados y nunca la consultó.
+   Si no, deja de contar hasta que se confirme (Comprobar palabras, Repasar o
+   Traducir). No cambia su estado: solo lo que la app supone.
+   Los números vienen de STUDY_CONFIG.preKnown.
+   ========================================= */
+
+function preKnownCounts(rec, now, config) {
+  if ((rec.seen || 0) >= config.minSeen && !rec.lookups) return true;
+  return now - (rec.firstSeen || 0) <= config.days * LC_DAY_MS;
+}
+
+/* ¿Se da por sabida esta palabra del usuario? Dominada, repasada con la lectura
+   acertada la última vez, o «por confirmar» con algo que lo apoye. */
+function knownRecord(rec, now, config) {
+  if (!rec) return false;
+  if (rec.status === "mastered" || rec.studied && rec.canReadKanji) return true;
+  return rec.status === "pre_known" && preKnownCounts(rec, now, config);
+}
+
+/* Una palabra dada por dominada sin tarjeta (acertada una vez en la prueba de
+   nivel o en «Comprobar palabras») no se repasaba nunca. Al darles tarjeta de
+   golpe a las que ya había, se reparten entre min y max días para que no venzan
+   todas el mismo día: la número 0 a los min días, la siguiente un día después… */
+function backfillDays(index, { min, max }) {
+  return min + (index % (max - min + 1));
+}
+
 /* Para las pruebas (Node); en el navegador son globales */
 if (typeof module !== "undefined") {
   module.exports = {
     kanjiGate, writingLevel, nextWritingKanji, writingRating, writingTestResult, writingTestKanji,
-    readingCredit, readingInterval, planToday, nextReadyCard, recordDue
+    readingCredit, readingInterval, planToday, nextReadyCard, recordDue,
+    dueTime, pickDue, reviewEntry, preKnownCounts, knownRecord, backfillDays
   };
 }

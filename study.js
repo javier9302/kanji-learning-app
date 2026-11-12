@@ -143,6 +143,42 @@ function masteredCard(days, now = new Date()) {
   };
 }
 
+/* Una palabra acertada una sola vez (prueba de nivel, «Comprobar palabras») entra
+   en el repaso con una tarjeta a `days` días. Solo las que se repasan (con kanji)
+   y aún no tienen tarjeta. Devuelve si se la dio. */
+function giveCheckedCard(rec, days, now = new Date()) {
+  if (rec.studied || !hasKanjiChar(rec.lemma)) return false;
+  applyCard(withSRS(rec), masteredCard(days, now));
+  return true;
+}
+
+/* Las que ya estaban «dominadas» sin tarjeta antes de este cambio: se la da a
+   todas, repartidas (backfillDays) para que no venzan el mismo día. Una vez
+   hecho no encuentra ninguna: no necesita marca. */
+async function backfillCheckedCards() {
+  const range = STUDY_CONFIG.checkedIntervalDays.backfill;
+  const pending = [...userWords.values()]
+    .filter((rec) => rec.status === "mastered" && !rec.studied && !rec.deletedAt && hasKanjiChar(rec.lemma || ""))
+    .sort((a, b) => (a.lastSeen || 0) - (b.lastSeen || 0));
+  pending.forEach((rec, i) => {
+    giveCheckedCard(rec, backfillDays(i, range));
+    rec.updatedAt = Date.now();
+  });
+  if (!pending.length) return 0;
+  await putRecords("userWords", pending);
+  scheduleSync();
+  return pending.length;
+}
+
+/* Registro de repasos (almacén «reviews», solo en el dispositivo): una línea por
+   respuesta con la tarjeta de antes y la que quedó (reviewEntry, learning-core.js).
+   Si no se puede guardar, el repaso sigue: es un registro, no el progreso. */
+function logReview(kind, item, rating, before, after, at = Date.now()) {
+  const entry = reviewEntry({ kind, item, rating: RATING[rating], before: before && storedCard(before), after, at });
+  putRecords("reviews", [entry]).catch((error) => console.warn("No se pudo guardar el registro de repasos:", error));
+  return entry.id;
+}
+
 /* Sigue en los pasos cortos: vuelve a salir en esta misma sesión */
 const staysInSession = (card) => card.scheduled_days === 0;
 
@@ -493,7 +529,8 @@ async function startSession() {
   const count = Number($("studyCount").value) || Infinity; // 0 = todas
   const { due, fresh, extra } = studyCards();
   // Primero lo pendiente; después las nuevas, con su tope; el resto, práctica extra
-  const reviews = shuffle(due).slice(0, count);
+  // Con más pendientes que sitio, los más atrasados (pickDue, learning-core.js)
+  const reviews = pickDue(due, count, shuffle);
   const news = fresh.slice(0, Math.min(maxNewCards(), count - reviews.length));
   // Práctica extra para completar la sesión: nunca lo ya repasado hoy, y las dominadas al final
   const reviewedToday = (rec) => !!rec.lastReviewed && isoDate(new Date(rec.lastReviewed)) === today();
@@ -781,6 +818,7 @@ function showCard() {
       if (extra?.keep) return ` · ${t("sin cambios")}`;
       return ` · ${intervalLabel(extra?.next || nextCard(card.rec || {}, rating, now), now)}`;
     };
+    area.querySelector(".card").classList.add("answered"); // fuera los botones de responder (style.css)
     if (pick) area.querySelector(".card-sentence").remove(); // abajo va entera, con furigana
     area.querySelector("#sentTranslation")?.remove();
     answer.innerHTML = `
@@ -1104,7 +1142,8 @@ async function undoRating(before) {
     await putRecords(store, [], [card.id]);
   }
   card.rec = before.rec || before.cardRec;
-  Object.assign(card, before.cardState);
+  if (card.logId) await putRecords("reviews", [], [card.logId]).catch(() => {}); // la respuesta deshecha no queda en el registro
+  Object.assign(card, before.cardState, { logId: null });
   if (before.day) meta.days[today()] = before.day; else delete meta.days[today()];
   await saveMeta();
   // La sesión vuelve al punto anterior (también si la valoración la había terminado)
@@ -1181,7 +1220,9 @@ function applyReadingReview(rec, result, now = new Date()) {
   withSRS(rec);
   const config = STUDY_CONFIG.readingReview;
   if (result === "again") {
-    applyCard(rec, nextCard(rec, "again", now));
+    const before = fsrsCard(rec, now), next = nextCard(rec, "again", now);
+    applyCard(rec, next);
+    logReview("read", rec.id, "again", before, next, now.getTime());
     Object.assign(rec, { status: "learning", canReadKanji: false, streakDays: 0 });
     rec.incorrectCount++;
     rec.readStreak = 0;
@@ -1194,6 +1235,7 @@ function applyReadingReview(rec, result, now = new Date()) {
     const days = readingInterval(previous, next.scheduled_days, config);
     if (days !== next.scheduled_days) Object.assign(next, { scheduled_days: days, due: new Date(now.getTime() + days * DAY_MS) });
     applyCard(rec, next);
+    logReview("read", rec.id, config.rating, before, next, now.getTime());
     rec.correctCount++;
     rec.readStreak = (rec.readStreak || 0) + 1;
   }
@@ -1221,11 +1263,14 @@ async function gradeCard(card, rating) {
   card.attempts = (card.attempts || 0) + 1;
 
   const extra = extraOutcome(card, rating);
+  const before = fsrsCard(rec);
   if (extra?.keep) {
     rec.studied = true;
+    card.logId = logReview(card.kind, card.id, rating, before, before);
   } else {
     const next = extra?.next || nextCard(rec, rating);
     applyCard(rec, next);
+    card.logId = logReview(card.kind, card.id, rating, before, next);
     if (staysInSession(next)) {
       card.requeue = correct ? "later" : "soon";
       card.waitUntil = new Date(next.due).getTime(); // no vuelve antes de su hora (nextReadyCard)
@@ -1336,10 +1381,12 @@ async function gradeWriting(c, rating, kind) {
   const rec = userKanji.get(c) || blankUserKanji(c);
   const now = new Date();
   let card = writeCard(rec, now);
+  const before = card;
   if (!(kind === "extra" && rating !== "again")) {
     card = fsrsScheduler().next(card, now, RATING[rating]).card;
     rec.writeFsrs = storedCard(card);
   }
+  logReview("write", c, rating, before, card, now.getTime());
   rec.canWrite = rating !== "again";
   if (rec.canWrite) rec.writes = (rec.writes || 0) + 1;
   rec.lastSeen = rec.lastWrittenAt = now.getTime();

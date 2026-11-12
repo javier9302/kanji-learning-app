@@ -31,6 +31,8 @@ async function todayState() {
     story,
     read: sessions.some((s) => !s.discarded && isToday(s.finishedAt, day)),
     due: cards.due.length, fresh: Math.min(cards.fresh.length, maxNewCards()),
+    // En sus pasos cortos (recién aprendidas o falladas): vuelven en unos minutos
+    waiting: cards.extra.filter((card) => card.rec.fsrs?.scheduled_days === 0).length,
     answered: meta.days[day]?.r || 0, goal: Math.max(1, Number(prefs.goal) || 20),
     writing: {
       available: !!draw && draw.kind !== "extra",
@@ -62,6 +64,7 @@ function todayStepText(step, state) {
     }
     case "reviews": return [t("Repasa"), step.due
       ? t("{due} y, después, hasta {fresh}.", { due: plural(step.due, "repaso pendiente", "repasos pendientes"), fresh: plural(step.fresh, "palabra nueva", "palabras nuevas") })
+      : step.waiting ? t("{n} que acabas de aprender o fallar vuelven en unos minutos.", { n: plural(step.waiting, "palabra", "palabras") })
       : step.done ? t("No te queda nada por repasar ahora.") : t("Nada pendiente: aprende hasta {fresh}.", { fresh: plural(step.fresh, "palabra nueva", "palabras nuevas") }),
       t("Empezar")];
     case "writing": return [t("Escribe {n} kanjis", { n: step.count }),
@@ -85,7 +88,7 @@ async function renderToday() {
   document.body.classList.toggle("placed", state.placed); // en el móvil, sin portada después de la prueba
   const finished = !plan.next;
   area.innerHTML = `
-    <p class="helper">${escapeHTML(t("Hoy llevas {done} de {goal} respuestas en Repasar.", { done: state.answered, goal: state.goal }))}</p>
+    ${state.placed ? `<p class="helper">${escapeHTML(t("Hoy llevas {done} de {goal} respuestas en Repasar.", { done: state.answered, goal: state.goal }))}</p>` : ""}
     ${finished ? `<div class="panel today-done">${darumiHTML("celebrate", 120)}<h3>${t("¡Has terminado lo de hoy!")}</h3>
       <p class="helper">${t("Puedes seguir con cualquier sección; mañana habrá un plan nuevo.")}</p></div>` : ""}
     <ol class="today-steps">${plan.steps.map((step) => {

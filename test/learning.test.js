@@ -235,3 +235,60 @@ test("recordDue: las de días, desde su día; las de minutos, desde su hora", ()
   assert.equal(recordDue({ studied: false, nextReview: "2026-10-01" }, now, "2026-10-30"), false);
   assert.equal(recordDue({ studied: true, nextReview: "2026-10-29" }, now, "2026-10-30"), true); // sin tarjeta FSRS
 });
+
+/* ---------- Etapa «datos de fiar»: atraso, registro y lo dado por sabido ---------- */
+
+test("planToday: lo que vuelve en unos minutos no deja Repasar como hecho", () => {
+  const base = { placed: true, story: { kind: "none" }, read: false, due: 0, fresh: 0, answered: 5,
+    writing: { available: false, done: 0 }, sentences: { available: false, done: 0 }, proof: null };
+  assert.equal(planToday({ ...base, waiting: 0 }, CONFIG.today).steps[0].done, true);
+  const plan = planToday({ ...base, waiting: 3 }, CONFIG.today);
+  assert.equal(plan.steps[0].done, false);
+  assert.equal(plan.steps[0].waiting, 3);
+  assert.equal(plan.next, "reviews");
+});
+
+test("pickDue: con más pendientes que sitio entran los más atrasados", () => {
+  const card = (id, nextReview, fsrs) => ({ id, rec: { nextReview, fsrs } });
+  const cards = [card("ayer", "2026-11-10"), card("hace un mes", "2026-10-10"), card("hoy", "2026-11-11"),
+    card("paso corto", "2026-11-11", { due: "2026-11-11T09:00:00.000Z", scheduled_days: 0 }), card("sin fecha", "")];
+  assert.deepEqual(core.pickDue(cards, 3).map((c) => c.id), ["sin fecha", "hace un mes", "ayer"]);
+  // Con sitio para todos, todos; y se barajan los elegidos, no los que entran
+  assert.equal(core.pickDue(cards, Infinity).length, 5);
+  assert.deepEqual(core.pickDue(cards, 2, (list) => [...list].reverse()).map((c) => c.id), ["hace un mes", "sin fecha"]);
+  assert.deepEqual(core.pickDue(cards, 0), []);
+});
+
+test("reviewEntry: la tarjeta de antes y a cuántos días queda", () => {
+  const at = Date.parse("2026-11-11T10:00:00Z");
+  const before = { state: 2, stability: 12.3456, difficulty: 5.1, last_review: "2026-11-01T10:00:00.000Z" };
+  assert.deepEqual(core.reviewEntry({ kind: "word", item: "学校|がっこう", rating: 3, before, after: { scheduled_days: 30 }, at }),
+    { id: `${at}|word|学校|がっこう`, at, kind: "word", item: "学校|がっこう", rating: 3, state: 2, elapsed: 10, s: 12.35, d: 5.1, ivl: 30 });
+  // Una tarjeta nueva: sin repaso anterior
+  const fresh = core.reviewEntry({ kind: "write", item: "日", rating: 1, before: { state: 0, last_review: null }, after: { scheduled_days: 0 }, at });
+  assert.deepEqual([fresh.state, fresh.elapsed, fresh.s, fresh.ivl], [0, 0, 0, 0]);
+});
+
+test("por confirmar: cuenta como sabida solo si es reciente o salió varias veces sin consultarla", () => {
+  const P = CONFIG.preKnown, DAY = 86400000, now = Date.parse("2026-11-11T10:00:00Z");
+  const rec = (extra) => ({ status: "pre_known", seen: 1, lookups: 0, firstSeen: now, ...extra });
+  assert.equal(core.knownRecord(rec(), now, P), true, "recién vista");
+  assert.equal(core.knownRecord(rec({ firstSeen: now - (P.days + 1) * DAY }), now, P), false, "vieja y vista una vez");
+  assert.equal(core.knownRecord(rec({ firstSeen: now - 200 * DAY, seen: P.minSeen }), now, P), true, "vieja, pero ha salido varias veces sin tocarla");
+  assert.equal(core.knownRecord(rec({ firstSeen: now - 200 * DAY, seen: 9, lookups: 1 }), now, P), false, "la consultó: verla más veces no lo demuestra");
+  // Lo demostrado no caduca; lo desconocido no cuenta nunca
+  assert.equal(core.knownRecord({ status: "mastered", firstSeen: 0 }, now, P), true);
+  assert.equal(core.knownRecord({ status: "learning", studied: true, canReadKanji: true }, now, P), true);
+  assert.equal(core.knownRecord({ status: "learning", studied: true, canReadKanji: false }, now, P), false);
+  assert.equal(core.knownRecord({ status: "unknown" }, now, P), false);
+  assert.equal(core.knownRecord(undefined, now, P), false);
+});
+
+test("backfillDays: las dominadas sin tarjeta se reparten, no vencen todas el mismo día", () => {
+  const range = CONFIG.checkedIntervalDays.backfill;
+  const days = Array.from({ length: 100 }, (_, i) => core.backfillDays(i, range));
+  assert.equal(Math.min(...days), range.min);
+  assert.equal(Math.max(...days), range.max);
+  const perDay = Math.max(...Object.values(Object.groupBy(days, (d) => d)).map((list) => list.length));
+  assert.ok(perDay <= Math.ceil(100 / (range.max - range.min + 1)));
+});

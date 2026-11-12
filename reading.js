@@ -14,7 +14,10 @@
               ("" = ninguno). Evita guardar miles de filas pre_known.
    ========================================= */
 
-const KNOWN_STATUS = new Set(["mastered", "pre_known"]);
+/* ¿Se da por sabida? Dominada, repasada con la lectura acertada, o «por confirmar»
+   con algo que lo apoye (reciente o vista varias veces sin consultarla):
+   knownRecord, learning-core.js, sección 6 */
+const isKnownWord = (rec, now = Date.now()) => knownRecord(rec, now, STUDY_CONFIG.preKnown);
 const COVERAGE_TARGET = 90;   // % mínimo de palabras conocidas para proponer un texto
 const HARD_RATIO = 0.15;      // palabras marcadas como no conocidas a partir de las que el texto es difícil
 const PLACEMENT_SIZE = 20;
@@ -32,8 +35,9 @@ function knownLemmas() {
     for (const word of levelVocabulary(level)) known.add(word.w);
   }
   // Lo que el usuario ha demostrado (leyendo o estudiando) manda sobre lo supuesto
+  const now = Date.now();
   for (const word of userWords.values()) {
-    if (KNOWN_STATUS.has(word.status) || word.studied && word.canReadKanji) known.add(word.lemma);
+    if (isKnownWord(word, now)) known.add(word.lemma);
     else known.delete(word.lemma);
   }
   return known;
@@ -43,7 +47,7 @@ function knownLemmas() {
    por nivel: se da por conocida mientras el usuario no la marque al leer. */
 function isKnownKey(key, known) {
   const mine = userWords.get(key);
-  if (mine) return KNOWN_STATUS.has(mine.status) || !!(mine.studied && mine.canReadKanji);
+  if (mine) return isKnownWord(mine);
   const lemma = key.split("|")[0];
   return known.has(lemma) || !/\p{Script=Han}/u.test(lemma);
 }
@@ -220,6 +224,8 @@ async function finishPlacement() {
   for (const { word } of known) {
     const mine = blankUserWord(word.lemma, word.reading);
     Object.assign(mine, { status: "mastered", canReadKanji: true, knowsMeaning: true, evalCorrect: 1 });
+    // Acertarla una vez no basta: entra en el repaso para comprobarlo dentro de unos días
+    giveCheckedCard(mine, STUDY_CONFIG.checkedIntervalDays.placement);
     userWords.set(mine.id, mine);
     if (!words.has(mine.id)) {
       const entry = { id: mine.id, lemma: mine.lemma, reading: mine.reading, meanings: word.en,
@@ -408,7 +414,7 @@ async function promptParams({ type, topic, length, cast, avoid = [] }) {
     ({ lemma, reading: readingOf.get(lemma) || BANK.byWriting.get(lemma)?.[0].r, status: statusOf.get(lemma) }));
   let assumed = [];
   if (known.length > PROMPT_WORD_LIMIT) {
-    known = [...userWords.values()].filter((w) => KNOWN_STATUS.has(w.status)).map(item).slice(0, PROMPT_WORD_LIMIT);
+    known = [...userWords.values()].filter((w) => isKnownWord(w)).map(item).slice(0, PROMPT_WORD_LIMIT);
     assumed = assumedLevels();
   }
   // Palabras solo en kana: no se estudian como tarjeta, así que se aprenden
@@ -1439,7 +1445,13 @@ async function finishEvaluation() {
       canReadKanji: reading,
       knowsMeaning: result.meaning
     });
-    if (passed) { word.evalCorrect++; mastered++; } else word.evalWrong++;
+    if (passed) {
+      word.evalCorrect++;
+      mastered++;
+      // Acaba de leerla: acertarla ahora no dice si la sabrá la semana que viene. Con
+      // tarjeta vuelve a salir; sin ella quedaba «dominada» y no se repasaba nunca.
+      giveCheckedCard(word, STUDY_CONFIG.checkedIntervalDays.evaluation);
+    } else word.evalWrong++;
     word.updatedAt = Date.now();
   }
   await putRecords("userWords", queue.map(({ word }) => word));

@@ -122,6 +122,11 @@ Se guardan en el dispositivo (IndexedDB) y, con cuenta, se sincronizan con Supab
 - `texts`, `words`, `sentences`, `translations`: textos, el diccionario propio, las frases
   sacadas de los textos (y las guardadas de la web, con `source: "web"`, `word` y `url`) y las
   traducciones respondidas.
+- `reviews` (solo en el dispositivo; no se sincroniza): el **registro de repasos**. Una línea por
+  respuesta en Repasar, Escribir o repaso al leer (`reviewEntry`, `learning-core.js`): cuándo, qué
+  elemento, la valoración (1 a 4), el estado, la estabilidad y la dificultad de la tarjeta antes de
+  responder, los días desde su repaso anterior y a cuántos días queda. Deshacer una valoración quita
+  su línea. Servirá para ajustar FSRS a cada estudiante y medir cuánto recuerda de verdad.
 - `meta`: historial diario, perfil de lectura (`reading.level`, `reading.assumed`),
   «Lecturas de kanji practicadas» (`practice`, solo en el dispositivo) y niveles de Escribir aprobados.
 - Preferencias (localStorage, por dispositivo): modo, presentación, contenido y número de
@@ -157,7 +162,8 @@ sabría leer ni las opciones; lleva a Repasar a aprender sus primeras palabras) 
 nivel**: 20 preguntas del nivel elegido (el 40 % del nivel anterior), con la lectura de cada opción
 también en rōmaji. Cinco seguidas sin saberlas la terminan antes (`PLACEMENT_STOP`). Con un 70 % o
 más se aprueba. Las acertadas quedan como sabidas; las que no sabía **no se apuntan** (ni como
-fallo): saldrán como nuevas. De ahí salen dos datos:
+fallo): saldrán como nuevas. Las acertadas entran en el repaso con una tarjeta a **14 días**
+(`STUDY_CONFIG.checkedIntervalDays.placement`): acertarla una vez entre cuatro opciones no basta. De ahí salen dos datos:
 
 - **Nivel de lectura**: el de los textos que se proponen. Si no se aprueba, un nivel menos.
 - **Nivel supuesto**: todo el vocabulario de ese nivel y de los anteriores se da por conocido.
@@ -165,6 +171,17 @@ fallo): saldrán como nuevas. De ahí salen dos datos:
 Después manda lo que el usuario demuestra: una palabra fallada deja de contar como conocida
 aunque sea de un nivel supuesto, y una acertada cuenta aunque sea de un nivel superior
 (`knownLemmas`, `reading.js`).
+
+**«Por confirmar»** (`pre_known`): al terminar un texto, sus palabras sin progreso quedan así. Cuenta
+como sabida (para la cobertura de los textos y las listas del prompt) solo mientras algo lo apoye
+(`knownRecord` / `preKnownCounts`, `learning-core.js`, sección 6; números en `STUDY_CONFIG.preKnown`):
+es reciente (**30 días** desde que se vio por primera vez) o ha salido en **3 textos** terminados sin
+consultarla nunca. Si no, deja de contar hasta que se confirme: en «Comprobar palabras» (al terminar
+un texto, 8 palabras), en Repasar (sale como palabra nueva «vista en una lectura») o en Traducir. Su
+estado no cambia. Una palabra acertada en «Comprobar palabras» pasa a dominada **y entra en el
+repaso** con una tarjeta a **7 días** (`checkedIntervalDays.evaluation`). Cualquier palabra dominada
+con kanji que no tenga tarjeta la recibe al abrir la app, repartidas entre 2 y 21 días
+(`backfillCheckedCards`, `study.js`).
 
 ### 2. Palabras nuevas en Repasar (`study.js` + `learning-core.js` + `ranking-core.js`)
 
@@ -196,6 +213,7 @@ aunque sea de un nivel supuesto, y una acertada cuenta aunque sea de un nivel su
   («lectura nueva めい de 名 · kanji nuevo 有 · frecuencia n.º 900»). Va con la respuesta porque
   cuenta la lectura.
 - Como mucho **5 nuevas por sesión** (se cambia en Ajustes). Los repasos pendientes salen antes y no cuentan.
+  Con más pendientes que preguntas por sesión entran **los más atrasados** (`pickDue`), barajados entre sí.
 - **Pasos cortos**: una palabra nueva o fallada vuelve en la misma sesión a los 1 o 10 minutos
   (FSRS), pero **no antes de su hora**: mientras espera salen las demás y, si solo quedan las que
   esperan, la sesión dice cuándo vuelven («Vuelven dentro de 9 min») y deja terminar; sale sola al
@@ -260,7 +278,8 @@ palabras que ya conoce o está aprendiendo. En «Palabras y kanjis» se alternan
   sección 6 de `kanji-core.js`). Salen del banco de todos los niveles que estén cargados.
 - En la práctica extra, «sin cambios» se decide por días: una respuesta aleja la palabra solo si
   su nuevo día de repaso es posterior al que ya tenía.
-- **Durante una sesión** solo se ve la tarjeta (los ajustes vuelven al terminar) y debajo,
+- **Durante una sesión** solo se ve la tarjeta (los ajustes vuelven al terminar; en el móvil tampoco
+  el título, la racha ni la meta; con la respuesta a la vista se quitan «Comprobar» y «No lo sé») y debajo,
   «Terminar la sesión»: lo respondido queda guardado y lo que falta sale en la próxima.
 - **Deshacer**: tras valorar una tarjeta, durante 8 segundos sale «Deshacer» encima de la siguiente.
   Vuelve la palabra (o el kanji) a como estaba, la sesión al punto anterior y la respuesta del día
@@ -563,7 +582,7 @@ Junta lo del día en este orden, y el siguiente paso sin hacer va resaltado:
 5. **Demostrar kanjis** del nivel que toca, si hay al menos 5 vistos por demostrar (sección 12).
 
 No guarda nada propio: lo hecho se deduce de lo de hoy (un texto terminado hoy; nada que toque en
-Repasar y alguna respuesta hoy; kanjis escritos hoy; traducciones de hoy). Un paso sin nada que
+Repasar, tampoco palabras en sus pasos cortos que vuelven en unos minutos, y alguna respuesta hoy; kanjis escritos hoy; traducciones de hoy). Un paso sin nada que
 hacer (sin texto posible, sin kanjis o sin frases) no sale. Sin la prueba de nivel (o «Empiezo de cero»), solo sale
 ella. Encima, cuántas respuestas lleva de su meta diaria.
 
@@ -590,7 +609,10 @@ Casi todo lo ajustable está en `study-config.js`: palabras nuevas por sesión, 
 días de dominio, reglas de Escribir y de Traducir. Lo que no:
 
 - 90 % de cobertura de los textos: `COVERAGE_TARGET` en `reading.js`.
-- Escribir: kanjis nuevos al día (10), cada cuántos nuevos uno sin ver (4) y los fallos que
+- Tarjeta de lo acertado una sola vez (prueba de nivel 14 días, «Comprobar palabras» 7, las que ya
+  había entre 2 y 21) y cuándo cuenta una palabra «por confirmar» (30 días o 3 textos):
+  `STUDY_CONFIG.checkedIntervalDays` y `STUDY_CONFIG.preKnown`.
+- Escribir: kanjis nuevos al día (10), cada cuántos nuevos uno sin ver (0 = nunca) y los fallos que
   perdona la valoración (1) o con los que cuenta como Otra vez (3 de más): `STUDY_CONFIG.writing`.
 - Análisis: umbral para dar un nivel por completo (80 %), textos recientes que se miran (5) y
   cuándo una estructura cuenta como entendida (3 lecturas sin consultar) o dominada (2 días), y las

@@ -18,7 +18,7 @@
      translations               frases traducidas (translate.js)
    ========================================= */
 
-const READING_STORES = ["texts", "words", "userWords", "userKanji", "sessions", "sentences", "sentenceStats", "translations", "sharedSentences"];
+const READING_STORES = ["texts", "words", "userWords", "userKanji", "sessions", "sentences", "sentenceStats", "translations", "sharedSentences", "reviews"];
 const MAX_SHOWN_ERRORS = 12;
 
 /* Tipos de palabra admitidos en los tokens */

@@ -3695,7 +3695,21 @@ body:not([data-view="today"]) .intro {
 
 @media (max-width: 600px) {
   body.placed .intro { display: none; }
+  /* Antes de la prueba, la portada en pequeño: «Empieza aquí» tiene que verse sin desplazarse */
+  .intro { padding: 0 0 12px; }
+  .intro .eyebrow, .intro-copy { display: none; }
+  .intro h1 { font-size: 26px; letter-spacing: -.5px; }
+  /* En una sesión, en el móvil, solo la tarjeta: el título, la racha y la meta ya
+     están en Hoy, y empujaban la respuesta fuera de la pantalla */
+  body.studying #view-study > .section-heading,
+  body.studying #view-study > .today-strip { display: none; }
 }
+
+/* Con la respuesta a la vista sobran los botones de responder y la ayuda del
+   rōmaji: lo escrito se queda (para compararlo) y la valoración sube */
+.card.answered #checkBtn,
+.card.answered #unknownBtn,
+.card.answered .romaji-hint { display: none; }
 
 /* Rōmaji junto a la lectura en kana (prefs.romaji) */
 .romaji {
