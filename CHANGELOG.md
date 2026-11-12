@@ -6,7 +6,7 @@ Cómo funciona todo hoy: [docs/COMO-FUNCIONA.md](docs/COMO-FUNCIONA.md).
 
 ## 2026-11-12
 
-- **El registro de repasos y las kanas se sincronizan** con tu cuenta: la retención de
+- **El registro de repasos y las kanas se sincronizan** con tu cuenta (`97ccc1c`): la retención de
   Estadísticas cuenta lo repasado en todos tus dispositivos, y el hiragana y katakana siguen donde
   los dejaste en otro. Hay que volver a ejecutar `supabase/schema.sql` (crea `review_log` y
   `kana_cards`; pasos en `SETUP.md`).
