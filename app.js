@@ -13,7 +13,8 @@ let db;
 // roadmap: { level, words, grammar, updatedAt } la hoja de ruta de la semana (progress.js)
 // summary: { key: "2026-W43:es", text } el resumen de la semana escrito por la IA (progress.js)
 // kanjiProof: { lastDay } el último día que hizo la prueba de kanjis de un nivel (proof.js)
-let meta = { days: {}, deleted: {}, reading: {}, practice: {}, writing: {}, snapshots: {}, roadmap: {}, summary: {}, queue: {}, kanjiProof: {} };
+// kana: { cards: { あ: tarjeta FSRS }, today: { day, fresh, answered } } hiragana y katakana (kana.js)
+let meta = { days: {}, deleted: {}, reading: {}, practice: {}, writing: {}, snapshots: {}, roadmap: {}, summary: {}, queue: {}, kanjiProof: {}, kana: {} };
 let emptyStudyHTML = ""; // mensaje inicial de la pantalla de estudio
 
 const $ = (id) => document.getElementById(id);
@@ -237,7 +238,7 @@ function formatDate(iso) {
 
 /* Secciones principales y las vistas que agrupa cada una */
 const NAV = {
-  study: ["today", "read", "study", "translate", "draw", "proof"],
+  study: ["today", "read", "study", "translate", "draw", "proof", "kana"],
   library: ["library"],
   words: ["progress", "analysis", "kanji", "add"],
   settings: ["data"],
@@ -253,7 +254,7 @@ let previousView = "today";
 function switchView(name) {
   const group = Object.keys(NAV).find((g) => NAV[g].includes(name));
   const from = document.body.dataset.view;
-  if (from && from !== name && !["proof", "dict"].includes(from)) previousView = from;
+  if (from && from !== name && !["proof", "dict", "kana"].includes(from)) previousView = from;
   lastView[group] = name;
   closeWordPop();
 
@@ -272,6 +273,7 @@ function switchView(name) {
   document.body.dataset.view = name;
   if (name === "today") renderToday();
   if (name === "proof") renderProof();
+  if (name === "kana") renderKana();
   if (name === "read") renderRead();
   if (name === "library") renderLibrary();
   if (name === "study") renderStudyHome();
@@ -782,6 +784,8 @@ async function clearLocalData() {
   delete meta.practiceMigrated;
   meta.queue = {};
   meta.kanjiProof = {};
+  meta.kana = {};
+  kanaRun = null;
   meta.writing = {};
   meta.snapshots = {};
   meta.roadmap = {};

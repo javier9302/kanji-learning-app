@@ -9,6 +9,7 @@ mismo commit que cambie cualquiera de estas reglas. Los cambios, con fecha, est�
 | Sección | Qué hace |
 |---|---|
 | **Hoy** (pantalla de inicio) | La sesión del día en una lista: un texto con las palabras que tocan, Repasar, unos kanjis que escribir y unas frases que traducir. Cada paso abre su sección. |
+| **Hiragana y katakana** (sin pestaña) | Las letras, para quien empieza de cero: por filas, con repaso espaciado. Se abre desde Hoy, la bienvenida de «Empiezo de cero» y Repasar (apartado 15). |
 | **Leer** | Textos en japonés (generados por IA, de la comunidad o pegados) con furigana según el nivel. Tocar una palabra enseña su lectura y su significado. Al terminar, «Comprobar palabras»: unas preguntas cortas sobre las palabras del texto. Sin cuenta, el texto de ejemplo y lo pegado en Biblioteca (la IA necesita cuenta). |
 | **Repasar** | Repaso espaciado (FSRS) de palabras y kanjis. Modo «Escribir la lectura» o «Tarjetas»; presentación «Palabra sola» o «En una frase». |
 | **Traducir** | El usuario traduce frases de sus textos y lo corrige la IA (o él mismo con la traducción de referencia). Mide si entiende el significado; no mueve el calendario de repaso. |
@@ -592,6 +593,7 @@ ya descargado).
 La pantalla con la que se abre la app (si quedó un texto a medias al recargar, se vuelve a él).
 Junta lo del día en este orden, y el siguiente paso sin hacer va resaltado:
 
+0. **Hiragana y katakana**, para quien empieza de cero o ya los empezó (apartado 15).
 1. **Leer un texto**: el suyo a medias o el recomendado (el que tiene más palabras que tocan); sin
    ninguno y con cuenta, crear uno con IA, que llevará las palabras que tocan. Leerlo las repasa.
 2. **Repasar**: las que siguen tocando después del texto y hasta las palabras nuevas por sesión.
@@ -621,6 +623,26 @@ Repasar: un paso corto a su minuto, las demás el día de su repaso) y avisa si:
 El aviso sustituye al anterior sin apilarse y al tocarlo se abre la app. Lo que se repasa en otro
 dispositivo sin sincronizar todavía no se descuenta. En iPhone y iPad solo funciona con la app en la
 pantalla de inicio. Cerrar sesión quita la suscripción del dispositivo.
+
+### 15. Hiragana y katakana (`kana.js` + `kana-core.js`)
+
+Para quien empieza de cero. La tabla (`kanaRows`): 71 hiragana y 71 katakana por filas, primero el
+hiragana entero (las 46 básicas y después las de ゛ y ゜) y luego el katakana igual. Las combinaciones
+con ゃゅょ pequeña no van: se leen juntando dos que ya se saben.
+
+- **Una lección** (`nextKanaLesson`): primero las kanas cuya tarjeta venció (la más atrasada antes)
+  y después **una fila nueva entera**, la primera con alguna sin empezar, si hoy no ha empezado ya
+  **10** (`STUDY_CONFIG.kana.newPerDay`: dos filas al día).
+- La fila nueva **se enseña antes** (cada kana con su sonido; tocarla la lee en voz alta) y luego se
+  pregunta cada una: se escribe cómo suena **en letras** (`kanaAnswerOk`: vale shi o si, chi o ti,
+  tsu o tu, fu o hu, ji o zi, o / wo para を, y la propia kana con teclado japonés).
+- Cada kana tiene su **tarjeta FSRS** (`meta.kana.cards`): acertar a la primera es «Bien» y fallar,
+  «Otra vez»; la fallada vuelve al final de la lección hasta que sale, sin volver a valorarse. Cada
+  respuesta va al registro de repasos (`kind: "kana"`).
+- **Dónde sale**: lo primero en Hoy para quien eligió «Empiezo de cero» (sin nada dado por sabido) o
+  ya lo empezó, mientras haya algo que hacer; en la bienvenida de «Empiezo de cero»; y con un enlace
+  en Repasar. Debajo, la tabla entera con lo empezado marcado.
+- Se guarda en `meta.kana`, **solo en el dispositivo** (no se sincroniza).
 
 ## Dónde cambiar cada número
 

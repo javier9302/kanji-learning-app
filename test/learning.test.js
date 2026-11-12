@@ -347,3 +347,16 @@ test("leer cuenta como Bien con tope, no como Difícil (que sube la dificultad e
   assert.equal(CONFIG.readingReview.rating, "good");
   assert.ok(CONFIG.readingReview.maxGrowth <= 2);
 });
+
+test("planToday: las kanas van lo primero para quien empieza de cero, y no salen sin nada que hacer", () => {
+  const base = { placed: true, story: { kind: "none" }, read: false, due: 0, fresh: 2, answered: 0,
+    writing: { available: false, done: 0 }, sentences: { available: false, done: 0 }, proof: null };
+  const plan = planToday({ ...base, kana: { show: true, due: 2, fresh: 5, answered: 0 } }, CONFIG.today);
+  assert.deepEqual(plan.steps.map((step) => step.kind), ["kana", "reviews"]);
+  assert.equal(plan.next, "kana");
+  assert.equal(plan.steps[0].count, 7);
+  // Hechas hoy: sale como hecho; sin nada y sin haber hecho nada (todo sabido), no sale
+  assert.equal(planToday({ ...base, kana: { show: true, due: 0, fresh: 0, answered: 5 } }, CONFIG.today).steps[0].done, true);
+  assert.deepEqual(planToday({ ...base, kana: { show: true, due: 0, fresh: 0, answered: 0 } }, CONFIG.today).steps.map((s) => s.kind), ["reviews"]);
+  assert.deepEqual(planToday({ ...base, kana: { show: false, due: 3, fresh: 5, answered: 0 } }, CONFIG.today).steps.map((s) => s.kind), ["reviews"]);
+});

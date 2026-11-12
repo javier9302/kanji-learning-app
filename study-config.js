@@ -94,6 +94,10 @@ const STUDY_CONFIG = {
      escribir y cuántas frases traducir cada día */
   today: { writing: 4, sentences: 3, proofMin: 5 },
 
+  /* Hiragana y katakana (kana-core.js, nextKanaLesson; kana.js): kanas nuevas al
+     día como mucho. Se enseñan por filas enteras (あいうえお): con 10, dos filas. */
+  kana: { newPerDay: 10 },
+
   /* Demostrar los kanjis de un nivel (kanji-core.js, sección 5; proof.js): kanjis
      por prueba como mucho. En Hoy sale cuando hay al menos today.proofMin por demostrar. */
   kanjiProof: { size: 20 },

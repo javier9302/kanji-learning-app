@@ -207,6 +207,7 @@ function readingInterval(previousDays, fsrsDays, config) {
    4. HOY
    -----------------------------------------
    La pantalla de inicio junta lo del día en una lista, en este orden:
+     0. hiragana y katakana, para quien empieza de cero o ya los empezó (kana-core.js);
      1. un texto con las palabras que tocan (leerlo las repasa; sección 3);
      2. Repasar: las que siguen tocando después del texto, y las nuevas;
      3. unos kanjis que escribir;
@@ -226,11 +227,17 @@ function readingInterval(previousDays, fsrsDays, config) {
      s.writing     { available, done }: si hay kanji que escribir y cuántos ha escrito hoy
      s.sentences   { available, done }: si hay frases que traducir y cuántas ha traducido hoy
      s.proof       { level, pending, doneToday }: kanjis vistos por demostrar del nivel que toca (o null)
+     s.kana        { show, due, fresh, answered }: hiragana y katakana (quien empieza de cero); va lo primero
      config        { writing, sentences }: cuántos kanjis y frases por día
    Devuelve { steps: [{ kind, count, done, progress }], next } (next: el primer paso sin hacer). */
 function planToday(s, config) {
   if (!s.placed) return { steps: [{ kind: "placement", count: 1, done: false, progress: 0 }], next: "placement" };
   const steps = [];
+  // Las letras, antes que nada: sin ellas no se lee ni la lectura de una palabra
+  if (s.kana?.show && (s.kana.due + s.kana.fresh > 0 || s.kana.answered > 0)) {
+    steps.push({ kind: "kana", count: s.kana.due + s.kana.fresh, done: s.kana.due + s.kana.fresh === 0, progress: s.kana.answered,
+      due: s.kana.due, fresh: s.kana.fresh });
+  }
   if (s.story.kind !== "none" || s.read) steps.push({ kind: "story", count: 1, done: !!s.read, progress: s.read ? 1 : 0, due: s.story.due || 0 });
   // Repasar está hecho cuando no queda nada que toque (tampoco lo que vuelve en unos
   // minutos: una palabra recién fallada no está repasada) y ya ha respondido algo hoy

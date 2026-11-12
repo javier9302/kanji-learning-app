@@ -117,11 +117,15 @@ async function startAsBeginner() {
     <div class="empty-state">
       ${darumiHTML("appear")}
       <h3>${t("¡Bienvenido! Empezamos por lo más básico")}</h3>
-      <p>${t("En Repasar aprenderás tus primeras palabras: primero te enseñamos cada una, con su lectura en rōmaji, y después te la preguntamos. Cuando sepas unas cuantas, podrás leer textos con ellas.")}</p>
-      <button id="beginnerGoBtn" class="button button-primary" type="button">${t("Aprender mis primeras palabras")}</button>
+      <p>${t("Primero, las letras: el hiragana, una fila cada día. Y en Repasar aprenderás tus primeras palabras: te enseñamos cada una, con su lectura en rōmaji, y después te la preguntamos. Puedes ir haciendo las dos cosas a la vez.")}</p>
+      <div class="row-actions">
+        <button id="beginnerKanaBtn" class="button button-primary" type="button">${t("Aprender hiragana")}</button>
+        <button id="beginnerGoBtn" class="button button-outline" type="button">${t("Aprender mis primeras palabras")}</button>
+      </div>
     </div>`;
   $("beginnerGoBtn").onclick = () => { switchView("study"); startSession(); };
-  $("beginnerGoBtn").focus();
+  $("beginnerKanaBtn").onclick = () => { switchView("kana"); startKana(); };
+  $("beginnerKanaBtn").focus();
 }
 
 async function startPlacement(level) {

@@ -20,10 +20,10 @@ Funciona sin cuenta (todo en IndexedDB); con cuenta sincroniza con Supabase.
 Scripts clásicos (no módulos) que comparten variables globales. El orden de carga de
 `index.html` importa:
 
-`darumi.js` → `config.js` → `i18n.js` → `vendor/ts-fsrs` → `bank/*.js` → `study-config.js` → `learning-core.js`
+`darumi.js` → `config.js` → `i18n.js` → `vendor/ts-fsrs` → `bank/*.js` → `study-config.js` → `kana-core.js` → `learning-core.js`
 → `ja-core.js` → `sentences-core.js` → `capture-core.js` → `kanji-core.js` → `ranking-core.js` → `story-core.js` → `translate-core.js` → `texts.js` → `reading.js`
 → `reading-stats.js` → `reading-sync.js` → `study.js` → `sentences.js` → `translate.js`
-→ `progress.js` → `kanji-table.js` → `proof.js` → `today.js` → `dictionary.js` → `capture.js` → `notify.js` → `app.js` (`progress-core.js` y `grammar-core.js` van justo
+→ `progress.js` → `kanji-table.js` → `proof.js` → `kana.js` → `today.js` → `dictionary.js` → `capture.js` → `notify.js` → `app.js` (`progress-core.js` y `grammar-core.js` van justo
 después de `learning-core.js`)
 
 - **`*-core.js`**: reglas puras, sin DOM ni datos del usuario. Las usan el navegador y Node
@@ -42,6 +42,14 @@ después de `learning-core.js`)
   de frase, `chooseSentence` / `chooseKanjiSentence`.
 - **`texts.js`, `reading*.js`**: textos (IA, comunidad o pegados), lector, nivel de lectura y su sincronización.
 - **`translate*.js`**: sección Traducir, corregida con IA (Edge Function `grade-translation`).
+- **`kana.js` / `kana-core.js`**: hiragana y katakana para quien empieza de cero (por filas, tarjeta
+  FSRS por kana en `meta.kana`, solo en el dispositivo; sin pestaña, se abre desde Hoy).
+- **Revisión del 2026-11-11** (auditoría con plan por etapas): hechas la 1 (lo acertado una vez
+  recibe tarjeta, `pre_known` caduca con `knownRecord`, `pickDue`, registro de repasos en el almacén
+  `reviews`), la 2 (significado en Repasar, `needsMeaningCheck`; palabras en kana con tarjeta,
+  `ensureKanaEntries`; `pickDistractors`), la 3 (kana) y parte de la 4 (`enable_fuzz`, leer cuenta
+  como Bien, `retentionFromLog`). Falta: ajustar los pesos de FSRS con el registro, sincronizar el
+  registro y las kanas, y la etapa 5 (premium comprobado en el servidor, pagos, audio, gramática N4).
 - **`dictionary.js`**: búsqueda por escritura, kana, rōmaji o significado.
 - **`capture.js` / `capture-core.js`**: palabras desde la web (`?add=…`, marcador «+ Kanji»,
   `share_target` de Android). Abre Agregar palabra relleno y guarda la frase como frase del usuario

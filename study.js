@@ -636,6 +636,7 @@ async function renderStudyHome() {
         ? t("Pulsa “Iniciar repaso” para empezar. Primero salen los repasos pendientes y después, como mucho, {n} de tu nivel ({level}).", {
             n: plural(maxNewCards(), "elemento nuevo", "elementos nuevos"), level: userLevel() })
         : t("No queda nada por estudiar ahora. Lee un texto o agrega palabras en “Mis palabras”.")}</p>
+      <p class="helper"><button class="link-btn" data-go="kana" type="button">${t("¿Aún no lees hiragana ni katakana? Apréndelos aquí.")}</button></p>
     </div>
     ${prefs.debugStudy ? debugHTML(fresh, excluded) : ""}`;
 }
