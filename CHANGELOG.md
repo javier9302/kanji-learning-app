@@ -24,7 +24,7 @@ Primera etapa del plan de la revisión del 2026-11-11 («datos de fiar», `1c12c
   meta) y, con la respuesta a la vista, desaparecen «Comprobar» y «No lo sé»: la valoración queda
   más arriba. Antes de la prueba de nivel, la portada va en pequeño para que «Empieza aquí» se vea
   sin desplazarse.
-- **También el significado** (etapa 2): al acertar la lectura de una palabra en un repaso de días,
+- **También el significado** (etapa 2, `0928c0e`): al acertar la lectura de una palabra en un repaso de días,
   si aún no has demostrado qué significa (o hace un mes que no), se pregunta entre cuatro. Si lo
   fallas, la palabra cuenta como fallada, y sin el significado demostrado no pasa a «dominada»
   (antes bastaba con escribir がっこう sin saber que es «escuela»). Se quita en Ajustes → Repaso.
@@ -34,7 +34,7 @@ Primera etapa del plan de la revisión del 2026-11-11 («datos de fiar», `1c12c
 - **«Ya la sé»** al enseñarte una palabra nueva: no se pregunta ahora y vuelve en 30 días para comprobarlo.
 - **Respuestas falsas mejores** en «Comprobar palabras» y en las preguntas de significado: se
   parecen a la buena (un kanji en común, mismo nivel) en vez de salir al azar.
-- **Repasos mejor repartidos y medidos** (etapa 4): los intervalos de más de dos días varían un
+- **Repasos mejor repartidos y medidos** (etapa 4, `b7d2590`): los intervalos de más de dos días varían un
   poco al azar, para que lo aprendido el mismo día no vuelva siempre junto (el botón sigue diciendo
   el día exacto). Leer una palabra que tocaba cuenta como «Bien» con tope en vez de «Difícil», que
   la dejaba con repasos más seguidos para siempre. En Estadísticas, **Retención (30 días)**: de lo
