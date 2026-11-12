@@ -6,7 +6,7 @@ Cómo funciona todo hoy: [docs/COMO-FUNCIONA.md](docs/COMO-FUNCIONA.md).
 
 ## 2026-11-12
 
-- **Audio mejor**: al escuchar una palabra se lee su **lectura**, no su escritura (antes 日 podía
+- **Audio mejor** (`50d0569`): al escuchar una palabra se lee su **lectura**, no su escritura (antes 日 podía
   sonar «nichi» aunque la tarjeta enseñara ひ). Se elige la mejor voz japonesa del dispositivo y, en
   **Ajustes → Repaso**, puedes cambiar la voz y la velocidad (lenta, normal, natural) y probarla. Si
   el dispositivo no tiene voz japonesa, te dice cómo instalarla en Android, iPhone, Windows y Mac.
