@@ -959,7 +959,8 @@ export default async function extra({ page, step, check }) {
           snapshot: Object.keys(meta.snapshots).join() === weekKey() && meta.snapshots[weekKey()].vocab.N5[3] > 0,
           tiles: document.querySelectorAll("#analysisArea .stat-card").length,
           // Gramática: lo traducido bien en Traducir (私は毎朝コーヒーを飲みます) cuenta como entendido
-          grammar: meta.snapshots[weekKey()].grammar?.N5?.[3] === GRAMMAR.length,
+          // Cada nivel del catálogo (N5 y N4) con su total en la foto
+          grammar: ["N5", "N4"].every((level) => meta.snapshots[weekKey()].grammar?.[level]?.[3] === GRAMMAR.filter((point) => point.level === level).length),
           groups: document.querySelectorAll("#analysisArea .grammar-group").length,
           listed: document.querySelectorAll("#analysisArea .grammar-list li").length === GRAMMAR.length
         };

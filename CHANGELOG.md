@@ -63,7 +63,7 @@ Primera etapa del plan de la revisión del 2026-11-11 («datos de fiar», `1c12c
   (se escribe en letras: ka, shi…). Cada kana se repasa con el mismo sistema que las palabras. Sale
   lo primero en Hoy para quien eligió «Empiezo de cero», en su bienvenida y con un enlace en
   Repasar; lleva la tabla entera para consultarla. Su progreso se guarda solo en el dispositivo.
-- Interno: se guarda un registro de cada repaso en el dispositivo (para ajustar más adelante el
+- Interno: la prueba de humo del análisis cuenta la gramática por nivel (N5 y N4); se guarda un registro de cada repaso en el dispositivo (para ajustar más adelante el
   repaso a cada estudiante) y se corrige un número de `docs/COMO-FUNCIONA.md`.
 
 ## 2026-11-02
