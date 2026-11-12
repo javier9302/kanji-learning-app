@@ -872,6 +872,7 @@ const EN = {
   "Estudiados": "Studied",
   "Racha actual": "Current streak",
   "Aciertos (30 días)": "Accuracy (30 days)",
+  "Retención (30 días)": "Retention (30 days)",
   "Repasos de los próximos 14 días": "Reviews in the next 14 days",
   "Tarjetas ya estudiadas que vencen cada día.": "Already studied cards that fall due each day.",
   "Actividad": "Activity",

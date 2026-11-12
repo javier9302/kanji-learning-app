@@ -349,6 +349,11 @@ function renderStats() {
     if (day) { reviews += day.r || 0; correct += day.c || 0; }
   }
   $("statAccuracy").textContent = reviews ? `${Math.round((correct / reviews) * 100)} %` : "—";
+  // Retención: de los repasos de días, los recordados (registro de repasos de este dispositivo)
+  getAll("reviews").then((entries) => {
+    const { rate } = retentionFromLog(entries, Date.now(), STUDY_CONFIG.retention);
+    $("statRetention").textContent = rate === null ? "—" : `${Math.round(rate * 100)} %`;
+  }).catch(() => {});
 
   renderForecast(studied);
   renderHeatmap();

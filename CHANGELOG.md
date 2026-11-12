@@ -34,6 +34,12 @@ Primera etapa del plan de la revisión del 2026-11-11 («datos de fiar», `1c12c
 - **«Ya la sé»** al enseñarte una palabra nueva: no se pregunta ahora y vuelve en 30 días para comprobarlo.
 - **Respuestas falsas mejores** en «Comprobar palabras» y en las preguntas de significado: se
   parecen a la buena (un kanji en común, mismo nivel) en vez de salir al azar.
+- **Repasos mejor repartidos y medidos** (etapa 4): los intervalos de más de dos días varían un
+  poco al azar, para que lo aprendido el mismo día no vuelva siempre junto (el botón sigue diciendo
+  el día exacto). Leer una palabra que tocaba cuenta como «Bien» con tope en vez de «Difícil», que
+  la dejaba con repasos más seguidos para siempre. En Estadísticas, **Retención (30 días)**: de lo
+  que te tocaba repasar tras días sin verlo, cuánto recordaste (el repaso busca un 90 %; aparece
+  a partir de 20 repasos).
 - Interno: se guarda un registro de cada repaso en el dispositivo (para ajustar más adelante el
   repaso a cada estudiante) y se corrige un número de `docs/COMO-FUNCIONA.md`.
 

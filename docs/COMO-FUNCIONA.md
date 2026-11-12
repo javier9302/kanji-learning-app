@@ -391,9 +391,10 @@ palabras que ya conoce o está aprendiendo. En «Palabras y kanjis» se alternan
 - **Leer cuenta como repaso** (`learning-core.js`, `readingCredit`; números en
   `STUDY_CONFIG.readingReview`). Al terminar un texto, cada palabra suya que **tocaba repasar**
   (estudiada en Repasar y con la fecha de hoy o atrasada) cuenta como un repaso:
-  - **sin tocarla**: como «Difícil», y su intervalo crece **como mucho 1,5 veces** (al menos 1 día):
+  - **sin tocarla**: como «Bien», pero su intervalo crece **como mucho 1,5 veces** (al menos 1 día):
     una que volvía a los 10 días y FSRS mandaría a 30 vuelve a los 15. Reconocerla en contexto es
-    más fácil que recordarla en una tarjeta, por eso vale menos;
+    más fácil que recordarla en una tarjeta, por eso vale menos; lo pone el tope y no la valoración
+    («Difícil» sube la dificultad de la tarjeta en FSRS y la dejaba con repasos más seguidos);
   - **tocada** para ver su lectura o significado (o marcada «Nueva»): «Otra vez», vuelve a repaso;
   - **«La conocía, solo comprobaba»**: ni suma ni resta;
   - **con furigana encima** no cuenta (la lectura estaba a la vista), ni dos veces el mismo día, y
@@ -627,6 +628,11 @@ Casi todo lo ajustable está en `study-config.js`: palabras nuevas por sesión, 
 días de dominio, reglas de Escribir y de Traducir. Lo que no:
 
 - 90 % de cobertura de los textos: `COVERAGE_TARGET` en `reading.js`.
+- FSRS (`STUDY_CONFIG.fsrs`): retención buscada (0,9), tope de 365 días, pasos cortos y `enable_fuzz`
+  (los intervalos de más de 2 días varían un poco al azar para repartir los repasos; lo que dice
+  cada botón de valoración es lo que se aplica, `card.previews`). **Retención (30 días)** de
+  Estadísticas: de los repasos de días del registro, los recordados (`retentionFromLog`; no cuenta
+  lo repasado al leer; aparece con 20 repasos, `STUDY_CONFIG.retention`).
 - Cada cuánto se vuelve a preguntar el significado (30 días) y las palabras en kana (una de cada 3
   nuevas, 40 preparadas): `STUDY_CONFIG.meaningCheck` y `STUDY_CONFIG.kanaCards`.
 - Tarjeta de lo acertado una sola vez (prueba de nivel 14 días, «Comprobar palabras» 7, «Ya la sé» 30,
@@ -641,7 +647,7 @@ días de dominio, reglas de Escribir y de Traducir. Lo que no:
 - Hoy: kanjis que escribir (4) y frases que traducir (3) al día: `STUDY_CONFIG.today`.
 - Textos con las palabras que tocan: cuántas (8), con cuántos días de adelanto (2), textos que se
   miran para variar y no repetir (10) y cuándo un texto se repite: `STUDY_CONFIG.stories`.
-- Leer cuenta como repaso: valoración (Difícil), tope de crecimiento (×1,5), días mínimos (1) y
+- Leer cuenta como repaso: valoración (Bien), tope de crecimiento (×1,5), días mínimos (1) y
   tarjeta cada 2 lecturas: `STUDY_CONFIG.readingReview`.
 - Orden de las palabras nuevas: pesos de frecuencia, puente, abre vocabulario, lecturas que faltan
   y tema, la tabla del puente, λ y tamaño de la variedad (MMR) y las filas de la depuración:

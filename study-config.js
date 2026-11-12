@@ -112,11 +112,19 @@ const STUDY_CONFIG = {
 
   /* Leer cuenta como repaso (learning-core.js, sección 3): una palabra que toca
      repasar y sale en un texto terminado.
-       rating          cómo cuenta si no se tocó (Difícil: reconocer es más fácil que recordar)
+       rating          cómo cuenta si no se tocó. Bien, no Difícil: en FSRS «Difícil» sube la
+                       dificultad de la tarjeta, y cada lectura acertada la dejaba para siempre
+                       con repasos más seguidos. Que reconocer valga menos que recordar lo pone
+                       el tope de maxGrowth, no la valoración
        maxGrowth       su intervalo crece como mucho estas veces
        minDays         días mínimos hasta el siguiente repaso
        flashcardEvery  tras estas seguidas leyendo, la siguiente es una tarjeta */
-  readingReview: { rating: "hard", maxGrowth: 1.5, minDays: 1, flashcardEvery: 2 },
+  readingReview: { rating: "good", maxGrowth: 1.5, minDays: 1, flashcardEvery: 2 },
+
+  /* Retención medida (Estadísticas; learning-core.js, retentionFromLog): los
+     repasos de días de los últimos `days` días que se recordaron. Con menos de
+     minReviews no se enseña. */
+  retention: { days: 30, minReviews: 20 },
 
   /* "Ya la domino": días hasta el primer repaso de una palabra agregada así */
   masteredIntervalDays: 60,
@@ -233,12 +241,14 @@ const STUDY_CONFIG = {
        request_retention  probabilidad de recordar que se busca (0.9 = 90 %);
                           más alta = repasos más seguidos
        maximum_interval   tope de días entre dos repasos
+       enable_fuzz        mueve un poco al azar los intervalos de más de 2 días, para que
+                          lo aprendido el mismo día no vuelva siempre junto
        learning_steps     pasos de una palabra nueva antes de pasar a días
        relearning_steps   pasos de una palabra fallada */
   fsrs: {
     request_retention: 0.9,
     maximum_interval: 365,
-    enable_fuzz: false,
+    enable_fuzz: true,
     learning_steps: ["1m", "10m"],
     relearning_steps: ["10m"]
   }

@@ -153,7 +153,7 @@ test("prueba para saltar un nivel: cuenta solo lo escrito sin ayuda y con pocos 
 });
 
 const { readingCredit, readingInterval } = require("../learning-core.js");
-const READ = { rating: "hard", maxGrowth: 1.5, minDays: 1, flashcardEvery: 2 };
+const READ = { rating: "good", maxGrowth: 1.5, minDays: 1, flashcardEvery: 2 };
 
 test("readingCredit: solo cuenta lo que toca repasar; tocarla es Otra vez", () => {
   const day = "2026-10-27";
@@ -329,4 +329,21 @@ test("interleaveEvery: de cada tantas palabras nuevas, una en kana", () => {
   assert.deepEqual(core.interleaveEvery([], ["x"], 3), ["x"]);
   assert.deepEqual(core.interleaveEvery(["a", "b"], ["x"], 0), ["a", "b"], "0 = ninguna en kana");
   assert.deepEqual(core.interleaveEvery(["a", "b"], ["x", "y"], 1), ["x", "y", "a", "b"]);
+});
+
+test("retentionFromLog: solo los repasos de días recientes, y nada con pocos", () => {
+  const now = Date.parse("2026-11-12T10:00:00Z"), DAY = 86400000, R = { days: 30, minReviews: 4 };
+  const row = (rating, extra = {}) => ({ at: now - DAY, kind: "word", state: 2, rating, ...extra });
+  const log = [row(3), row(4), row(2), row(1),
+    row(1, { state: 0 }), row(1, { state: 1 }),          // nuevas y pasos cortos: no miden la memoria de días
+    row(1, { kind: "read" }),                            // al leer: reconocer no es recordar
+    row(1, { at: now - 40 * DAY })];                     // fuera del periodo
+  assert.deepEqual(core.retentionFromLog(log, now, R), { reviews: 4, recalled: 3, rate: 0.75 });
+  assert.equal(core.retentionFromLog(log.slice(0, 3), now, R).rate, null);
+  assert.deepEqual(core.retentionFromLog([], now, R), { reviews: 0, recalled: 0, rate: null });
+});
+
+test("leer cuenta como Bien con tope, no como Difícil (que sube la dificultad en FSRS)", () => {
+  assert.equal(CONFIG.readingReview.rating, "good");
+  assert.ok(CONFIG.readingReview.maxGrowth <= 2);
 });

@@ -98,6 +98,10 @@ const RATING = { again: 1, hard: 2, good: 3, easy: 4 };
 const DAY_MS = 86400000;
 let fsrsInstance = null; // no "scheduler": así se llama una API del propio navegador
 const fsrsScheduler = () => fsrsInstance ??= FSRS.fsrs(FSRS.generatorParameters(STUDY_CONFIG.fsrs));
+/* El mismo, sin variación al azar (enable_fuzz): para la práctica extra, que compara
+   fechas. Con ella, repetir una palabra recién repasada la «alejaba» un día por puro azar. */
+let fsrsExactInstance = null;
+const fsrsExact = () => fsrsExactInstance ??= FSRS.fsrs(FSRS.generatorParameters({ ...STUDY_CONFIG.fsrs, enable_fuzz: false }));
 
 /* Tarjeta FSRS de un registro. Lo repasado antes de FSRS se convierte: el
    intervalo que tenía pasa a ser su estabilidad y la facilidad, su dificultad. */
@@ -116,8 +120,8 @@ function fsrsCard(record, now = new Date()) {
 }
 
 /* Cómo quedaría la tarjeta tras una respuesta, sin modificar nada */
-const nextCard = (record, rating, now = new Date()) =>
-  fsrsScheduler().next(fsrsCard(record, now), now, RATING[rating]).card;
+const nextCard = (record, rating, now = new Date(), scheduler = fsrsScheduler()) =>
+  scheduler.next(fsrsCard(record, now), now, RATING[rating]).card;
 
 /* Una tarjeta con las fechas como texto, para IndexedDB y Supabase */
 const storedCard = (card) => ({
@@ -946,11 +950,16 @@ function showCard() {
     const now = new Date();
     // Debajo de cada botón, cuándo volvería a salir. En la práctica extra, «sin cambios»
     // si la respuesta no la deja para más tarde (extraOutcome).
+    // Lo calculado aquí es lo que se aplica al pulsar (card.previews): con enable_fuzz,
+    // calcularlo otra vez podría dar un día distinto del que dice el botón.
+    card.previews = {};
     const when = (rating) => {
       if (rating === "next") return "";
       const extra = extraOutcome(card, rating, now);
+      const next = extra?.keep ? null : extra?.next || nextCard(card.rec || {}, rating, now);
+      card.previews[rating] = { extra, next };
       if (extra?.keep) return ` · ${t("sin cambios")}`;
-      return ` · ${intervalLabel(extra?.next || nextCard(card.rec || {}, rating, now), now)}`;
+      return ` · ${intervalLabel(next, now)}`;
     };
     area.querySelector(".card").classList.add("answered"); // fuera los botones de responder (style.css)
     if (pick) area.querySelector(".card-sentence").remove(); // abajo va entera, con furigana
@@ -1367,7 +1376,7 @@ function bindShortcuts() {
    { next } (la fecha nueva) o { keep: true } (sin cambios). */
 function extraOutcome(card, rating, now = new Date()) {
   if (card.group !== "extra" || rating === "again" || card.failed || !card.rec) return null;
-  const next = nextCard(card.rec, rating, now);
+  const next = nextCard(card.rec, rating, now, fsrsExact());
   // Por días, como se repasa: comparar milisegundos haría que la misma respuesta
   // «alejara» la palabra o no según el instante exacto en que se pulsa
   return isoDate(new Date(next.due)) > isoDate(new Date(fsrsCard(card.rec, now).due)) ? { next } : { keep: true };
@@ -1422,13 +1431,16 @@ async function gradeCard(card, rating) {
   }
   card.attempts = (card.attempts || 0) + 1;
 
-  const extra = extraOutcome(card, rating);
+  // Lo que decía el botón (reveal), si se valoró desde ellos; si no (un fallo), ahora
+  const preview = card.previews?.[rating];
+  card.previews = null;
+  const extra = preview ? preview.extra : extraOutcome(card, rating);
   const before = fsrsCard(rec);
   if (extra?.keep) {
     rec.studied = true;
     card.logId = logReview(card.kind, card.id, rating, before, before);
   } else {
-    const next = extra?.next || nextCard(rec, rating);
+    const next = extra?.next || preview?.next || nextCard(rec, rating);
     applyCard(rec, next);
     card.logId = logReview(card.kind, card.id, rating, before, next);
     if (staysInSession(next)) {

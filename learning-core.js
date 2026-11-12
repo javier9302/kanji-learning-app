@@ -9,7 +9,8 @@
    3. Leer cuenta como repaso: readingCredit y readingInterval.
    4. Hoy: planToday, la sesión del día.
    5. La sesión de Repasar: nextReadyCard (lo que está en sus pasos cortos espera su hora),
-      pickDue (con atraso, lo más atrasado primero) y reviewEntry (el registro de cada repaso).
+      pickDue (con atraso, lo más atrasado primero), reviewEntry (el registro de cada repaso)
+      y retentionFromLog (cuánto se recuerda de verdad).
    6. Lo dado por sabido sin comprobar: preKnownCounts, knownRecord y backfillDays.
    7. El significado: needsMeaningCheck, pickDistractors y interleaveEvery (palabras en kana).
    Los números (repaso cada cuántos kanjis, tamaño de la prueba…) vienen de
@@ -318,6 +319,20 @@ function reviewEntry({ kind, item, rating, before, after, at }) {
   };
 }
 
+/* Retención medida con el registro: de los repasos de días (tarjetas en estado
+   «repaso», no las nuevas ni los pasos cortos) de los últimos `days` días,
+   cuántos se recordaron (cualquier valoración menos Otra vez). Es lo que FSRS
+   intenta dejar en request_retention (0,9). No cuentan los repasos al leer:
+   reconocer en un texto no es recordar.
+   Devuelve { reviews, recalled, rate }: rate de 0 a 1, o null con menos de
+   minReviews (con pocos, el número engaña). */
+function retentionFromLog(entries, now, { days, minReviews }) {
+  const since = now - days * LC_DAY_MS;
+  const rows = entries.filter((entry) => entry.state === 2 && entry.kind !== "read" && entry.at >= since && entry.at <= now);
+  const recalled = rows.filter((entry) => entry.rating > 1).length;
+  return { reviews: rows.length, recalled, rate: rows.length >= minReviews ? recalled / rows.length : null };
+}
+
 /* =========================================
    6. LO DADO POR SABIDO SIN COMPROBAR
    -----------------------------------------
@@ -428,7 +443,7 @@ if (typeof module !== "undefined") {
   module.exports = {
     kanjiGate, writingLevel, nextWritingKanji, writingRating, writingTestResult, writingTestKanji,
     readingCredit, readingInterval, planToday, nextReadyCard, recordDue,
-    dueTime, pickDue, reviewEntry, preKnownCounts, knownRecord, backfillDays,
+    dueTime, pickDue, reviewEntry, retentionFromLog, preKnownCounts, knownRecord, backfillDays,
     needsMeaningCheck, pickDistractors, interleaveEvery
   };
 }
