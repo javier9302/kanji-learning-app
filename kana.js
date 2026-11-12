@@ -5,8 +5,9 @@
    nueva (あいうえお); después se pregunta cada una y se escribe cómo suena en
    rōmaji. Cada kana tiene su tarjeta FSRS, como las palabras.
 
-   Se guarda en meta.kana = { cards: { あ: tarjeta }, today: { day, fresh, answered } },
-   solo en el dispositivo. Sin pestaña propia: se abre desde Hoy, desde la
+   Se guarda en meta.kana = { cards: { あ: tarjeta }, stamps: { あ: ms }, today: { day, fresh, answered } }.
+   Las tarjetas se sincronizan con la cuenta (tabla kana_cards, reading-sync.js,
+   sección 13); lo de hoy se queda en el dispositivo. Sin pestaña propia: se abre desde Hoy, desde la
    bienvenida de «Empiezo de cero» y desde Repasar, y lleva «← Volver».
    Se carga después de proof.js (usa funciones de study.js).
    ========================================= */
@@ -154,11 +155,13 @@ async function gradeKana(card, correct) {
   const before = kanaCards()[card.id] ? { ...kanaCards()[card.id] } : FSRS.createEmptyCard(now);
   const next = fsrsScheduler().next(before, now, RATING[rating]).card;
   kanaCards()[card.id] = storedCard(next);
+  (meta.kana.stamps ??= {})[card.id] = now.getTime(); // para la sincronización: gana la más reciente
   logReview("kana", card.id, rating, before, next, now.getTime());
   const day = kanaToday();
   meta.kana.today = { day: day.day, fresh: day.fresh + (card.fresh ? 1 : 0), answered: day.answered + 1 };
   if (!correct) kanaRun.missed.add(card.id);
   await saveMeta();
+  scheduleSync();
 }
 
 function endKana() {

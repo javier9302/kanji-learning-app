@@ -398,3 +398,89 @@ function refreshReadingViews() {
   renderAll();
   if (document.body.dataset.view === "read" && !reader && !placement && !evaluation) renderRead();
 }
+
+/* =========================================
+   13. REGISTRO DE REPASOS Y KANAS (Supabase)
+   -----------------------------------------
+   - review_log: el almacén «reviews», que solo crece. Lo que aún no está en el
+     servidor lleva synced: false; al subirlo se marca. Lo que llega de otro
+     dispositivo se guarda ya marcado. Deshacer una valoración borra su fila
+     aquí y allí (deleteReviewEntry).
+   - kana_cards: meta.kana.cards, una tarjeta por kana; gana la más reciente
+     (meta.kana.stamps guarda cuándo cambió cada una).
+   Sin las tablas (falta volver a ejecutar schema.sql) no se sincroniza nada de
+   esto y el resto sigue igual.
+   ========================================= */
+
+async function syncLearningLog(userId) {
+  try {
+    await pullReviewLog(userId);
+    if (sync.user?.id === userId) await pushReviewLog(userId);
+  } catch (error) {
+    if (!tableMissing(error)) console.warn("No se pudo sincronizar el registro de repasos:", error.message || error);
+  }
+  try {
+    await pullKanaCards(userId);
+    if (sync.user?.id === userId) await pushKanaCards(userId);
+  } catch (error) {
+    if (!tableMissing(error)) console.warn("No se pudieron sincronizar las kanas:", error.message || error);
+  }
+}
+
+const REVIEW_COLUMNS = ["id", "at", "kind", "item", "rating", "state", "elapsed", "s", "d", "ivl"];
+
+async function pullReviewLog(userId) {
+  const cursors = sync.config.cursors;
+  const rows = await fetchChanged("review_log", "id", userId, cursors.review_log);
+  if (!rows.length) return;
+  const entries = rows.map((row) => ({ ...Object.fromEntries(REVIEW_COLUMNS.map((key) => [key, row[key]])), at: Number(row.at), synced: true }));
+  await putRecords("reviews", entries);
+  cursors.review_log = rows[rows.length - 1].updated_at;
+}
+
+async function pushReviewLog(userId) {
+  const pending = (await getAll("reviews")).filter((entry) => !entry.synced);
+  if (!pending.length) return;
+  const rows = pending.map((entry) => ({ user_id: userId, ...Object.fromEntries(REVIEW_COLUMNS.map((key) => [key, entry[key]])) }));
+  // Una fila que ya está (subida desde otra pestaña) no se toca: nunca cambia
+  await pushRows("review_log", "user_id,id", rows, [], {}, { ignoreDuplicates: true });
+  await putRecords("reviews", pending.map((entry) => ({ ...entry, synced: true })));
+}
+
+/* Deshacer una valoración: si ya se subió, también se borra en el servidor */
+function deleteReviewEntry(id) {
+  putRecords("reviews", [], [id]).catch(() => {});
+  if (sb && sync.user) sb.from("review_log").delete().eq("user_id", sync.user.id).eq("id", id).then(() => {}, () => {});
+}
+
+async function pullKanaCards(userId) {
+  const cursors = sync.config.cursors, pushed = sync.pushed.kana ??= {};
+  const rows = await fetchChanged("kana_cards", "id", userId, cursors.kana_cards);
+  if (!rows.length) return;
+  const stamps = meta.kana.stamps ??= {};
+  let changed = false;
+  for (const row of rows) {
+    const stamp = Number(row.client_updated_at) || 0;
+    pushed[row.id] = String(stamp);
+    if ((stamps[row.id] || 0) >= stamp || !row.card) continue;
+    kanaCards()[row.id] = row.card;
+    stamps[row.id] = stamp;
+    changed = true;
+  }
+  cursors.kana_cards = rows[rows.length - 1].updated_at;
+  if (changed) {
+    await saveMeta();
+    if (document.body.dataset.view === "kana" && !kanaRun) renderKana();
+  }
+}
+
+async function pushKanaCards(userId) {
+  const pushed = sync.pushed.kana ??= {}, stamps = meta.kana.stamps ??= {};
+  // Las de antes de sincronizar no tenían fecha: cuentan como de ahora
+  let missing = false;
+  for (const id of Object.keys(kanaCards())) if (!stamps[id]) { stamps[id] = Date.now(); missing = true; }
+  if (missing) await saveMeta();
+  const ids = Object.keys(kanaCards()).filter((id) => pushed[id] !== String(stamps[id]));
+  await pushRows("kana_cards", "user_id,id", ids.map((id) => ({ user_id: userId, id, card: kanaCards()[id], client_updated_at: Math.round(stamps[id]) })),
+    ids.map((id) => [id, String(stamps[id])]), pushed);
+}

@@ -176,11 +176,11 @@ async function backfillCheckedCards() {
   return pending.length;
 }
 
-/* Registro de repasos (almacén «reviews», solo en el dispositivo): una línea por
+/* Registro de repasos (almacén «reviews»; con cuenta, tabla review_log): una línea por
    respuesta con la tarjeta de antes y la que quedó (reviewEntry, learning-core.js).
    Si no se puede guardar, el repaso sigue: es un registro, no el progreso. */
 function logReview(kind, item, rating, before, after, at = Date.now()) {
-  const entry = reviewEntry({ kind, item, rating: RATING[rating], before: before && storedCard(before), after, at });
+  const entry = { ...reviewEntry({ kind, item, rating: RATING[rating], before: before && storedCard(before), after, at }), synced: false };
   putRecords("reviews", [entry]).catch((error) => console.warn("No se pudo guardar el registro de repasos:", error));
   return entry.id;
 }
@@ -1312,7 +1312,7 @@ async function undoRating(before) {
     await putRecords(store, [], [card.id]);
   }
   card.rec = before.rec || before.cardRec;
-  if (card.logId) await putRecords("reviews", [], [card.logId]).catch(() => {}); // la respuesta deshecha no queda en el registro
+  if (card.logId) deleteReviewEntry(card.logId); // la respuesta deshecha no queda en el registro (ni aquí ni en la cuenta)
   Object.assign(card, before.cardState, { logId: null });
   if (before.day) meta.days[today()] = before.day; else delete meta.days[today()];
   await saveMeta();

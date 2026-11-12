@@ -558,7 +558,7 @@ const SYNC_BATCH = 500;  // filas por subida
 const SYNC_DEFAULT = { userId: "", cursor: "", daysCursor: "", cursors: {}, lastSync: 0 };
 // Huellas de lo que ya está en el servidor (las de lectura las usa reading.js)
 const blankPushed = () =>
-  ({ days: {}, texts: {}, states: {}, words: {}, kanji: {}, sessions: {}, sentences: {}, translations: {}, snapshots: {}, profile: "" });
+  ({ days: {}, texts: {}, states: {}, words: {}, kanji: {}, sessions: {}, sentences: {}, translations: {}, snapshots: {}, kana: {}, profile: "" });
 
 const accountsReady = typeof SUPABASE_CONFIG === "object" &&
   /^https:\/\/.+/.test(SUPABASE_CONFIG.url) &&
@@ -732,6 +732,8 @@ async function syncNow() {
       if (sync.user?.id === userId) await pushTranslations(userId);
       // La foto semanal del progreso, al final: usa todo lo anterior
       if (sync.user?.id === userId) await syncSnapshots(userId);
+      // El registro de repasos y las kanas (reading-sync.js, sección 13)
+      if (sync.user?.id === userId) await syncLearningLog(userId);
     }
 
     sync.config.lastSync = Date.now();

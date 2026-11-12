@@ -43,13 +43,15 @@ después de `learning-core.js`)
 - **`texts.js`, `reading*.js`**: textos (IA, comunidad o pegados), lector, nivel de lectura y su sincronización.
 - **`translate*.js`**: sección Traducir, corregida con IA (Edge Function `grade-translation`).
 - **`kana.js` / `kana-core.js`**: hiragana y katakana para quien empieza de cero (por filas, tarjeta
-  FSRS por kana en `meta.kana`, solo en el dispositivo; sin pestaña, se abre desde Hoy).
+  FSRS por kana en `meta.kana`, tabla `kana_cards`; sin pestaña, se abre desde Hoy).
 - **Revisión del 2026-11-11** (auditoría con plan por etapas): hechas la 1 (lo acertado una vez
   recibe tarjeta, `pre_known` caduca con `knownRecord`, `pickDue`, registro de repasos en el almacén
   `reviews`), la 2 (significado en Repasar, `needsMeaningCheck`; palabras en kana con tarjeta,
   `ensureKanaEntries`; `pickDistractors`), la 3 (kana) y parte de la 4 (`enable_fuzz`, leer cuenta
-  como Bien, `retentionFromLog`). Falta: ajustar los pesos de FSRS con el registro, sincronizar el
-  registro y las kanas, y la etapa 5 (premium comprobado en el servidor, pagos, audio, gramática N4).
+  como Bien, `retentionFromLog`). Después, el registro y las kanas se sincronizan (tablas
+  `review_log` y `kana_cards`, `syncLearningLog` en `reading-sync.js`). Orden acordado para lo que
+  falta: audio, gramática N4; pagos y premium en el servidor, más adelante; ajustar los pesos de
+  FSRS cuando el registro tenga semanas de datos.
 - **`dictionary.js`**: búsqueda por escritura, kana, rōmaji o significado.
 - **`capture.js` / `capture-core.js`**: palabras desde la web (`?add=…`, marcador «+ Kanji»,
   `share_target` de Android). Abre Agregar palabra relleno y guarda la frase como frase del usuario

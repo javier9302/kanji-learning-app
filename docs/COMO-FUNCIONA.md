@@ -123,11 +123,13 @@ Se guardan en el dispositivo (IndexedDB) y, con cuenta, se sincronizan con Supab
 - `texts`, `words`, `sentences`, `translations`: textos, el diccionario propio, las frases
   sacadas de los textos (y las guardadas de la web, con `source: "web"`, `word` y `url`) y las
   traducciones respondidas.
-- `reviews` (solo en el dispositivo; no se sincroniza): el **registro de repasos**. Una línea por
-  respuesta en Repasar, Escribir o repaso al leer (`reviewEntry`, `learning-core.js`): cuándo, qué
+- `reviews` (con cuenta, tabla `review_log`): el **registro de repasos**. Una línea por
+  respuesta en Repasar, Escribir, Hiragana y katakana o repaso al leer (`reviewEntry`, `learning-core.js`): cuándo, qué
   elemento, la valoración (1 a 4), el estado, la estabilidad y la dificultad de la tarjeta antes de
   responder, los días desde su repaso anterior y a cuántos días queda. Deshacer una valoración quita
-  su línea. Servirá para ajustar FSRS a cada estudiante y medir cuánto recuerda de verdad.
+  su línea, también en el servidor. Mide la retención (Estadísticas) y servirá para ajustar FSRS a
+  cada estudiante. Solo crece: lo no subido lleva `synced: false` y lo que llega de otro dispositivo
+  se guarda ya marcado (`syncLearningLog`, `reading-sync.js`, sección 13).
 - `meta`: historial diario, perfil de lectura (`reading.level`, `reading.assumed`),
   «Lecturas de kanji practicadas» (`practice`, solo en el dispositivo) y niveles de Escribir aprobados.
 - Preferencias (localStorage, por dispositivo): modo, presentación, contenido y número de
@@ -642,7 +644,8 @@ con ゃゅょ pequeña no van: se leen juntando dos que ya se saben.
 - **Dónde sale**: lo primero en Hoy para quien eligió «Empiezo de cero» (sin nada dado por sabido) o
   ya lo empezó, mientras haya algo que hacer; en la bienvenida de «Empiezo de cero»; y con un enlace
   en Repasar. Debajo, la tabla entera con lo empezado marcado.
-- Se guarda en `meta.kana`, **solo en el dispositivo** (no se sincroniza).
+- Se guarda en `meta.kana`. Con cuenta, las tarjetas se sincronizan (tabla `kana_cards`: gana la
+  más reciente de cada kana, `meta.kana.stamps`); las kanas empezadas hoy se cuentan por dispositivo.
 
 ## Dónde cambiar cada número
 
