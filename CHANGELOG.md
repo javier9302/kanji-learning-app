@@ -40,7 +40,7 @@ Primera etapa del plan de la revisión del 2026-11-11 («datos de fiar», `1c12c
   la dejaba con repasos más seguidos para siempre. En Estadísticas, **Retención (30 días)**: de lo
   que te tocaba repasar tras días sin verlo, cuánto recordaste (el repaso busca un 90 %; aparece
   a partir de 20 repasos).
-- **Hiragana y katakana para quien empieza de cero** (etapa 3): una pantalla nueva enseña las
+- **Hiragana y katakana para quien empieza de cero** (etapa 3, `a6cbd1c`): una pantalla nueva enseña las
   letras por filas (あいうえお…), como mucho dos filas nuevas al día, y pregunta cómo suena cada una
   (se escribe en letras: ka, shi…). Cada kana se repasa con el mismo sistema que las palabras. Sale
   lo primero en Hoy para quien eligió «Empiezo de cero», en su bienvenida y con un enlace en
