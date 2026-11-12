@@ -6,7 +6,7 @@ Cómo funciona todo hoy: [docs/COMO-FUNCIONA.md](docs/COMO-FUNCIONA.md).
 
 ## 2026-11-12
 
-- **Gramática de N4** (Análisis, premium): 47 estructuras nuevas (pasiva y causativa, forma
+- **Gramática de N4** (Análisis, premium, `3873174`): 47 estructuras nuevas (pasiva y causativa, forma
   volitiva, たら / ば / と / なら, 〜てしまう, 〜てみる, 〜ておく, 〜そう, 〜ようだ, 〜はず, 〜ながら,
   〜すぎる, あげる / くれる / もらう…), detectadas en lo que lees, repasas y traduces. Cuentan para el
   nivel estimado de gramática y la hoja de ruta las propone cuando terminas N5; en la lista, cada una
