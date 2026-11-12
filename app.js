@@ -3,7 +3,7 @@
    ========================================= */
 
 const DB_NAME = "kanji-learning-app";
-const DB_VERSION = 7; // 5: almacenes sentences y sentenceStats (frases de ejemplo); 6: translations (Traducir); 7: sharedSentences
+const DB_VERSION = 8; // 5: almacenes sentences y sentenceStats (frases de ejemplo); 6: translations (Traducir); 7: sharedSentences; 8: reviews (registro de repasos)
 const LEVELS = ["N5", "N4", "N3", "N2", "N1"];
 
 let db;
@@ -13,7 +13,8 @@ let db;
 // roadmap: { level, words, grammar, updatedAt } la hoja de ruta de la semana (progress.js)
 // summary: { key: "2026-W43:es", text } el resumen de la semana escrito por la IA (progress.js)
 // kanjiProof: { lastDay } el último día que hizo la prueba de kanjis de un nivel (proof.js)
-let meta = { days: {}, deleted: {}, reading: {}, practice: {}, writing: {}, snapshots: {}, roadmap: {}, summary: {}, queue: {}, kanjiProof: {} };
+// kana: { cards: { あ: tarjeta FSRS }, today: { day, fresh, answered } } hiragana y katakana (kana.js)
+let meta = { days: {}, deleted: {}, reading: {}, practice: {}, writing: {}, snapshots: {}, roadmap: {}, summary: {}, queue: {}, kanjiProof: {}, kana: {} };
 let emptyStudyHTML = ""; // mensaje inicial de la pantalla de estudio
 
 const $ = (id) => document.getElementById(id);
@@ -118,6 +119,10 @@ const prefs = loadLocal("kanji-prefs", {
   furigana: "unknown", // furigana al leer: unknown | all | none
   kanjiGroup: "jlpt",  // Mis palabras → Kanjis: jlpt | grade | frequency
   kanjiBoxes: true,    // Repasar, «Palabra sola»: una casilla por kanji al escribir la lectura
+  meaningCheck: true,  // Repasar: al acertar la lectura, a veces se pregunta también el significado
+  autoSpeak: true,     // Leer en voz alta la palabra al enseñar la respuesta (y cada kana)
+  speechRate: 0.9,     // Velocidad de la voz: 0.7 lenta, 0.9 normal, 1 natural
+  voice: "",           // voiceURI de la voz japonesa elegida ("" = la mejor del dispositivo)
   notifyMin: 10,       // Avisos de repaso: avisar cuando se junten tantas palabras (notify.js)
   theme: "auto",       // Apariencia: auto (la del dispositivo) | light | dark
   romaji: true,        // Rōmaji junto a cada lectura en kana: quien empieza aún no lee hiragana
@@ -236,7 +241,7 @@ function formatDate(iso) {
 
 /* Secciones principales y las vistas que agrupa cada una */
 const NAV = {
-  study: ["today", "read", "study", "translate", "draw", "proof"],
+  study: ["today", "read", "study", "translate", "draw", "proof", "kana"],
   library: ["library"],
   words: ["progress", "analysis", "kanji", "add"],
   settings: ["data"],
@@ -252,7 +257,7 @@ let previousView = "today";
 function switchView(name) {
   const group = Object.keys(NAV).find((g) => NAV[g].includes(name));
   const from = document.body.dataset.view;
-  if (from && from !== name && !["proof", "dict"].includes(from)) previousView = from;
+  if (from && from !== name && !["proof", "dict", "kana"].includes(from)) previousView = from;
   lastView[group] = name;
   closeWordPop();
 
@@ -271,6 +276,7 @@ function switchView(name) {
   document.body.dataset.view = name;
   if (name === "today") renderToday();
   if (name === "proof") renderProof();
+  if (name === "kana") renderKana();
   if (name === "read") renderRead();
   if (name === "library") renderLibrary();
   if (name === "study") renderStudyHome();
@@ -280,7 +286,7 @@ function switchView(name) {
   if (name === "analysis") renderAnalysis();
   if (name === "kanji") renderKanjiTable();
   if (name === "add") renderAddWord();
-  if (name === "data") renderDataView();
+  if (name === "data") { renderDataView(); renderVoiceSettings(); }
   if (name === "dict") renderDictionary();
 }
 
@@ -348,6 +354,11 @@ function renderStats() {
     if (day) { reviews += day.r || 0; correct += day.c || 0; }
   }
   $("statAccuracy").textContent = reviews ? `${Math.round((correct / reviews) * 100)} %` : "—";
+  // Retención: de los repasos de días, los recordados (registro de repasos de este dispositivo)
+  getAll("reviews").then((entries) => {
+    const { rate } = retentionFromLog(entries, Date.now(), STUDY_CONFIG.retention);
+    $("statRetention").textContent = rate === null ? "—" : `${Math.round(rate * 100)} %`;
+  }).catch(() => {});
 
   renderForecast(studied);
   renderHeatmap();
@@ -550,7 +561,7 @@ const SYNC_BATCH = 500;  // filas por subida
 const SYNC_DEFAULT = { userId: "", cursor: "", daysCursor: "", cursors: {}, lastSync: 0 };
 // Huellas de lo que ya está en el servidor (las de lectura las usa reading.js)
 const blankPushed = () =>
-  ({ days: {}, texts: {}, states: {}, words: {}, kanji: {}, sessions: {}, sentences: {}, translations: {}, snapshots: {}, profile: "" });
+  ({ days: {}, texts: {}, states: {}, words: {}, kanji: {}, sessions: {}, sentences: {}, translations: {}, snapshots: {}, kana: {}, profile: "" });
 
 const accountsReady = typeof SUPABASE_CONFIG === "object" &&
   /^https:\/\/.+/.test(SUPABASE_CONFIG.url) &&
@@ -724,6 +735,8 @@ async function syncNow() {
       if (sync.user?.id === userId) await pushTranslations(userId);
       // La foto semanal del progreso, al final: usa todo lo anterior
       if (sync.user?.id === userId) await syncSnapshots(userId);
+      // El registro de repasos y las kanas (reading-sync.js, sección 13)
+      if (sync.user?.id === userId) await syncLearningLog(userId);
     }
 
     sync.config.lastSync = Date.now();
@@ -776,6 +789,8 @@ async function clearLocalData() {
   delete meta.practiceMigrated;
   meta.queue = {};
   meta.kanjiProof = {};
+  meta.kana = {};
+  kanaRun = null;
   meta.writing = {};
   meta.snapshots = {};
   meta.roadmap = {};
@@ -1229,6 +1244,12 @@ function bindSettings() {
     prefs.kanjiBoxes = $("kanjiBoxesInput").checked;
     saveLocal("kanji-prefs", prefs);
   });
+  bindVoiceSettings();
+  $("meaningCheckInput").checked = prefs.meaningCheck !== false;
+  $("meaningCheckInput").addEventListener("change", () => {
+    prefs.meaningCheck = $("meaningCheckInput").checked;
+    saveLocal("kanji-prefs", prefs);
+  });
   $("debugStudyInput").checked = !!prefs.debugStudy;
   $("debugStudyInput").addEventListener("change", () => {
     prefs.debugStudy = $("debugStudyInput").checked;
@@ -1275,6 +1296,8 @@ async function init() {
   // Sin conexión en la primera visita puede fallar: la app sigue y lo reintenta al usarlo.
   await BANK.loadUpTo(meta.reading.level || "N5").catch(() => {});
   await migrateOldItems().catch((error) => console.error("Error al migrar el progreso:", error));
+  // Las «dominadas» sin tarjeta (acertadas una vez y nunca repasadas) entran en el repaso
+  await backfillCheckedCards().catch((error) => console.error("Error al dar tarjeta a las palabras dominadas:", error));
 
   emptyStudyHTML = $("studyArea").innerHTML;
   bindNavigation();

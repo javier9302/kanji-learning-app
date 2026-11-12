@@ -94,6 +94,10 @@ const STUDY_CONFIG = {
      escribir y cuántas frases traducir cada día */
   today: { writing: 4, sentences: 3, proofMin: 5 },
 
+  /* Hiragana y katakana (kana-core.js, nextKanaLesson; kana.js): kanas nuevas al
+     día como mucho. Se enseñan por filas enteras (あいうえお): con 10, dos filas. */
+  kana: { newPerDay: 10 },
+
   /* Demostrar los kanjis de un nivel (kanji-core.js, sección 5; proof.js): kanjis
      por prueba como mucho. En Hoy sale cuando hay al menos today.proofMin por demostrar. */
   kanjiProof: { size: 20 },
@@ -112,14 +116,48 @@ const STUDY_CONFIG = {
 
   /* Leer cuenta como repaso (learning-core.js, sección 3): una palabra que toca
      repasar y sale en un texto terminado.
-       rating          cómo cuenta si no se tocó (Difícil: reconocer es más fácil que recordar)
+       rating          cómo cuenta si no se tocó. Bien, no Difícil: en FSRS «Difícil» sube la
+                       dificultad de la tarjeta, y cada lectura acertada la dejaba para siempre
+                       con repasos más seguidos. Que reconocer valga menos que recordar lo pone
+                       el tope de maxGrowth, no la valoración
        maxGrowth       su intervalo crece como mucho estas veces
        minDays         días mínimos hasta el siguiente repaso
        flashcardEvery  tras estas seguidas leyendo, la siguiente es una tarjeta */
-  readingReview: { rating: "hard", maxGrowth: 1.5, minDays: 1, flashcardEvery: 2 },
+  readingReview: { rating: "good", maxGrowth: 1.5, minDays: 1, flashcardEvery: 2 },
+
+  /* Retención medida (Estadísticas; learning-core.js, retentionFromLog): los
+     repasos de días de los últimos `days` días que se recordaron. Con menos de
+     minReviews no se enseña. */
+  retention: { days: 30, minReviews: 20 },
 
   /* "Ya la domino": días hasta el primer repaso de una palabra agregada así */
   masteredIntervalDays: 60,
+
+  /* Acertada una vez sin haberla repasado nunca: entra en el repaso con una
+     tarjeta a estos días, para comprobar que de verdad se sabe (antes quedaba
+     «dominada» sin tarjeta y no volvía a salir).
+       evaluation  «Comprobar palabras», al terminar un texto (acaba de leerla)
+       placement   acertada en la prueba de nivel
+       backfill    las que ya estaban así: repartidas entre min y max días
+       known       «Ya la sé», al enseñarle una palabra nueva en Repasar */
+  checkedIntervalDays: { evaluation: 7, placement: 14, known: 30, backfill: { min: 2, max: 21 } },
+
+  /* El significado en Repasar (learning-core.js, sección 7). Al acertar la lectura
+     en un repaso de días se pregunta también qué significa, entre 4, si aún no lo
+     ha demostrado o hace everyDays que no lo demuestra. Sin el significado
+     demostrado una palabra no pasa a dominada. Se desactiva en Ajustes. */
+  meaningCheck: { everyDays: 30 },
+
+  /* Palabras solo en kana (これ, する, テレビ): se repasan por su significado.
+       every  de cada tantas palabras nuevas, una en kana (0 = ninguna)
+       pool   cuántas de las más frecuentes se preparan cada vez (su significado
+              sale del diccionario general) */
+  kanaCards: { every: 3, pool: 40 },
+
+  /* «Por confirmar» (salió en un texto y no se tocó): cuenta como sabida mientras
+     sea reciente (days desde que se vio por primera vez) o haya salido en
+     minSeen textos sin consultarla nunca (learning-core.js, sección 6) */
+  preKnown: { days: 30, minSeen: 3 },
 
   /* A partir de este intervalo (días) una palabra se da por dominada */
   masteredAtDays: 21,
@@ -207,12 +245,14 @@ const STUDY_CONFIG = {
        request_retention  probabilidad de recordar que se busca (0.9 = 90 %);
                           más alta = repasos más seguidos
        maximum_interval   tope de días entre dos repasos
+       enable_fuzz        mueve un poco al azar los intervalos de más de 2 días, para que
+                          lo aprendido el mismo día no vuelva siempre junto
        learning_steps     pasos de una palabra nueva antes de pasar a días
        relearning_steps   pasos de una palabra fallada */
   fsrs: {
     request_retention: 0.9,
     maximum_interval: 365,
-    enable_fuzz: false,
+    enable_fuzz: true,
     learning_steps: ["1m", "10m"],
     relearning_steps: ["10m"]
   }

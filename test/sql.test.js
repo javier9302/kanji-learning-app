@@ -329,3 +329,46 @@ test("delete_my_account: borra al que llama y todo lo suyo; lo compartido se que
   const shared = (await db.query("select user_id from public.shared_sentences where id = 'ai:borrar'")).rows;
   assert.deepEqual(shared, [{ user_id: null }]);
 });
+
+test("registro de repasos y kanas: una fila por respuesta y una tarjeta por kana; se borran con la cuenta", async () => {
+  const db = await database();
+  const USER = "00000000-0000-0000-0000-0000000000f1";
+  await db.exec(`insert into auth.users (id) values ('${USER}') on conflict do nothing`);
+  const log = (id, kind = "word", rating = 3) => db.query(
+    `insert into public.review_log (user_id, id, at, kind, item, rating, state, elapsed, s, d, ivl)
+     values ($1, $2, 1794400000000, $3, '学校|がっこう', $4, 2, 10.5, 12.35, 5.1, 30)`, [USER, id, kind, rating]);
+  await log("1|word|学校|がっこう");
+  await log("2|kana|あ", "kana", 1);
+  await assert.rejects(log("3|x", "inventado"), /review_log_kind_check/);
+  await assert.rejects(log("4|word", "word", 5), /review_log_rating_check/);
+  await assert.rejects(log("1|word|学校|がっこう"), /duplicate key|review_log_pkey/); // la misma respuesta no se repite
+  const { rows } = await db.query("select kind, rating, s from public.review_log where user_id = $1 order by id", [USER]);
+  assert.deepEqual(rows, [{ kind: "word", rating: 3, s: 12.35 }, { kind: "kana", rating: 1, s: 12.35 }]);
+
+  const kana = (id, card, stamp = 1) => db.query(
+    `insert into public.kana_cards (user_id, id, card, client_updated_at) values ($1, $2, $3::jsonb, $4)
+     on conflict (user_id, id) do update set card = excluded.card, client_updated_at = excluded.client_updated_at`, [USER, id, card, stamp]);
+  await kana("あ", '{"due":"2026-11-13T10:00:00.000Z","stability":1}');
+  await kana("あ", '{"due":"2026-11-15T10:00:00.000Z","stability":3}', 2);
+  assert.equal((await db.query("select count(*)::int as n from public.kana_cards where user_id = $1", [USER])).rows[0].n, 1);
+  await assert.rejects(kana("あい", "{}"), /kana_cards_id_check/);
+  await assert.rejects(kana("い", JSON.stringify({ x: "a".repeat(1001) })), /kana_cards_size_check/);
+  await kana("う", "{}", Date.now() + 365 * 86400000); // reloj adelantado: se limita
+  const stamp = Number((await db.query("select client_updated_at::text as s from public.kana_cards where id = 'う'")).rows[0].s);
+  assert.ok(stamp < Date.now() + 301000);
+
+  // Como usuario con sesión: solo lo suyo
+  const as = (id) => db.exec(`
+    create or replace function auth.uid() returns uuid language sql stable as $$ select ${id ? `'${id}'` : "null"}::uuid $$;
+    create or replace function auth.jwt() returns jsonb language sql stable as $$ select '${id ? '{"role":"authenticated"}' : "{}"}'::jsonb $$;`);
+  try {
+    await as(USER);
+    await db.query("select public.delete_my_account()");
+  } finally {
+    await as(null);
+  }
+  for (const table of ["review_log", "kana_cards"]) {
+    assert.equal((await db.query(`select count(*)::int as n from public.${table} where user_id = $1`, [USER])).rows[0].n, 0, table);
+  }
+  await db.exec(SCHEMA);
+});

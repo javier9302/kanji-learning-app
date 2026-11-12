@@ -8,7 +8,11 @@
    2. Escribir: writingLevel, nextWritingKanji, writingRating y writingTestResult.
    3. Leer cuenta como repaso: readingCredit y readingInterval.
    4. Hoy: planToday, la sesión del día.
-   5. La sesión de Repasar: nextReadyCard (lo que está en sus pasos cortos espera su hora).
+   5. La sesión de Repasar: nextReadyCard (lo que está en sus pasos cortos espera su hora),
+      pickDue (con atraso, lo más atrasado primero), reviewEntry (el registro de cada repaso)
+      y retentionFromLog (cuánto se recuerda de verdad).
+   6. Lo dado por sabido sin comprobar: preKnownCounts, knownRecord y backfillDays.
+   7. El significado: needsMeaningCheck, pickDistractors y interleaveEvery (palabras en kana).
    Los números (repaso cada cuántos kanjis, tamaño de la prueba…) vienen de
    STUDY_CONFIG.
    ========================================= */
@@ -203,6 +207,7 @@ function readingInterval(previousDays, fsrsDays, config) {
    4. HOY
    -----------------------------------------
    La pantalla de inicio junta lo del día en una lista, en este orden:
+     0. hiragana y katakana, para quien empieza de cero o ya los empezó (kana-core.js);
      1. un texto con las palabras que tocan (leerlo las repasa; sección 3);
      2. Repasar: las que siguen tocando después del texto, y las nuevas;
      3. unos kanjis que escribir;
@@ -217,18 +222,28 @@ function readingInterval(previousDays, fsrsDays, config) {
                    puede crear uno; due, cuántas palabras que tocan salen en él
      s.read        ha terminado algún texto hoy
      s.due         tarjetas de Repasar que tocan ahora;  s.fresh  nuevas que saldrían
+     s.waiting     las que están en sus pasos cortos y vuelven en unos minutos
      s.answered    respuestas de hoy en Repasar;  s.goal  la meta diaria
      s.writing     { available, done }: si hay kanji que escribir y cuántos ha escrito hoy
      s.sentences   { available, done }: si hay frases que traducir y cuántas ha traducido hoy
      s.proof       { level, pending, doneToday }: kanjis vistos por demostrar del nivel que toca (o null)
+     s.kana        { show, due, fresh, answered }: hiragana y katakana (quien empieza de cero); va lo primero
      config        { writing, sentences }: cuántos kanjis y frases por día
    Devuelve { steps: [{ kind, count, done, progress }], next } (next: el primer paso sin hacer). */
 function planToday(s, config) {
   if (!s.placed) return { steps: [{ kind: "placement", count: 1, done: false, progress: 0 }], next: "placement" };
   const steps = [];
+  // Las letras, antes que nada: sin ellas no se lee ni la lectura de una palabra
+  if (s.kana?.show && (s.kana.due + s.kana.fresh > 0 || s.kana.answered > 0)) {
+    steps.push({ kind: "kana", count: s.kana.due + s.kana.fresh, done: s.kana.due + s.kana.fresh === 0, progress: s.kana.answered,
+      due: s.kana.due, fresh: s.kana.fresh });
+  }
   if (s.story.kind !== "none" || s.read) steps.push({ kind: "story", count: 1, done: !!s.read, progress: s.read ? 1 : 0, due: s.story.due || 0 });
-  // Repasar está hecho cuando no queda nada que toque y ya ha respondido algo hoy
-  steps.push({ kind: "reviews", count: s.due + s.fresh, done: s.due === 0 && s.answered > 0, progress: s.answered, due: s.due, fresh: s.fresh });
+  // Repasar está hecho cuando no queda nada que toque (tampoco lo que vuelve en unos
+  // minutos: una palabra recién fallada no está repasada) y ya ha respondido algo hoy
+  const waiting = s.waiting || 0;
+  steps.push({ kind: "reviews", count: s.due + s.fresh, done: s.due === 0 && waiting === 0 && s.answered > 0,
+    progress: s.answered, due: s.due, fresh: s.fresh, waiting });
   if (s.writing.available || s.writing.done) {
     steps.push({ kind: "writing", count: config.writing, done: s.writing.done >= config.writing || !s.writing.available, progress: Math.min(s.writing.done, config.writing) });
   }
@@ -270,10 +285,172 @@ function recordDue(record, now, today) {
   return !!record.nextReview && record.nextReview <= today;
 }
 
+const LC_DAY_MS = 86400000;
+
+/* Cuándo venció un registro (ms): su hora si está en los pasos cortos; si no, el
+   principio de su día de repaso. Sin fecha (versión antigua o importado), lo primero. */
+function dueTime(record) {
+  const card = record?.fsrs;
+  if (card?.due && card.scheduled_days === 0) return Date.parse(card.due);
+  return record?.nextReview ? Date.parse(`${record.nextReview}T00:00:00`) : 0;
+}
+
+/* Los repasos pendientes de una sesión. Con más pendientes que sitio (unos días
+   sin estudiar), entran los MÁS ATRASADOS: son los que más cerca están de
+   olvidarse. Antes se barajaban todos y entraba cualquiera. Los elegidos sí se
+   barajan, para que la sesión no salga siempre en el mismo orden.
+     cards  [{ rec }];  count  sitio en la sesión (Infinity = todos)
+     shuffle(lista) -> lista barajada */
+function pickDue(cards, count, shuffle = (list) => list) {
+  const oldest = [...cards].sort((a, b) => dueTime(a.rec) - dueTime(b.rec)).slice(0, Math.max(0, count));
+  return shuffle(oldest);
+}
+
+/* Una línea del registro de repasos: lo mínimo para ajustar FSRS a cada
+   estudiante y medir cuánto recuerda de verdad (con lo que se guardaba, solo la
+   tarjeta final, no se puede).
+     kind    "word" | "kanji" | "write" (Escribir) | "read" (repaso al leer)
+     rating  1 Otra vez … 4 Fácil
+     before  la tarjeta FSRS antes de responder;  after  la que quedó
+   Devuelve { id, at, kind, item, rating, state, elapsed, s, d, ivl }: state, el
+   estado de la tarjeta antes (0 nueva, 1 aprendiendo, 2 repaso, 3 reaprendiendo);
+   elapsed, días desde su repaso anterior; s y d, estabilidad y dificultad de
+   antes; ivl, los días a los que queda. */
+function reviewEntry({ kind, item, rating, before, after, at }) {
+  const last = before?.last_review ? Date.parse(before.last_review) : 0;
+  const round = (value) => Math.round((Number(value) || 0) * 100) / 100;
+  return {
+    id: `${at}|${kind}|${item}`, at, kind, item, rating,
+    state: before?.state || 0, elapsed: last ? round((at - last) / LC_DAY_MS) : 0,
+    s: round(before?.stability), d: round(before?.difficulty), ivl: after?.scheduled_days || 0
+  };
+}
+
+/* Retención medida con el registro: de los repasos de días (tarjetas en estado
+   «repaso», no las nuevas ni los pasos cortos) de los últimos `days` días,
+   cuántos se recordaron (cualquier valoración menos Otra vez). Es lo que FSRS
+   intenta dejar en request_retention (0,9). No cuentan los repasos al leer:
+   reconocer en un texto no es recordar.
+   Devuelve { reviews, recalled, rate }: rate de 0 a 1, o null con menos de
+   minReviews (con pocos, el número engaña). */
+function retentionFromLog(entries, now, { days, minReviews }) {
+  const since = now - days * LC_DAY_MS;
+  const rows = entries.filter((entry) => entry.state === 2 && entry.kind !== "read" && entry.at >= since && entry.at <= now);
+  const recalled = rows.filter((entry) => entry.rating > 1).length;
+  return { reviews: rows.length, recalled, rate: rows.length >= minReviews ? recalled / rows.length : null };
+}
+
+/* =========================================
+   6. LO DADO POR SABIDO SIN COMPROBAR
+   -----------------------------------------
+   Una palabra que salió en un texto y no se tocó queda «por confirmar»
+   (pre_known): seguramente la sabía. Pero no tocarla no lo demuestra, y darla
+   por sabida para siempre hace que los textos se crean más fáciles de lo que
+   son. Cuenta como sabida solo mientras haya algo que lo apoye:
+     - es reciente (config.days desde que se vio por primera vez), o
+     - ha salido en config.minSeen textos terminados y nunca la consultó.
+   Si no, deja de contar hasta que se confirme (Comprobar palabras, Repasar o
+   Traducir). No cambia su estado: solo lo que la app supone.
+   Los números vienen de STUDY_CONFIG.preKnown.
+   ========================================= */
+
+function preKnownCounts(rec, now, config) {
+  if ((rec.seen || 0) >= config.minSeen && !rec.lookups) return true;
+  return now - (rec.firstSeen || 0) <= config.days * LC_DAY_MS;
+}
+
+/* ¿Se da por sabida esta palabra del usuario? Dominada, repasada con la lectura
+   acertada la última vez, o «por confirmar» con algo que lo apoye. */
+function knownRecord(rec, now, config) {
+  if (!rec) return false;
+  if (rec.status === "mastered" || rec.studied && rec.canReadKanji) return true;
+  return rec.status === "pre_known" && preKnownCounts(rec, now, config);
+}
+
+/* Una palabra dada por dominada sin tarjeta (acertada una vez en la prueba de
+   nivel o en «Comprobar palabras») no se repasaba nunca. Al darles tarjeta de
+   golpe a las que ya había, se reparten entre min y max días para que no venzan
+   todas el mismo día: la número 0 a los min días, la siguiente un día después… */
+function backfillDays(index, { min, max }) {
+  return min + (index % (max - min + 1));
+}
+
+/* =========================================
+   7. EL SIGNIFICADO
+   -----------------------------------------
+   Escribir la lectura no prueba que se sepa qué significa: se podía «dominar»
+   学校 → がっこう sin saber que es una escuela. Por eso, en un repaso de días
+   acertado, de vez en cuando se pregunta también el significado entre cuatro.
+   Y las palabras que van solo en kana (これ, する, テレビ), que no tienen lectura
+   que escribir, se repasan por su significado.
+   ========================================= */
+
+/* ¿Toca preguntar el significado de esta palabra? Si aún no lo ha demostrado, o
+   si hace config.everyDays días que no lo demuestra (en Repasar o en Traducir). */
+function needsMeaningCheck(rec, now, config) {
+  if (!rec) return false;
+  if (!rec.knowsMeaning) return true;
+  return now - (rec.lastMeaningAt || 0) >= config.everyDays * LC_DAY_MS;
+}
+
+/* Las respuestas falsas de una pregunta entre varias. Al azar del todo se
+   descartaban solas (para 学生, «gato» y «rápido»); salen primero las que se
+   parecen: comparten un kanji (学校), son del mismo nivel o del mismo largo.
+   Pero sin pasarse: como mucho UNA que comparta kanji, y ninguna cuya etiqueta
+   comparta una palabra con la buena («estudiante» y «estudiante universitario»
+   para 学生 serían dos respuestas casi iguales, y fallar no diría nada).
+     target   { id, w, kanji, level }
+     pool     [{ id, w, kanji, level }]
+     label(entry)  lo que se enseña como opción ("" = no sirve)
+     random   para que las pruebas sean repetibles
+   Devuelve hasta count entradas, sin repetir etiqueta ni la del target. */
+function pickDistractors(target, pool, { count = 3, label, random = Math.random }) {
+  const mine = new Set(target.kanji || []), used = new Set([label(target)]);
+  const scored = [];
+  for (const entry of pool) {
+    if (entry.id === target.id || !label(entry)) continue;
+    const shared = (entry.kanji || []).filter((c) => mine.has(c)).length;
+    scored.push({ entry, score: shared * 2 + (entry.level && entry.level === target.level ? 1 : 0) +
+      ([...(entry.w || "")].length === [...(target.w || "")].length ? 0.5 : 0) + random() });
+  }
+  scored.sort((a, b) => b.score - a.score);
+  const terms = (text) => String(text).toLowerCase().split(/[\s,;()\/]+/).filter((term) => term.length >= 4);
+  const taken = new Set(terms(label(target)));
+  const picked = [];
+  let sharing = 0;
+  for (const { entry } of scored) {
+    if (picked.length === count) break;
+    const text = label(entry), shares = (entry.kanji || []).some((c) => mine.has(c));
+    if (used.has(text) || terms(text).some((term) => taken.has(term)) || shares && sharing >= 1) continue;
+    used.add(text);
+    if (shares) sharing++;
+    picked.push(entry);
+  }
+  return picked;
+}
+
+/* Mezcla dos listas en orden: cada `every` elementos, uno de la segunda
+   (con 3: a, a, b, a, a, b…). Cuando una se acaba, sigue la otra. Con every
+   menor que 1, solo la primera. Para las palabras nuevas en kana. */
+function interleaveEvery(main, other, every) {
+  if (!(every >= 1)) return [...main];
+  const out = [];
+  let i = 0, j = 0;
+  while (i < main.length || j < other.length) {
+    const turn = out.length % every === every - 1;
+    if ((turn || i >= main.length) && j < other.length) out.push(other[j++]);
+    else if (i < main.length) out.push(main[i++]);
+    else break;
+  }
+  return out;
+}
+
 /* Para las pruebas (Node); en el navegador son globales */
 if (typeof module !== "undefined") {
   module.exports = {
     kanjiGate, writingLevel, nextWritingKanji, writingRating, writingTestResult, writingTestKanji,
-    readingCredit, readingInterval, planToday, nextReadyCard, recordDue
+    readingCredit, readingInterval, planToday, nextReadyCard, recordDue,
+    dueTime, pickDue, reviewEntry, retentionFromLog, preKnownCounts, knownRecord, backfillDays,
+    needsMeaningCheck, pickDistractors, interleaveEvery
   };
 }

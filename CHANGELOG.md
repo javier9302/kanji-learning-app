@@ -4,6 +4,68 @@ Lo que cambia para quien usa la app, el más reciente primero. Cada cambio añad
 el mismo commit. El detalle técnico está en el mensaje de cada commit (`git show <commit>`).
 Cómo funciona todo hoy: [docs/COMO-FUNCIONA.md](docs/COMO-FUNCIONA.md).
 
+## 2026-11-12
+
+- **Gramática de N4** (Análisis, premium, `3873174`): 47 estructuras nuevas (pasiva y causativa, forma
+  volitiva, たら / ば / と / なら, 〜てしまう, 〜てみる, 〜ておく, 〜そう, 〜ようだ, 〜はず, 〜ながら,
+  〜すぎる, あげる / くれる / もらう…), detectadas en lo que lees, repasas y traduces. Cuentan para el
+  nivel estimado de gramática y la hoja de ruta las propone cuando terminas N5; en la lista, cada una
+  dice su nivel. Además, 〜てもいい y 〜てはいけない ya no se confunden con 〜なくてもいい y
+  〜なくてはいけない.
+- **Audio mejor** (`50d0569`): al escuchar una palabra se lee su **lectura**, no su escritura (antes 日 podía
+  sonar «nichi» aunque la tarjeta enseñara ひ). Se elige la mejor voz japonesa del dispositivo y, en
+  **Ajustes → Repaso**, puedes cambiar la voz y la velocidad (lenta, normal, natural) y probarla. Si
+  el dispositivo no tiene voz japonesa, te dice cómo instalarla en Android, iPhone, Windows y Mac.
+  La palabra se oye sola al enseñártela y al ver la respuesta, y cada kana al responderla (se quita
+  en Ajustes). En el lector, 🔊 junto a la lectura de la palabra tocada. Si el navegador falla al
+  leer, la tarjeta sigue.
+- **El registro de repasos y las kanas se sincronizan** con tu cuenta (`97ccc1c`): la retención de
+  Estadísticas cuenta lo repasado en todos tus dispositivos, y el hiragana y katakana siguen donde
+  los dejaste en otro. Hay que volver a ejecutar `supabase/schema.sql` (crea `review_log` y
+  `kana_cards`; pasos en `SETUP.md`).
+
+Primera etapa del plan de la revisión del 2026-11-11 («datos de fiar», `1c12cd7`).
+
+- **Lo que aciertas una vez ya se repasa**: una palabra acertada en la prueba de nivel o en
+  «Comprobar palabras» quedaba «dominada» sin tarjeta y no volvía a salir nunca. Ahora entra en el
+  repaso (a los 14 y a los 7 días) para comprobar que de verdad la sabes. Las que ya tenías así
+  reciben su tarjeta al abrir la app, repartidas entre 2 y 21 días para que no venzan todas juntas.
+- **«Por confirmar» ya no es para siempre**: una palabra que salió en un texto y no tocaste cuenta
+  como sabida mientras sea reciente (30 días) o haya salido en 3 textos sin consultarla. Si no, deja
+  de contar (para elegir textos y para lo que se le dice a la IA) hasta que la confirmes. Puede que
+  algún texto te salga ahora como algo más difícil: es más fiel a lo que sabes.
+- **Con repasos atrasados, primero los más atrasados**: si tienes más pendientes que preguntas por
+  sesión, entran los que llevan más tiempo esperando (antes, cualquiera al azar).
+- **Hoy no da Repasar por hecho** mientras queden palabras recién aprendidas o falladas que vuelven
+  en unos minutos, y lo dice.
+- **Repasar en el móvil**: durante la sesión solo se ve la tarjeta (sin el título, la racha ni la
+  meta) y, con la respuesta a la vista, desaparecen «Comprobar» y «No lo sé»: la valoración queda
+  más arriba. Antes de la prueba de nivel, la portada va en pequeño para que «Empieza aquí» se vea
+  sin desplazarse.
+- **También el significado** (etapa 2, `0928c0e`): al acertar la lectura de una palabra en un repaso de días,
+  si aún no has demostrado qué significa (o hace un mes que no), se pregunta entre cuatro. Si lo
+  fallas, la palabra cuenta como fallada, y sin el significado demostrado no pasa a «dominada»
+  (antes bastaba con escribir がっこう sin saber que es «escuela»). Se quita en Ajustes → Repaso.
+- **Las palabras en kana ya se repasan** (これ, する, テレビ…): de cada 3 palabras nuevas, una va
+  solo en kana y se pregunta su significado entre cuatro. Primero las que agregaste o buscaste y
+  después las más frecuentes. Las acertadas en «Comprobar palabras» también entran en el repaso.
+- **«Ya la sé»** al enseñarte una palabra nueva: no se pregunta ahora y vuelve en 30 días para comprobarlo.
+- **Respuestas falsas mejores** en «Comprobar palabras» y en las preguntas de significado: se
+  parecen a la buena (un kanji en común, mismo nivel) en vez de salir al azar.
+- **Repasos mejor repartidos y medidos** (etapa 4, `b7d2590`): los intervalos de más de dos días varían un
+  poco al azar, para que lo aprendido el mismo día no vuelva siempre junto (el botón sigue diciendo
+  el día exacto). Leer una palabra que tocaba cuenta como «Bien» con tope en vez de «Difícil», que
+  la dejaba con repasos más seguidos para siempre. En Estadísticas, **Retención (30 días)**: de lo
+  que te tocaba repasar tras días sin verlo, cuánto recordaste (el repaso busca un 90 %; aparece
+  a partir de 20 repasos).
+- **Hiragana y katakana para quien empieza de cero** (etapa 3, `a6cbd1c`): una pantalla nueva enseña las
+  letras por filas (あいうえお…), como mucho dos filas nuevas al día, y pregunta cómo suena cada una
+  (se escribe en letras: ka, shi…). Cada kana se repasa con el mismo sistema que las palabras. Sale
+  lo primero en Hoy para quien eligió «Empiezo de cero», en su bienvenida y con un enlace en
+  Repasar; lleva la tabla entera para consultarla. Su progreso se guarda solo en el dispositivo.
+- Interno: la prueba de humo del análisis cuenta la gramática por nivel (N5 y N4); se guarda un registro de cada repaso en el dispositivo (para ajustar más adelante el
+  repaso a cada estudiante) y se corrige un número de `docs/COMO-FUNCIONA.md`.
+
 ## 2026-11-02
 
 - **Primera pregunta de una palabra nueva**: justo después de enseñártela ya no hay que elegir

@@ -9,6 +9,7 @@ mismo commit que cambie cualquiera de estas reglas. Los cambios, con fecha, est�
 | Sección | Qué hace |
 |---|---|
 | **Hoy** (pantalla de inicio) | La sesión del día en una lista: un texto con las palabras que tocan, Repasar, unos kanjis que escribir y unas frases que traducir. Cada paso abre su sección. |
+| **Hiragana y katakana** (sin pestaña) | Las letras, para quien empieza de cero: por filas, con repaso espaciado. Se abre desde Hoy, la bienvenida de «Empiezo de cero» y Repasar (apartado 15). |
 | **Leer** | Textos en japonés (generados por IA, de la comunidad o pegados) con furigana según el nivel. Tocar una palabra enseña su lectura y su significado. Al terminar, «Comprobar palabras»: unas preguntas cortas sobre las palabras del texto. Sin cuenta, el texto de ejemplo y lo pegado en Biblioteca (la IA necesita cuenta). |
 | **Repasar** | Repaso espaciado (FSRS) de palabras y kanjis. Modo «Escribir la lectura» o «Tarjetas»; presentación «Palabra sola» o «En una frase». |
 | **Traducir** | El usuario traduce frases de sus textos y lo corrige la IA (o él mismo con la traducción de referencia). Mide si entiende el significado; no mueve el calendario de repaso. |
@@ -70,7 +71,7 @@ La vista previa del enlace (título, descripción e icono) sale de las etiquetas
 | `vendor/jmdict/common-<fecha>.json` | Diccionario general: palabras comunes que no están en el banco | `tools/build-dictionary.mjs` desde JMdict | No |
 | `bank/sentences/<nivel>.json` | Frases comunes de ejemplo, con traducción: de Tatoeba (aprobadas por la IA, con su autor) y de IA | `tools/import-tatoeba.mjs` (Tatoeba, CC BY 2.0 FR) y `tools/generate-sentences.mjs` (IA por tandas) | No |
 | Tabla `shared_sentences` (Supabase) | Frases compartidas por todos: las propias de un administrador, las de historias que se usaron y las que escribió la IA para palabras sin frase | La app: Ajustes → Frases propias y al repasar «En una frase» | Se borran en admin.html → Frases |
-| `grammar-core.js` (`GRAMMAR`) | Catálogo de gramática: 56 estructuras de N5 (partículas, です/ます y sus formas, forma て, 〜たい, 〜から…), cada una con su regla de detección y un ejemplo | Escrito a mano sobre el análisis de kuromoji | Sí: cada estructura nueva lleva su ejemplo en `test/grammar.test.js` |
+| `grammar-core.js` (`GRAMMAR`) | Catálogo de gramática: 56 estructuras de N5 (partículas, です/ます y sus formas, forma て, 〜たい, 〜から…) y 47 de N4 (pasiva, causativa, volitiva, condicionales たら/ば/と/なら, 〜てしまう/みる/おく, 〜そう, 〜ようだ, 〜はず, 〜ながら…), cada una con su regla de detección y un ejemplo | Escrito a mano sobre el análisis de kuromoji | Sí: cada estructura nueva lleva su ejemplo en `test/grammar.test.js` |
 | `kanji-data.js` | Modelo antiguo; ya no se carga, solo sirve para migrar datos viejos | — | No |
 
 Tamaño del banco:
@@ -83,8 +84,8 @@ Tamaño del banco:
 | N2 | 1.347 | 428 |
 | N1 | 2.461 | 1.053 |
 
-Las palabras marcadas «casi siempre en kana» (有る → ある) no se repasan como tarjeta: se aprenden
-leyendo, y a la IA se le piden en kana.
+Las palabras marcadas «casi siempre en kana» (有る → ある) no se repasan por su lectura (a la IA se le
+piden en kana): se repasan **por su significado**, como las demás palabras en kana (apartado 4).
 
 ### Datos del usuario
 
@@ -122,6 +123,13 @@ Se guardan en el dispositivo (IndexedDB) y, con cuenta, se sincronizan con Supab
 - `texts`, `words`, `sentences`, `translations`: textos, el diccionario propio, las frases
   sacadas de los textos (y las guardadas de la web, con `source: "web"`, `word` y `url`) y las
   traducciones respondidas.
+- `reviews` (con cuenta, tabla `review_log`): el **registro de repasos**. Una línea por
+  respuesta en Repasar, Escribir, Hiragana y katakana o repaso al leer (`reviewEntry`, `learning-core.js`): cuándo, qué
+  elemento, la valoración (1 a 4), el estado, la estabilidad y la dificultad de la tarjeta antes de
+  responder, los días desde su repaso anterior y a cuántos días queda. Deshacer una valoración quita
+  su línea, también en el servidor. Mide la retención (Estadísticas) y servirá para ajustar FSRS a
+  cada estudiante. Solo crece: lo no subido lleva `synced: false` y lo que llega de otro dispositivo
+  se guarda ya marcado (`syncLearningLog`, `reading-sync.js`, sección 13).
 - `meta`: historial diario, perfil de lectura (`reading.level`, `reading.assumed`),
   «Lecturas de kanji practicadas» (`practice`, solo en el dispositivo) y niveles de Escribir aprobados.
 - Preferencias (localStorage, por dispositivo): modo, presentación, contenido y número de
@@ -157,7 +165,8 @@ sabría leer ni las opciones; lleva a Repasar a aprender sus primeras palabras) 
 nivel**: 20 preguntas del nivel elegido (el 40 % del nivel anterior), con la lectura de cada opción
 también en rōmaji. Cinco seguidas sin saberlas la terminan antes (`PLACEMENT_STOP`). Con un 70 % o
 más se aprueba. Las acertadas quedan como sabidas; las que no sabía **no se apuntan** (ni como
-fallo): saldrán como nuevas. De ahí salen dos datos:
+fallo): saldrán como nuevas. Las acertadas entran en el repaso con una tarjeta a **14 días**
+(`STUDY_CONFIG.checkedIntervalDays.placement`): acertarla una vez entre cuatro opciones no basta. De ahí salen dos datos:
 
 - **Nivel de lectura**: el de los textos que se proponen. Si no se aprueba, un nivel menos.
 - **Nivel supuesto**: todo el vocabulario de ese nivel y de los anteriores se da por conocido.
@@ -165,6 +174,17 @@ fallo): saldrán como nuevas. De ahí salen dos datos:
 Después manda lo que el usuario demuestra: una palabra fallada deja de contar como conocida
 aunque sea de un nivel supuesto, y una acertada cuenta aunque sea de un nivel superior
 (`knownLemmas`, `reading.js`).
+
+**«Por confirmar»** (`pre_known`): al terminar un texto, sus palabras sin progreso quedan así. Cuenta
+como sabida (para la cobertura de los textos y las listas del prompt) solo mientras algo lo apoye
+(`knownRecord` / `preKnownCounts`, `learning-core.js`, sección 6; números en `STUDY_CONFIG.preKnown`):
+es reciente (**30 días** desde que se vio por primera vez) o ha salido en **3 textos** terminados sin
+consultarla nunca. Si no, deja de contar hasta que se confirme: en «Comprobar palabras» (al terminar
+un texto, 8 palabras), en Repasar (sale como palabra nueva «vista en una lectura») o en Traducir. Su
+estado no cambia. Una palabra acertada en «Comprobar palabras» pasa a dominada **y entra en el
+repaso** con una tarjeta a **7 días** (`checkedIntervalDays.evaluation`; también las de kana con significado). Cualquier palabra dominada
+con kanji que no tenga tarjeta la recibe al abrir la app, repartidas entre 2 y 21 días
+(`backfillCheckedCards`, `study.js`).
 
 ### 2. Palabras nuevas en Repasar (`study.js` + `learning-core.js` + `ranking-core.js`)
 
@@ -196,6 +216,7 @@ aunque sea de un nivel supuesto, y una acertada cuenta aunque sea de un nivel su
   («lectura nueva めい de 名 · kanji nuevo 有 · frecuencia n.º 900»). Va con la respuesta porque
   cuenta la lectura.
 - Como mucho **5 nuevas por sesión** (se cambia en Ajustes). Los repasos pendientes salen antes y no cuentan.
+  Con más pendientes que preguntas por sesión entran **los más atrasados** (`pickDue`), barajados entre sí.
 - **Pasos cortos**: una palabra nueva o fallada vuelve en la misma sesión a los 1 o 10 minutos
   (FSRS), pero **no antes de su hora**: mientras espera salen las demás y, si solo quedan las que
   esperan, la sesión dice cuándo vuelven («Vuelven dentro de 9 min») y deja terminar; sale sola al
@@ -223,6 +244,22 @@ palabras que ya conoce o está aprendiendo. En «Palabras y kanjis» se alternan
 ### 4. Cómo se pregunta en Repasar
 
 - **Tarjetas**: palabra o kanji; el usuario ve la respuesta y se puntúa (Otra vez / Difícil / Bien / Fácil).
+- **El significado** (`needsMeaningCheck`, `learning-core.js`, sección 7; `STUDY_CONFIG.meaningCheck`): al
+  acertar la lectura de una palabra en un repaso de días (no en los pasos cortos ni en la práctica
+  extra), si aún no ha demostrado su significado o hace **30 días** que no lo demuestra (aquí o en
+  Traducir), se pregunta «¿Y qué significa?» entre cuatro. Fallarlo cuenta como Otra vez. En una
+  frase no se pregunta si tiene la traducción abierta. En «Tarjetas» el significado está a la vista
+  al valorarse, así que la propia valoración cuenta. **Sin el significado demostrado una palabra no
+  pasa a dominada.** Se desactiva en Ajustes → Repaso (`prefs.meaningCheck`).
+- **Palabras en kana** (`ensureKanaEntries`, `newKanaCandidates`, `study.js`; `STUDY_CONFIG.kanaCards`):
+  no tienen lectura que escribir, así que se pregunta su significado entre cuatro (en «Tarjetas»,
+  como cualquier tarjeta). Son las del banco marcadas «casi siempre en kana» de su nivel y las **40**
+  más frecuentes de `BANK.kanaByFrequency` que aún no repasa, con el significado del diccionario
+  general (las que no lo tienen no salen). De cada **3** palabras nuevas, una es en kana: primero las
+  agregadas a mano, las buscadas en el diccionario y las marcadas al leer; después por frecuencia.
+- **Respuestas falsas** (`pickDistractors`): las tres que más se parecen a la buena (un kanji en
+  común, mismo nivel, mismo largo), pero como mucho una que comparta kanji y ninguna cuyo
+  significado comparta una palabra con el bueno. Igual en «Comprobar palabras» al terminar un texto.
 - Debajo de cada botón de valoración va su tecla (1 a 4) y cuándo volvería a salir con esa
   respuesta («3 · 57 d»); en la práctica extra, «sin cambios» si esa respuesta no la aleja.
 - **Escribir la lectura + Palabra sola**: la palabra; se escribe su lectura en hiragana. Solo palabras.
@@ -245,7 +282,17 @@ palabras que ya conoce o está aprendiendo. En «Palabras y kanjis» se alternan
 - **Palabra nueva**: la primera vez que sale en una sesión se **enseña antes de preguntarla**
   (escritura, lectura con rōmaji, significado, sus kanjis y «También sale en»). Con «Ya la he
   visto» pasa dos tarjetas más atrás (o enseguida, si es la única) y entonces se pregunta. No cuenta
-  como respuesta.
+  como respuesta. Con **«Ya la sé»** no se pregunta: queda dominada y entra en el repaso a los
+  **30 días** (`checkedIntervalDays.known`) para comprobarlo.
+- **Audio** (`speak`, `study.js`): la voz japonesa del dispositivo (gratis, sin conexión). Se usa
+  la que se eligió en Ajustes → Repaso (`prefs.voice`) o la mejor que haya (`rankJapaneseVoices`,
+  `ja-core.js`: primero las neuronales —Online (Natural), Premium, Mejorada—, luego las de Google,
+  luego las de cada sistema; nunca las de juguete), a la velocidad elegida (`prefs.speechRate`:
+  0,7 / 0,9 / 1). De una palabra se lee **su lectura en kana**, no la escritura (con 日 la voz
+  elegiría sola entre ひ, にち y か); de una frase, la frase. Con «Leer en voz alta la palabra al
+  enseñar la respuesta» (`prefs.autoSpeak`, activado) suena sola al enseñar una palabra nueva, al
+  ver la respuesta y al responder cada kana. Sin voz japonesa se avisa una vez y Ajustes explica
+  cómo instalarla. En el lector, 🔊 junto a la lectura de la palabra tocada.
 - **Rōmaji**: junto a cada lectura en kana (respuestas, prueba de nivel, Demostrar, lector y
   diccionario), con `kanaToRomaji` (`ja-core.js`, Hepburn: がっこう gakkou, まっちゃ matcha). Se quita en
   Ajustes → Repaso. Al escribir la lectura se puede teclear en rōmaji (WanaKana la convierte), y la
@@ -260,12 +307,14 @@ palabras que ya conoce o está aprendiendo. En «Palabras y kanjis» se alternan
   sección 6 de `kanji-core.js`). Salen del banco de todos los niveles que estén cargados.
 - En la práctica extra, «sin cambios» se decide por días: una respuesta aleja la palabra solo si
   su nuevo día de repaso es posterior al que ya tenía.
-- **Durante una sesión** solo se ve la tarjeta (los ajustes vuelven al terminar) y debajo,
+- **Durante una sesión** solo se ve la tarjeta (los ajustes vuelven al terminar; en el móvil tampoco
+  el título, la racha ni la meta; con la respuesta a la vista se quitan «Comprobar» y «No lo sé») y debajo,
   «Terminar la sesión»: lo respondido queda guardado y lo que falta sale en la próxima.
 - **Deshacer**: tras valorar una tarjeta, durante 8 segundos sale «Deshacer» encima de la siguiente.
   Vuelve la palabra (o el kanji) a como estaba, la sesión al punto anterior y la respuesta del día
   se descuenta. Lo anotado en las casillas de cada kanji no se deshace.
-- Una palabra se da por **dominada** con 3 aciertos seguidos en días distintos o un intervalo de 21 días o más.
+- Una palabra se da por **dominada** con 3 aciertos seguidos en días distintos o un intervalo de 21 días o más,
+  y con su significado demostrado (arriba).
 
 ### 5. Frases de ejemplo (`sentences.js` + `sentences-core.js`)
 
@@ -354,9 +403,10 @@ palabras que ya conoce o está aprendiendo. En «Palabras y kanjis» se alternan
 - **Leer cuenta como repaso** (`learning-core.js`, `readingCredit`; números en
   `STUDY_CONFIG.readingReview`). Al terminar un texto, cada palabra suya que **tocaba repasar**
   (estudiada en Repasar y con la fecha de hoy o atrasada) cuenta como un repaso:
-  - **sin tocarla**: como «Difícil», y su intervalo crece **como mucho 1,5 veces** (al menos 1 día):
+  - **sin tocarla**: como «Bien», pero su intervalo crece **como mucho 1,5 veces** (al menos 1 día):
     una que volvía a los 10 días y FSRS mandaría a 30 vuelve a los 15. Reconocerla en contexto es
-    más fácil que recordarla en una tarjeta, por eso vale menos;
+    más fácil que recordarla en una tarjeta, por eso vale menos; lo pone el tope y no la valoración
+    («Difícil» sube la dificultad de la tarjeta en FSRS y la dejaba con repasos más seguidos);
   - **tocada** para ver su lectura o significado (o marcada «Nueva»): «Otra vez», vuelve a repaso;
   - **«La conocía, solo comprobaba»**: ni suma ni resta;
   - **con furigana encima** no cuenta (la lectura estaba a la vista), ni dos veces el mismo día, y
@@ -442,8 +492,9 @@ esta semana); un resumen de la semana escrito por la IA, y la vista del profesor
   - *dominada*: la tradujo bien en 2 días distintos;
   - si su última traducción fue mala (también «No lo sé») no cuenta como dominada ni, por las
     traducciones, como entendida.
-  El nivel estimado de gramática cuenta dominadas y entendidas, con el mismo umbral del 80 %. Solo
-  hay catálogo de N5 por ahora. El análisis descarga el analizador de japonés si hace falta (unos
+  El nivel estimado de gramática cuenta dominadas y entendidas, con el mismo umbral del 80 %. Hay
+  catálogo de N5 y N4: el de N4 cuenta cuando el de N5 está completo, como en vocabulario; la hoja de
+  ruta propone las de N4 después y la lista de Análisis dice el nivel de cada una. El análisis descarga el analizador de japonés si hace falta (unos
   18 MB la primera vez); al sincronizar no se descarga, y la foto conserva la gramática de esa semana.
 - **Lectura**: textos leídos (en total y en 30 días), qué % conoce hoy de sus 5 últimos textos y
   cuántas palabras consulta por cada 100 que lee. **Constancia**: días activos y aciertos en los
@@ -554,6 +605,7 @@ ya descargado).
 La pantalla con la que se abre la app (si quedó un texto a medias al recargar, se vuelve a él).
 Junta lo del día en este orden, y el siguiente paso sin hacer va resaltado:
 
+0. **Hiragana y katakana**, para quien empieza de cero o ya los empezó (apartado 15).
 1. **Leer un texto**: el suyo a medias o el recomendado (el que tiene más palabras que tocan); sin
    ninguno y con cuenta, crear uno con IA, que llevará las palabras que tocan. Leerlo las repasa.
 2. **Repasar**: las que siguen tocando después del texto y hasta las palabras nuevas por sesión.
@@ -563,7 +615,7 @@ Junta lo del día en este orden, y el siguiente paso sin hacer va resaltado:
 5. **Demostrar kanjis** del nivel que toca, si hay al menos 5 vistos por demostrar (sección 12).
 
 No guarda nada propio: lo hecho se deduce de lo de hoy (un texto terminado hoy; nada que toque en
-Repasar y alguna respuesta hoy; kanjis escritos hoy; traducciones de hoy). Un paso sin nada que
+Repasar, tampoco palabras en sus pasos cortos que vuelven en unos minutos, y alguna respuesta hoy; kanjis escritos hoy; traducciones de hoy). Un paso sin nada que
 hacer (sin texto posible, sin kanjis o sin frases) no sale. Sin la prueba de nivel (o «Empiezo de cero»), solo sale
 ella. Encima, cuántas respuestas lleva de su meta diaria.
 
@@ -584,13 +636,44 @@ El aviso sustituye al anterior sin apilarse y al tocarlo se abre la app. Lo que 
 dispositivo sin sincronizar todavía no se descuenta. En iPhone y iPad solo funciona con la app en la
 pantalla de inicio. Cerrar sesión quita la suscripción del dispositivo.
 
+### 15. Hiragana y katakana (`kana.js` + `kana-core.js`)
+
+Para quien empieza de cero. La tabla (`kanaRows`): 71 hiragana y 71 katakana por filas, primero el
+hiragana entero (las 46 básicas y después las de ゛ y ゜) y luego el katakana igual. Las combinaciones
+con ゃゅょ pequeña no van: se leen juntando dos que ya se saben.
+
+- **Una lección** (`nextKanaLesson`): primero las kanas cuya tarjeta venció (la más atrasada antes)
+  y después **una fila nueva entera**, la primera con alguna sin empezar, si hoy no ha empezado ya
+  **10** (`STUDY_CONFIG.kana.newPerDay`: dos filas al día).
+- La fila nueva **se enseña antes** (cada kana con su sonido; tocarla la lee en voz alta) y luego se
+  pregunta cada una: se escribe cómo suena **en letras** (`kanaAnswerOk`: vale shi o si, chi o ti,
+  tsu o tu, fu o hu, ji o zi, o / wo para を, y la propia kana con teclado japonés).
+- Cada kana tiene su **tarjeta FSRS** (`meta.kana.cards`): acertar a la primera es «Bien» y fallar,
+  «Otra vez»; la fallada vuelve al final de la lección hasta que sale, sin volver a valorarse. Cada
+  respuesta va al registro de repasos (`kind: "kana"`).
+- **Dónde sale**: lo primero en Hoy para quien eligió «Empiezo de cero» (sin nada dado por sabido) o
+  ya lo empezó, mientras haya algo que hacer; en la bienvenida de «Empiezo de cero»; y con un enlace
+  en Repasar. Debajo, la tabla entera con lo empezado marcado.
+- Se guarda en `meta.kana`. Con cuenta, las tarjetas se sincronizan (tabla `kana_cards`: gana la
+  más reciente de cada kana, `meta.kana.stamps`); las kanas empezadas hoy se cuentan por dispositivo.
+
 ## Dónde cambiar cada número
 
 Casi todo lo ajustable está en `study-config.js`: palabras nuevas por sesión, pesos del orden,
 días de dominio, reglas de Escribir y de Traducir. Lo que no:
 
 - 90 % de cobertura de los textos: `COVERAGE_TARGET` en `reading.js`.
-- Escribir: kanjis nuevos al día (10), cada cuántos nuevos uno sin ver (4) y los fallos que
+- FSRS (`STUDY_CONFIG.fsrs`): retención buscada (0,9), tope de 365 días, pasos cortos y `enable_fuzz`
+  (los intervalos de más de 2 días varían un poco al azar para repartir los repasos; lo que dice
+  cada botón de valoración es lo que se aplica, `card.previews`). **Retención (30 días)** de
+  Estadísticas: de los repasos de días del registro, los recordados (`retentionFromLog`; no cuenta
+  lo repasado al leer; aparece con 20 repasos, `STUDY_CONFIG.retention`).
+- Cada cuánto se vuelve a preguntar el significado (30 días) y las palabras en kana (una de cada 3
+  nuevas, 40 preparadas): `STUDY_CONFIG.meaningCheck` y `STUDY_CONFIG.kanaCards`.
+- Tarjeta de lo acertado una sola vez (prueba de nivel 14 días, «Comprobar palabras» 7, «Ya la sé» 30,
+  las que ya había entre 2 y 21) y cuándo cuenta una palabra «por confirmar» (30 días o 3 textos):
+  `STUDY_CONFIG.checkedIntervalDays` y `STUDY_CONFIG.preKnown`.
+- Escribir: kanjis nuevos al día (10), cada cuántos nuevos uno sin ver (0 = nunca) y los fallos que
   perdona la valoración (1) o con los que cuenta como Otra vez (3 de más): `STUDY_CONFIG.writing`.
 - Análisis: umbral para dar un nivel por completo (80 %), textos recientes que se miran (5) y
   cuándo una estructura cuenta como entendida (3 lecturas sin consultar) o dominada (2 días), y las
@@ -599,7 +682,7 @@ días de dominio, reglas de Escribir y de Traducir. Lo que no:
 - Hoy: kanjis que escribir (4) y frases que traducir (3) al día: `STUDY_CONFIG.today`.
 - Textos con las palabras que tocan: cuántas (8), con cuántos días de adelanto (2), textos que se
   miran para variar y no repetir (10) y cuándo un texto se repite: `STUDY_CONFIG.stories`.
-- Leer cuenta como repaso: valoración (Difícil), tope de crecimiento (×1,5), días mínimos (1) y
+- Leer cuenta como repaso: valoración (Bien), tope de crecimiento (×1,5), días mínimos (1) y
   tarjeta cada 2 lecturas: `STUDY_CONFIG.readingReview`.
 - Orden de las palabras nuevas: pesos de frecuencia, puente, abre vocabulario, lecturas que faltan
   y tema, la tabla del puente, λ y tamaño de la variedad (MMR) y las filas de la depuración:

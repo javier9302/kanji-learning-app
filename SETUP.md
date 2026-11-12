@@ -270,6 +270,12 @@ foto semanal se sincronice entre dispositivos, **vuelve a ejecutar `supabase/sch
 `progress_snapshots`; los administradores pueden leer las de todos). Sin la tabla, el análisis
 funciona igual con las fotos del dispositivo.
 
+**Registro de repasos y kanas:** para que el registro de cada respuesta (con el que se mide la
+retención) y las tarjetas de hiragana y katakana se sincronicen entre dispositivos, **vuelve a
+ejecutar `supabase/schema.sql`** (crea `review_log` y `kana_cards`, cada usuario solo ve lo suyo y
+se borran con su cuenta). `review_log` admite 3000 filas nuevas por usuario y día. Sin las tablas,
+todo funciona igual en cada dispositivo.
+
 **Resumen de la semana con IA y vista del profesor:**
 
 1. **Vuelve a ejecutar `supabase/schema.sql`**: crea `progress_summaries` (un resumen por usuario,

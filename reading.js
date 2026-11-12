@@ -14,7 +14,10 @@
               ("" = ninguno). Evita guardar miles de filas pre_known.
    ========================================= */
 
-const KNOWN_STATUS = new Set(["mastered", "pre_known"]);
+/* ¿Se da por sabida? Dominada, repasada con la lectura acertada, o «por confirmar»
+   con algo que lo apoye (reciente o vista varias veces sin consultarla):
+   knownRecord, learning-core.js, sección 6 */
+const isKnownWord = (rec, now = Date.now()) => knownRecord(rec, now, STUDY_CONFIG.preKnown);
 const COVERAGE_TARGET = 90;   // % mínimo de palabras conocidas para proponer un texto
 const HARD_RATIO = 0.15;      // palabras marcadas como no conocidas a partir de las que el texto es difícil
 const PLACEMENT_SIZE = 20;
@@ -32,8 +35,9 @@ function knownLemmas() {
     for (const word of levelVocabulary(level)) known.add(word.w);
   }
   // Lo que el usuario ha demostrado (leyendo o estudiando) manda sobre lo supuesto
+  const now = Date.now();
   for (const word of userWords.values()) {
-    if (KNOWN_STATUS.has(word.status) || word.studied && word.canReadKanji) known.add(word.lemma);
+    if (isKnownWord(word, now)) known.add(word.lemma);
     else known.delete(word.lemma);
   }
   return known;
@@ -43,7 +47,7 @@ function knownLemmas() {
    por nivel: se da por conocida mientras el usuario no la marque al leer. */
 function isKnownKey(key, known) {
   const mine = userWords.get(key);
-  if (mine) return KNOWN_STATUS.has(mine.status) || !!(mine.studied && mine.canReadKanji);
+  if (mine) return isKnownWord(mine);
   const lemma = key.split("|")[0];
   return known.has(lemma) || !/\p{Script=Han}/u.test(lemma);
 }
@@ -113,11 +117,15 @@ async function startAsBeginner() {
     <div class="empty-state">
       ${darumiHTML("appear")}
       <h3>${t("¡Bienvenido! Empezamos por lo más básico")}</h3>
-      <p>${t("En Repasar aprenderás tus primeras palabras: primero te enseñamos cada una, con su lectura en rōmaji, y después te la preguntamos. Cuando sepas unas cuantas, podrás leer textos con ellas.")}</p>
-      <button id="beginnerGoBtn" class="button button-primary" type="button">${t("Aprender mis primeras palabras")}</button>
+      <p>${t("Primero, las letras: el hiragana, una fila cada día. Y en Repasar aprenderás tus primeras palabras: te enseñamos cada una, con su lectura en rōmaji, y después te la preguntamos. Puedes ir haciendo las dos cosas a la vez.")}</p>
+      <div class="row-actions">
+        <button id="beginnerKanaBtn" class="button button-primary" type="button">${t("Aprender hiragana")}</button>
+        <button id="beginnerGoBtn" class="button button-outline" type="button">${t("Aprender mis primeras palabras")}</button>
+      </div>
     </div>`;
   $("beginnerGoBtn").onclick = () => { switchView("study"); startSession(); };
-  $("beginnerGoBtn").focus();
+  $("beginnerKanaBtn").onclick = () => { switchView("kana"); startKana(); };
+  $("beginnerKanaBtn").focus();
 }
 
 async function startPlacement(level) {
@@ -220,6 +228,8 @@ async function finishPlacement() {
   for (const { word } of known) {
     const mine = blankUserWord(word.lemma, word.reading);
     Object.assign(mine, { status: "mastered", canReadKanji: true, knowsMeaning: true, evalCorrect: 1 });
+    // Acertarla una vez no basta: entra en el repaso para comprobarlo dentro de unos días
+    giveCheckedCard(mine, STUDY_CONFIG.checkedIntervalDays.placement);
     userWords.set(mine.id, mine);
     if (!words.has(mine.id)) {
       const entry = { id: mine.id, lemma: mine.lemma, reading: mine.reading, meanings: word.en,
@@ -408,7 +418,7 @@ async function promptParams({ type, topic, length, cast, avoid = [] }) {
     ({ lemma, reading: readingOf.get(lemma) || BANK.byWriting.get(lemma)?.[0].r, status: statusOf.get(lemma) }));
   let assumed = [];
   if (known.length > PROMPT_WORD_LIMIT) {
-    known = [...userWords.values()].filter((w) => KNOWN_STATUS.has(w.status)).map(item).slice(0, PROMPT_WORD_LIMIT);
+    known = [...userWords.values()].filter((w) => isKnownWord(w)).map(item).slice(0, PROMPT_WORD_LIMIT);
     assumed = assumedLevels();
   }
   // Palabras solo en kana: no se estudian como tarjeta, así que se aprenden
@@ -1016,7 +1026,8 @@ function panelHTML() {
   const current = reader.clicks.get(tokenKey(token));
   return `${close}
     <div class="pop-word" lang="ja">${escapeHTML(token.surface)}</div>
-    <div class="pop-reading"><span lang="ja">${escapeHTML(token.reading)}</span>${romajiHTML(token.reading)}</div>
+    <div class="pop-reading"><span lang="ja">${escapeHTML(token.reading)}</span>${romajiHTML(token.reading)}${"speechSynthesis" in window
+      ? ` <button class="link-btn" type="button" data-panel-speak="${escapeHTML(token.reading)}" title="${t("Escuchar")}" aria-label="${t("Escuchar")}">🔊</button>` : ""}</div>
     ${token.lemma !== token.surface ? `<p class="pop-lemma">${t("Forma de diccionario")}:
       <span lang="ja">${escapeHTML(token.lemma)}（${escapeHTML(entry.reading)}）</span></p>` : ""}
     <p class="meaning">${escapeHTML(meanings.join(", "))}</p>
@@ -1370,17 +1381,12 @@ function renderEvaluation() {
   const kind = steps[step];
   const label = kind === "reading" ? (e) => e.reading : entryGloss;
 
-  // Respuestas falsas: otras palabras del diccionario con respuesta distinta
-  const seenLabels = new Set([label(entry)]);
-  const wrong = [];
-  for (const other of shuffle([...words.values()])) {
-    if (wrong.length === 3) break;
-    if (kind === "reading" && !/\p{Script=Han}/u.test(other.lemma)) continue;
-    const text = label(other);
-    if (!text || seenLabels.has(text)) continue;
-    seenLabels.add(text);
-    wrong.push(other);
-  }
+  // Respuestas falsas: otras palabras del diccionario con respuesta distinta, primero las
+  // que se parecen (comparten un kanji, mismo nivel o largo: pickDistractors, learning-core.js).
+  // Al azar del todo se descartaban solas y acertar no decía nada.
+  const shape = (own) => ({ id: own.id, w: own.lemma, kanji: kanjiOf(own.lemma), level: BANK.words.get(own.id)?.level || null, own });
+  const pool = [...words.values()].filter((other) => kind !== "reading" || /\p{Script=Han}/u.test(other.lemma)).map(shape);
+  const wrong = pickDistractors(shape(entry), pool, { count: 3, label: (item) => label(item.own) }).map((item) => item.own);
   const options = shuffle([entry, ...wrong]);
 
   $("readArea").innerHTML = `
@@ -1439,7 +1445,13 @@ async function finishEvaluation() {
       canReadKanji: reading,
       knowsMeaning: result.meaning
     });
-    if (passed) { word.evalCorrect++; mastered++; } else word.evalWrong++;
+    if (passed) {
+      word.evalCorrect++;
+      mastered++;
+      // Acaba de leerla: acertarla ahora no dice si la sabrá la semana que viene. Con
+      // tarjeta vuelve a salir; sin ella quedaba «dominada» y no se repasaba nunca.
+      giveCheckedCard(word, STUDY_CONFIG.checkedIntervalDays.evaluation, new Date(), { kana: true });
+    } else word.evalWrong++;
     word.updatedAt = Date.now();
   }
   await putRecords("userWords", queue.map(({ word }) => word));
@@ -1497,6 +1509,7 @@ function bindReader() {
       return showPanel(same ? null : { kind: "sentence", s });
     }
     if (pick("[data-panel-close]")) return showPanel(null);
+    if (pick("[data-panel-speak]")) return speak(pick("[data-panel-speak]").dataset.panelSpeak);
     if (pick("[data-class]")) return classifyWord(pick("[data-class]").dataset.class);
     if (pick("[data-furigana]")) {
       prefs.furigana = $("furiganaSelect").value = pick("[data-furigana]").dataset.furigana;

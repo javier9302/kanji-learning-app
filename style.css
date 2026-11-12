@@ -3695,7 +3695,21 @@ body:not([data-view="today"]) .intro {
 
 @media (max-width: 600px) {
   body.placed .intro { display: none; }
+  /* Antes de la prueba, la portada en pequeño: «Empieza aquí» tiene que verse sin desplazarse */
+  .intro { padding: 0 0 12px; }
+  .intro .eyebrow, .intro-copy { display: none; }
+  .intro h1 { font-size: 26px; letter-spacing: -.5px; }
+  /* En una sesión, en el móvil, solo la tarjeta: el título, la racha y la meta ya
+     están en Hoy, y empujaban la respuesta fuera de la pantalla */
+  body.studying #view-study > .section-heading,
+  body.studying #view-study > .today-strip { display: none; }
 }
+
+/* Con la respuesta a la vista sobran los botones de responder y la ayuda del
+   rōmaji: lo escrito se queda (para compararlo) y la valoración sube */
+.card.answered #checkBtn,
+.card.answered #unknownBtn,
+.card.answered .romaji-hint { display: none; }
 
 /* Rōmaji junto a la lectura en kana (prefs.romaji) */
 .romaji {
@@ -3816,3 +3830,63 @@ footer {
   font-size: 14px;
   box-shadow: var(--shadow-pop);
 }
+
+/* Hiragana y katakana (kana.js): la fila nueva y la tabla entera */
+.kana-teach {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.kana-cell {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm, 8px);
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+}
+
+.kana-cell b {
+  font: 400 20px var(--font-study, inherit);
+  color: var(--ink-muted, var(--muted));
+}
+
+.kana-cell small {
+  font-size: 12px;
+}
+
+.kana-cell.kana-known { border-color: var(--line-strong); }
+.kana-cell.kana-known b { color: var(--ink, inherit); font-weight: 700; }
+
+button.kana-cell { cursor: pointer; }
+.kana-big { min-width: 58px; min-height: 72px; border-color: var(--line-strong); }
+.kana-big b { font-size: 34px; color: var(--ink, inherit); }
+.kana-big small { font-size: 14px; }
+
+.kana-table { margin-top: 16px; }
+.kana-table h4 { margin: 14px 0 6px; }
+.kana-chart { display: grid; gap: 4px; }
+.kana-chart-row { display: flex; flex-wrap: wrap; gap: 4px; }
+
+/* Análisis → gramática: el nivel de cada estructura (N5, N4) */
+.grammar-level { color: var(--muted); font-size: 12px; margin-left: 4px; }
+
+/* Ajustes → Repaso: voz y velocidad en una fila (en el móvil se apilan) */
+.voice-settings {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px;
+  margin-top: 10px;
+}
+.voice-settings .field { flex: 1 1 160px; }
+.voice-settings select { width: 100%; }

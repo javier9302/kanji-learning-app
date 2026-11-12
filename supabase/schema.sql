@@ -1323,3 +1323,89 @@ end;
 $$;
 revoke all on function public.delete_my_account() from public, anon;
 grant execute on function public.delete_my_account() to authenticated;
+
+-- =========================================
+-- REGISTRO DE REPASOS Y KANAS
+-- =========================================
+
+-- Una fila por respuesta en Repasar, Escribir, Hiragana y katakana o repaso al
+-- leer (reviewEntry, learning-core.js): cuándo, qué elemento, la valoración y
+-- la tarjeta FSRS de antes. Sirve para medir la retención de verdad y, más
+-- adelante, ajustar FSRS a cada estudiante. Solo se añade: una fila nunca
+-- cambia (deshacer una valoración la borra). id = "<at>|<kind>|<item>".
+-- Unos 100 bytes por fila: 100 respuestas al día son unos 3,5 MB al año.
+create table if not exists public.review_log (
+  user_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  id text not null check (char_length(id) <= 200),
+  at bigint not null,
+  kind text not null check (kind in ('word', 'kanji', 'write', 'read', 'kana')),
+  item text not null check (char_length(item) <= 120),
+  rating smallint not null check (rating between 1 and 4),
+  state smallint not null default 0 check (state between 0 and 3),
+  elapsed real not null default 0,
+  s real not null default 0,
+  d real not null default 0,
+  ivl integer not null default 0,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  primary key (user_id, id)
+);
+
+create index if not exists review_log_user_updated_idx on public.review_log (user_id, updated_at);
+
+drop trigger if exists review_log_set_updated_at on public.review_log;
+create trigger review_log_set_updated_at
+  before insert or update on public.review_log
+  for each row execute function public.set_updated_at();
+
+-- Más que esto al día no lo hace una persona estudiando
+drop trigger if exists review_log_daily_limit on public.review_log;
+create trigger review_log_daily_limit before insert on public.review_log
+  for each row execute function public.limit_daily_inserts('3000');
+
+-- Las tarjetas de hiragana y katakana (kana.js): una por kana y usuario. Gana la
+-- de client_updated_at más reciente, como las palabras.
+create table if not exists public.kana_cards (
+  user_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  id text not null check (char_length(id) = 1),
+  card jsonb not null,
+  client_updated_at bigint not null default 0,
+  updated_at timestamptz not null default now(),
+  primary key (user_id, id),
+  constraint kana_cards_size_check check (octet_length(card::text) <= 1000)
+);
+
+create index if not exists kana_cards_user_updated_idx on public.kana_cards (user_id, updated_at);
+
+drop trigger if exists kana_cards_set_updated_at on public.kana_cards;
+create trigger kana_cards_set_updated_at
+  before insert or update on public.kana_cards
+  for each row execute function public.set_updated_at();
+
+drop trigger if exists kana_cards_clamp_clock on public.kana_cards;
+create trigger kana_cards_clamp_clock
+  before insert or update on public.kana_cards
+  for each row execute function public.clamp_client_clock();
+
+-- Cada usuario solo ve y modifica lo suyo
+do $$
+declare tbl text;
+begin
+  foreach tbl in array array['review_log', 'kana_cards'] loop
+    execute format('alter table public.%I enable row level security', tbl);
+    execute format('revoke all on public.%I from anon', tbl);
+    execute format('grant select, insert, update, delete on public.%I to authenticated', tbl);
+    execute format('drop policy if exists %I on public.%I', tbl || '_select_own', tbl);
+    execute format('create policy %I on public.%I for select to authenticated
+      using ((select auth.uid()) = user_id)', tbl || '_select_own', tbl);
+    execute format('drop policy if exists %I on public.%I', tbl || '_insert_own', tbl);
+    execute format('create policy %I on public.%I for insert to authenticated
+      with check ((select auth.uid()) = user_id)', tbl || '_insert_own', tbl);
+    execute format('drop policy if exists %I on public.%I', tbl || '_update_own', tbl);
+    execute format('create policy %I on public.%I for update to authenticated
+      using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id)', tbl || '_update_own', tbl);
+    execute format('drop policy if exists %I on public.%I', tbl || '_delete_own', tbl);
+    execute format('create policy %I on public.%I for delete to authenticated
+      using ((select auth.uid()) = user_id)', tbl || '_delete_own', tbl);
+  end loop;
+end $$;

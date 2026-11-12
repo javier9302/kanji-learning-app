@@ -153,7 +153,7 @@ test("prueba para saltar un nivel: cuenta solo lo escrito sin ayuda y con pocos 
 });
 
 const { readingCredit, readingInterval } = require("../learning-core.js");
-const READ = { rating: "hard", maxGrowth: 1.5, minDays: 1, flashcardEvery: 2 };
+const READ = { rating: "good", maxGrowth: 1.5, minDays: 1, flashcardEvery: 2 };
 
 test("readingCredit: solo cuenta lo que toca repasar; tocarla es Otra vez", () => {
   const day = "2026-10-27";
@@ -234,4 +234,129 @@ test("recordDue: las de días, desde su día; las de minutos, desde su hora", ()
   assert.equal(recordDue({ ...days, nextReview: "2026-10-31" }, now, "2026-10-30"), false);
   assert.equal(recordDue({ studied: false, nextReview: "2026-10-01" }, now, "2026-10-30"), false);
   assert.equal(recordDue({ studied: true, nextReview: "2026-10-29" }, now, "2026-10-30"), true); // sin tarjeta FSRS
+});
+
+/* ---------- Etapa «datos de fiar»: atraso, registro y lo dado por sabido ---------- */
+
+test("planToday: lo que vuelve en unos minutos no deja Repasar como hecho", () => {
+  const base = { placed: true, story: { kind: "none" }, read: false, due: 0, fresh: 0, answered: 5,
+    writing: { available: false, done: 0 }, sentences: { available: false, done: 0 }, proof: null };
+  assert.equal(planToday({ ...base, waiting: 0 }, CONFIG.today).steps[0].done, true);
+  const plan = planToday({ ...base, waiting: 3 }, CONFIG.today);
+  assert.equal(plan.steps[0].done, false);
+  assert.equal(plan.steps[0].waiting, 3);
+  assert.equal(plan.next, "reviews");
+});
+
+test("pickDue: con más pendientes que sitio entran los más atrasados", () => {
+  const card = (id, nextReview, fsrs) => ({ id, rec: { nextReview, fsrs } });
+  const cards = [card("ayer", "2026-11-10"), card("hace un mes", "2026-10-10"), card("hoy", "2026-11-11"),
+    card("paso corto", "2026-11-11", { due: "2026-11-11T09:00:00.000Z", scheduled_days: 0 }), card("sin fecha", "")];
+  assert.deepEqual(core.pickDue(cards, 3).map((c) => c.id), ["sin fecha", "hace un mes", "ayer"]);
+  // Con sitio para todos, todos; y se barajan los elegidos, no los que entran
+  assert.equal(core.pickDue(cards, Infinity).length, 5);
+  assert.deepEqual(core.pickDue(cards, 2, (list) => [...list].reverse()).map((c) => c.id), ["hace un mes", "sin fecha"]);
+  assert.deepEqual(core.pickDue(cards, 0), []);
+});
+
+test("reviewEntry: la tarjeta de antes y a cuántos días queda", () => {
+  const at = Date.parse("2026-11-11T10:00:00Z");
+  const before = { state: 2, stability: 12.3456, difficulty: 5.1, last_review: "2026-11-01T10:00:00.000Z" };
+  assert.deepEqual(core.reviewEntry({ kind: "word", item: "学校|がっこう", rating: 3, before, after: { scheduled_days: 30 }, at }),
+    { id: `${at}|word|学校|がっこう`, at, kind: "word", item: "学校|がっこう", rating: 3, state: 2, elapsed: 10, s: 12.35, d: 5.1, ivl: 30 });
+  // Una tarjeta nueva: sin repaso anterior
+  const fresh = core.reviewEntry({ kind: "write", item: "日", rating: 1, before: { state: 0, last_review: null }, after: { scheduled_days: 0 }, at });
+  assert.deepEqual([fresh.state, fresh.elapsed, fresh.s, fresh.ivl], [0, 0, 0, 0]);
+});
+
+test("por confirmar: cuenta como sabida solo si es reciente o salió varias veces sin consultarla", () => {
+  const P = CONFIG.preKnown, DAY = 86400000, now = Date.parse("2026-11-11T10:00:00Z");
+  const rec = (extra) => ({ status: "pre_known", seen: 1, lookups: 0, firstSeen: now, ...extra });
+  assert.equal(core.knownRecord(rec(), now, P), true, "recién vista");
+  assert.equal(core.knownRecord(rec({ firstSeen: now - (P.days + 1) * DAY }), now, P), false, "vieja y vista una vez");
+  assert.equal(core.knownRecord(rec({ firstSeen: now - 200 * DAY, seen: P.minSeen }), now, P), true, "vieja, pero ha salido varias veces sin tocarla");
+  assert.equal(core.knownRecord(rec({ firstSeen: now - 200 * DAY, seen: 9, lookups: 1 }), now, P), false, "la consultó: verla más veces no lo demuestra");
+  // Lo demostrado no caduca; lo desconocido no cuenta nunca
+  assert.equal(core.knownRecord({ status: "mastered", firstSeen: 0 }, now, P), true);
+  assert.equal(core.knownRecord({ status: "learning", studied: true, canReadKanji: true }, now, P), true);
+  assert.equal(core.knownRecord({ status: "learning", studied: true, canReadKanji: false }, now, P), false);
+  assert.equal(core.knownRecord({ status: "unknown" }, now, P), false);
+  assert.equal(core.knownRecord(undefined, now, P), false);
+});
+
+test("backfillDays: las dominadas sin tarjeta se reparten, no vencen todas el mismo día", () => {
+  const range = CONFIG.checkedIntervalDays.backfill;
+  const days = Array.from({ length: 100 }, (_, i) => core.backfillDays(i, range));
+  assert.equal(Math.min(...days), range.min);
+  assert.equal(Math.max(...days), range.max);
+  const perDay = Math.max(...Object.values(Object.groupBy(days, (d) => d)).map((list) => list.length));
+  assert.ok(perDay <= Math.ceil(100 / (range.max - range.min + 1)));
+});
+
+/* ---------- El significado y las palabras en kana ---------- */
+
+test("needsMeaningCheck: si no lo ha demostrado, o hace tiempo que no", () => {
+  const M = CONFIG.meaningCheck, DAY = 86400000, now = Date.parse("2026-11-12T10:00:00Z");
+  assert.equal(core.needsMeaningCheck({ knowsMeaning: false }, now, M), true);
+  assert.equal(core.needsMeaningCheck({ knowsMeaning: true, lastMeaningAt: now - DAY }, now, M), false);
+  assert.equal(core.needsMeaningCheck({ knowsMeaning: true, lastMeaningAt: now - (M.everyDays + 1) * DAY }, now, M), true);
+  assert.equal(core.needsMeaningCheck({ knowsMeaning: true }, now, M), true, "lo sabía, pero nunca se le preguntó aquí");
+  assert.equal(core.needsMeaningCheck(null, now, M), false, "una palabra nueva: aún no hay nada que comprobar");
+});
+
+test("pickDistractors: primero las que se parecen, sin repetir significado", () => {
+  const entry = (id) => BANK.words.get(id);
+  const target = entry("学生|がくせい");
+  const label = (word) => word.es.slice(0, 2).join(", ");
+  const pool = [...BANK.words.values()].filter((word) => !word.kana);
+  const wrong = core.pickDistractors(target, pool, { count: 3, label, random: () => 0 });
+  assert.equal(wrong.length, 3);
+  const sharing = wrong.filter((word) => word.kanji.some((c) => target.kanji.includes(c)));
+  assert.equal(sharing.length, 1, `una sola comparte 学 o 生: ${wrong.map((w) => w.w)}`);
+  assert.equal(wrong[0], sharing[0], "y es la primera: la que más se parece");
+  assert.ok(wrong.every((word) => !/estudiante|alumno/.test(label(word))), `ninguna casi igual a la buena: ${wrong.map(label)}`);
+  const labels = [label(target), ...wrong.map(label)];
+  assert.equal(new Set(labels).size, 4);
+  assert.ok(!wrong.includes(target));
+  // Sin bastantes, las que haya; las que no tienen etiqueta no sirven
+  assert.equal(core.pickDistractors(target, pool.slice(0, 2), { label }).length <= 2, true);
+  assert.deepEqual(core.pickDistractors(target, pool, { label: (word) => word === target ? "x" : "" }), []);
+});
+
+test("interleaveEvery: de cada tantas palabras nuevas, una en kana", () => {
+  assert.deepEqual(core.interleaveEvery(["a", "b", "c", "d", "e"], ["x", "y"], 3), ["a", "b", "x", "c", "d", "y", "e"]);
+  assert.deepEqual(core.interleaveEvery(["a"], ["x", "y", "z"], 3), ["a", "x", "y", "z"], "si se acaban las de kanji, siguen las de kana");
+  assert.deepEqual(core.interleaveEvery([], ["x"], 3), ["x"]);
+  assert.deepEqual(core.interleaveEvery(["a", "b"], ["x"], 0), ["a", "b"], "0 = ninguna en kana");
+  assert.deepEqual(core.interleaveEvery(["a", "b"], ["x", "y"], 1), ["x", "y", "a", "b"]);
+});
+
+test("retentionFromLog: solo los repasos de días recientes, y nada con pocos", () => {
+  const now = Date.parse("2026-11-12T10:00:00Z"), DAY = 86400000, R = { days: 30, minReviews: 4 };
+  const row = (rating, extra = {}) => ({ at: now - DAY, kind: "word", state: 2, rating, ...extra });
+  const log = [row(3), row(4), row(2), row(1),
+    row(1, { state: 0 }), row(1, { state: 1 }),          // nuevas y pasos cortos: no miden la memoria de días
+    row(1, { kind: "read" }),                            // al leer: reconocer no es recordar
+    row(1, { at: now - 40 * DAY })];                     // fuera del periodo
+  assert.deepEqual(core.retentionFromLog(log, now, R), { reviews: 4, recalled: 3, rate: 0.75 });
+  assert.equal(core.retentionFromLog(log.slice(0, 3), now, R).rate, null);
+  assert.deepEqual(core.retentionFromLog([], now, R), { reviews: 0, recalled: 0, rate: null });
+});
+
+test("leer cuenta como Bien con tope, no como Difícil (que sube la dificultad en FSRS)", () => {
+  assert.equal(CONFIG.readingReview.rating, "good");
+  assert.ok(CONFIG.readingReview.maxGrowth <= 2);
+});
+
+test("planToday: las kanas van lo primero para quien empieza de cero, y no salen sin nada que hacer", () => {
+  const base = { placed: true, story: { kind: "none" }, read: false, due: 0, fresh: 2, answered: 0,
+    writing: { available: false, done: 0 }, sentences: { available: false, done: 0 }, proof: null };
+  const plan = planToday({ ...base, kana: { show: true, due: 2, fresh: 5, answered: 0 } }, CONFIG.today);
+  assert.deepEqual(plan.steps.map((step) => step.kind), ["kana", "reviews"]);
+  assert.equal(plan.next, "kana");
+  assert.equal(plan.steps[0].count, 7);
+  // Hechas hoy: sale como hecho; sin nada y sin haber hecho nada (todo sabido), no sale
+  assert.equal(planToday({ ...base, kana: { show: true, due: 0, fresh: 0, answered: 5 } }, CONFIG.today).steps[0].done, true);
+  assert.deepEqual(planToday({ ...base, kana: { show: true, due: 0, fresh: 0, answered: 0 } }, CONFIG.today).steps.map((s) => s.kind), ["reviews"]);
+  assert.deepEqual(planToday({ ...base, kana: { show: false, due: 3, fresh: 5, answered: 0 } }, CONFIG.today).steps.map((s) => s.kind), ["reviews"]);
 });

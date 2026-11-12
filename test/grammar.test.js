@@ -68,7 +68,55 @@ test("grammarStates: vista, entendida (traducción o lecturas limpias) y dominad
 
 test("grammarBreakdown y grammarShare: recuento por nivel y lo que se maneja", () => {
   const states = grammarStates([ev("good", ["wa"], "d1", 1), ev("good", ["wa"], "d2", 2), ev("good", ["ga"], "d1", 3), ev("seen", ["wo"], "d1", 4)]);
-  const row = grammarBreakdown(states).N5;
-  assert.deepEqual(row, { mastered: 1, understood: 1, seen: 1, unseen: GRAMMAR.length - 3, total: GRAMMAR.length });
-  assert.equal(grammarShare(row), 2 / GRAMMAR.length);
+  const n5 = GRAMMAR.filter((point) => point.level === "N5").length;
+  const n4 = GRAMMAR.filter((point) => point.level === "N4").length;
+  const rows = grammarBreakdown(states);
+  assert.deepEqual(rows.N5, { mastered: 1, understood: 1, seen: 1, unseen: n5 - 3, total: n5 });
+  assert.deepEqual(rows.N4, { mastered: 0, understood: 0, seen: 0, unseen: n4, total: n4 });
+  assert.deepEqual(Object.keys(rows), ["N5", "N4"]);
+  assert.equal(grammarShare(rows.N5), 2 / n5);
+});
+
+test("N4: hay catálogo y no confunde estructuras parecidas", async () => {
+  assert.ok(GRAMMAR.filter((point) => point.level === "N4").length >= 40);
+  const has = async (text, id) => (await detect(text)).includes(id);
+  // なくてもいい (no hace falta) no es てもいい (permiso), ni なくてはいけない (tener que) es てはいけない
+  assert.ok(await has("行かなくてもいいです。", "nakute-mo-ii") && !(await has("行かなくてもいいです。", "te-mo-ii")));
+  assert.ok(await has("食べてもいいです。", "te-mo-ii") && !(await has("食べてもいいです。", "nakute-mo-ii")));
+  assert.ok(await has("行かなくてはいけない。", "nakereba") && !(await has("行かなくてはいけない。", "te-wa-ikenai")));
+  // ても (aunque) no es てもいい
+  assert.ok(await has("寒くても行きます。", "temo") && !(await has("食べてもいいです。", "temo")));
+  // なければ es «tener que», no un condicional ば más
+  assert.ok(!(await has("勉強しなければなりません。", "ba")));
+  // ないでください es N5; ないで a secas, «sin»
+  assert.ok(await has("傘を持たないで出かけた。", "naide") && !(await has("見ないでください。", "naide")));
+  // causativa, pasiva y causativa pasiva por separado
+  assert.ok(await has("母に野菜を食べさせました。", "saseru") && !(await has("母に野菜を食べさせました。", "rareru")));
+  assert.ok(await has("野菜を食べさせられた。", "saserareru") && !(await has("野菜を食べさせられた。", "saseru")) && !(await has("野菜を食べさせられた。", "rareru")));
+  // そう: «parece» frente a «dicen que»
+  assert.ok(await has("雨が降りそうです。", "sou-looks") && !(await has("雨が降りそうです。", "sou-hearsay")));
+  assert.ok(await has("雨が降るそうです。", "sou-hearsay") && !(await has("雨が降るそうです。", "sou-looks")));
+  // ように (para que) frente a ようになる (llegar a), y ようだ (parece)
+  assert.ok(await has("日本語が話せるようになりました。", "you-ni-naru") && !(await has("日本語が話せるようになりました。", "you-ni")));
+  assert.ok(await has("忘れないようにメモします。", "you-ni") && !(await has("忘れないようにメモします。", "you-da")));
+  // ほうがいい (consejo) no es la comparación より〜のほうが
+  assert.ok(!(await has("犬より猫のほうが好きです。", "hou-ga-ii")));
+  assert.ok(await has("行かないほうがいい。", "hou-ga-ii") && await has("読んだほうがいいです。", "hou-ga-ii"));
+  // ようと思う no es también と思う; と思う de un nombre (友達と) no es citar
+  assert.ok(await has("暑いと思います。", "to-omou") && !(await has("毎日運動しようと思います。", "to-omou")));
+  assert.ok(!(await has("友達と話します。", "to-omou")));
+  // ましょう (N5) no es la volitiva llana
+  assert.ok(!(await has("行きましょう。", "volitional")));
+  // la と condicional no es la と de «con»
+  assert.ok(await has("春になると暖かくなります。", "to-cond") && !(await has("友達と行きます。", "to-cond")));
+  // しか sin negación no es しか〜ない
+  assert.ok(await has("百円しかない。", "shika-nai") && await has("少ししか食べません。", "shika-nai"));
+  // てくれる es un favor; くれる a secas, dar
+  assert.ok(await has("来てくれる？", "te-morau") && !(await has("来てくれる？", "ageru-kureru")));
+  assert.ok(await has("友達が本をくれました。", "ageru-kureru") && !(await has("友達が本をくれました。", "te-morau")));
+});
+
+test("N4: のには (el hecho de) no es のに", async () => {
+  assert.ok(!(await detect("遅くまで起きているのには慣れています。")).includes("noni"));
+  assert.ok((await detect("雨が降っているのに出かけた。")).includes("noni"));
 });

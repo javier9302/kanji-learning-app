@@ -44,6 +44,7 @@ const SHELL = [
   "progress.js",
   "kanji-table.js",
   "proof.js",
+  "kana.js",
   "today.js",
   "dictionary.js",
   "capture.js",
