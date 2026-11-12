@@ -64,7 +64,7 @@ function todayStepText(step, state) {
     }
     case "reviews": return [t("Repasa"), step.due
       ? t("{due} y, después, hasta {fresh}.", { due: plural(step.due, "repaso pendiente", "repasos pendientes"), fresh: plural(step.fresh, "palabra nueva", "palabras nuevas") })
-      : step.waiting ? t("{n} que acabas de aprender o fallar vuelven en unos minutos.", { n: plural(step.waiting, "palabra", "palabras") })
+      : step.waiting ? t("En unos minutos vuelve lo que acabas de aprender o fallar: {n}.", { n: plural(step.waiting, "palabra", "palabras") })
       : step.done ? t("No te queda nada por repasar ahora.") : t("Nada pendiente: aprende hasta {fresh}.", { fresh: plural(step.fresh, "palabra nueva", "palabras nuevas") }),
       t("Empezar")];
     case "writing": return [t("Escribe {n} kanjis", { n: step.count }),

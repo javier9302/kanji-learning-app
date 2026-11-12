@@ -6,7 +6,7 @@ Cómo funciona todo hoy: [docs/COMO-FUNCIONA.md](docs/COMO-FUNCIONA.md).
 
 ## 2026-11-12
 
-Primera etapa del plan de la revisión del 2026-11-11 («datos de fiar»).
+Primera etapa del plan de la revisión del 2026-11-11 («datos de fiar», `1c12cd7`).
 
 - **Lo que aciertas una vez ya se repasa**: una palabra acertada en la prueba de nivel o en
   «Comprobar palabras» quedaba «dominada» sin tarjeta y no volvía a salir nunca. Ahora entra en el

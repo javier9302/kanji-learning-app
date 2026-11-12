@@ -238,7 +238,7 @@ const EN = {
   "Repasa": "Review",
   "{due} y, después, hasta {fresh}.": "{due} and then up to {fresh}.",
   "No te queda nada por repasar ahora.": "Nothing left to review right now.",
-  "{n} que acabas de aprender o fallar vuelven en unos minutos.": "{n} you just learned or missed come back in a few minutes.",
+  "En unos minutos vuelve lo que acabas de aprender o fallar: {n}.": "What you just learned or missed comes back in a few minutes: {n}.",
   "Nada pendiente: aprende hasta {fresh}.": "Nothing pending: learn up to {fresh}.",
   "Escribe {n} kanjis": "Write {n} kanji",
   "De los que ya has visto en tus palabras, de simple a complejo. Llevas {done}.": "From the ones you've seen in your words, simple to complex. Done so far: {done}.",
